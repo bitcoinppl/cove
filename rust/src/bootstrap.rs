@@ -110,6 +110,10 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
         crate::backup::recovery::recover_restore_markers()
             .map_err(AppInitError::RecoveryRequired)?;
 
+        // Tor reads its setting from the database, and starting here lets the built-in client
+        // join the network while the rest of startup runs
+        crate::tor::TorService::start();
+
         set_step(BootstrapStep::RedbMigrationComplete);
         info!("Bootstrap: storage bootstrapped, attempting BDK migration");
 

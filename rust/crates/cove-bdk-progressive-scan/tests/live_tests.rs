@@ -1,3 +1,6 @@
+// live tests talk to public servers directly; the app's clients go through the Tor route
+#![allow(clippy::disallowed_methods)]
+
 use std::collections::BTreeMap;
 use std::str::FromStr as _;
 

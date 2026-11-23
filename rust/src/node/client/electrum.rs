@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use bdk_electrum::{
     BdkElectrumClient,
-    electrum_client::{self, Client, ElectrumApi as _, Param},
+    electrum_client::{self, Client, Config, ConfigBuilder, ElectrumApi as _, Param, Socks5Config},
 };
 use bdk_wallet::chain::{
     BlockId, ConfirmationBlockTime, TxGraph,
@@ -22,10 +22,42 @@ use tap::TapFallible as _;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
+use cove_http::NetworkRoute;
+
 use super::{ELECTRUM_BATCH_SIZE, Error, NodeClientOptions};
 use crate::node::Node;
 
 type ElectrumClientInner = BdkElectrumClient<Client>;
+
+/// The client config for `route`
+///
+/// On Tor the client opens its socket through the proxy and sends the node's host name for the
+/// proxy to resolve, so `.onion` nodes work and the system resolver never sees the name. TLS
+/// runs over the proxied stream, so the proxy only sees encrypted bytes
+fn electrum_config(route: &NetworkRoute) -> Config {
+    match route {
+        NetworkRoute::Direct => Config::default(),
+        NetworkRoute::Tor(proxy) => {
+            let address = proxy.address.to_string();
+            let socks = match &proxy.credentials {
+                None => Socks5Config::new(address),
+                Some(credentials) => Socks5Config::with_credentials(
+                    address,
+                    credentials.username.clone(),
+                    credentials.password.clone(),
+                ),
+            };
+
+            // without a timeout a stalled circuit would hold the connection forever
+            ConfigBuilder::new().socks5(Some(socks)).timeout(Some(route.timeouts().request)).build()
+        }
+    }
+}
+
+#[allow(clippy::disallowed_methods, reason = "the one place that opens Electrum connections")]
+fn connect(url: &str, config: Config) -> Result<Client, electrum_client::Error> {
+    Client::from_config(url, config)
+}
 
 #[derive(Debug, Deserialize)]
 struct ElectrumTransactionResponse {
@@ -80,18 +112,17 @@ impl ElectrumClient {
         Self { client, options }
     }
 
-    pub async fn new_from_node(node: &Node) -> Result<Self, Error> {
-        Self::new_from_node_and_options(node, Self::default_options()).await
-    }
-
-    pub async fn new_from_node_and_options(
+    /// Connects to `node` on `route`, through the SOCKS proxy when the route is Tor
+    pub async fn new_from_node(
         node: &Node,
         options: NodeClientOptions,
+        route: &NetworkRoute,
     ) -> Result<Self, Error> {
         let url = node.url.strip_suffix('/').unwrap_or(&node.url).to_string();
+        let config = electrum_config(route);
 
         // use spawn_blocking for the synchronous TCP connection to avoid blocking the async runtime
-        let inner_client = cove_tokio::unblock::run_blocking(move || Client::new(&url))
+        let inner_client = cove_tokio::unblock::run_blocking(move || connect(&url, config))
             .await
             .map_err(Error::CreateElectrumClient)?;
 
@@ -343,7 +374,7 @@ impl ElectrumClient {
         Ok(tx_id)
     }
 
-    const fn default_options() -> NodeClientOptions {
+    pub(crate) const fn default_options() -> NodeClientOptions {
         NodeClientOptions { batch_size: ELECTRUM_BATCH_SIZE }
     }
 }
@@ -381,12 +412,18 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
 
         // blockstream.info does not support verbose transactions
-        let client = ElectrumClient::new_from_node(&crate::node::Node {
+        let node = crate::node::Node {
             url: "ssl://electrum.blockstream.info:50002".to_string(),
             name: "blockstream".to_string(),
             api_type: crate::node::ApiType::Electrum,
             network: cove_types::network::Network::Bitcoin,
-        })
+        };
+
+        let client = ElectrumClient::new_from_node(
+            &node,
+            ElectrumClient::default_options(),
+            &cove_http::NetworkRoute::Direct,
+        )
         .await
         .unwrap();
 

@@ -23,7 +23,10 @@ use cove_bdk_progressive_scan::ScanEvent;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::node::{Node, NodeConnectionIdentity};
+use crate::{
+    node::{Node, NodeConnectionIdentity},
+    tor::RouteError,
+};
 
 use super::ApiType;
 
@@ -97,6 +100,9 @@ pub enum Error {
 
     #[error("failed to get transaction: {0}")]
     ElectrumGetTransaction(electrum_client::Error),
+
+    #[error(transparent)]
+    Route(#[from] RouteError),
 }
 
 /// An esplora client error without the request URL
@@ -140,6 +146,8 @@ impl Error {
             Self::ElectrumBroadcast(_) => "electrum_broadcast",
             Self::EsploraGetTransaction(_) => "esplora_get_transaction",
             Self::ElectrumGetTransaction(_) => "electrum_get_transaction",
+            Self::Route(RouteError::TorUnavailable(_)) => "tor_unavailable",
+            Self::Route(RouteError::OnionNeedsTor) => "onion_needs_tor",
         }
     }
 }
@@ -150,37 +158,31 @@ pub struct NodeClientOptions {
 }
 
 impl NodeClient {
+    /// Connects to `node` on the current route, failing rather than leaving Tor when Tor is on
     pub async fn new(node: &Node) -> Result<Self, Error> {
-        let backend = match node.api_type {
-            ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node(node)?;
-                NodeClientBackend::Esplora(client)
-            }
-
-            ApiType::Electrum => {
-                let client = electrum::ElectrumClient::new_from_node(node).await?;
-                NodeClientBackend::Electrum(client)
-            }
+        let options = match node.api_type {
+            ApiType::Esplora => esplora::EsploraClient::default_options(),
+            ApiType::Electrum => electrum::ElectrumClient::default_options(),
         };
 
-        Ok(Self { connection_identity: node.connection_identity(), backend })
+        Self::new_with_options(node, options).await
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
+        let route = node.route()?;
         let backend = match node.api_type {
             ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
+                let client = esplora::EsploraClient::new_from_node(node, options, &route)?;
                 NodeClientBackend::Esplora(client)
             }
 
             ApiType::Electrum => {
-                let client =
-                    electrum::ElectrumClient::new_from_node_and_options(node, options).await?;
+                let client = electrum::ElectrumClient::new_from_node(node, options, &route).await?;
                 NodeClientBackend::Electrum(client)
             }
         };
 
-        Ok(Self { connection_identity: node.connection_identity(), backend })
+        Ok(Self { connection_identity: node.connection_identity_on(Some(route)), backend })
     }
 
     pub(crate) fn connection_identity(&self) -> &NodeConnectionIdentity {

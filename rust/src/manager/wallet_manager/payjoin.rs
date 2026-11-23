@@ -404,16 +404,22 @@ pub(crate) fn build_sender(
     Ok(sender)
 }
 
+/// An HTTP client on the current route, so the relay and directory see a Tor exit while Tor is on
+fn routed_client() -> Result<reqwest::Client, String> {
+    let route = crate::tor::current_route().map_err(|error| error.to_string())?;
+    cove_http::new_client(&route).map_err(|error| format!("{error:?}"))
+}
+
 // polls the payjoin directory for a receiver proposal; called from begin_poll via send_fut_with
 async fn do_poll(
     addr: WeakAddr<PayjoinActor>,
     polling_sender: V2Sender<PollingForProposal>,
     persister: PayjoinSessionPersister,
 ) {
-    let client = match cove_http::new_client() {
+    let client = match routed_client() {
         Ok(c) => c,
         Err(e) => {
-            warn!("payjoin poll: failed to create HTTP client: {e:?}");
+            warn!("payjoin poll: failed to create HTTP client: {e}");
             send!(addr.complete_with_fallback_msg());
             return;
         }
@@ -597,10 +603,10 @@ impl PayjoinActor {
         let persister = self.persister.clone();
 
         self.addr.send_fut_with(|addr| async move {
-            let client = match cove_http::new_client() {
+            let client = match routed_client() {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!("payjoin POST: failed to create HTTP client: {e:?}");
+                    warn!("payjoin POST: failed to create HTTP client: {e}");
                     send!(addr.complete_with_fallback_msg());
                     return;
                 }

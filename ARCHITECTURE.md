@@ -33,10 +33,12 @@
 - `cove-bip39` - BIP39 mnemonic handling
 - `cove-common` - Shared constants and utilities
 - `cove-device` - Platform abstraction for keychain and device features
+- `cove-http` - Shared HTTP client builder and the `NetworkRoute` every connection takes (direct or through a Tor SOCKS5 proxy)
 - `cove-fake-node` - Fake Esplora and Electrum node for tests and UI test runs; a dev-dependency only, never linked into the app
 - `cove-macros` - Common Macros used by the other crates
 - `cove-nfc` - NFC communication protocols
 - `cove-tap-card` - TAPSIGNER/SATSCARD integration
+- `cove-tor` - Built-in Tor client (Arti) behind a loopback SOCKS5 server
 - `cove-types` - Shared type definitions
 - `cove-util` - General utilities (formatting, logging, result extensions)
 - `uniffi_cli` - Custom UniFFI CLI wrapper for binding generation
@@ -70,6 +72,7 @@ Rust closures are fine for narrow synchronous helpers, local transactions, and t
 - `Device::global()` (`rust/crates/cove-device/src/device.rs`) - Device capabilities access via `OnceCell`, initialized once by the host app.
 - `FIAT_CLIENT` (`rust/src/fiat/client.rs`) - Price fetching client via `LazyLock<FiatClient>`.
 - `FEE_CLIENT` (`rust/src/fee_client.rs`) - Fee estimation client via `LazyLock<FeeClient>`.
+- `TorService::global()` (`rust/src/tor.rs`) - Tor mode, the built-in Tor client, and the network route via `LazyLock<TorService>`.
 - `PRICES` & `FEES` - Thread-safe cached data via `LazyLock<ArcSwap<Option<T>>>` for lock-free reads with atomic updates.
 
 This pattern is used throughout the codebase for shared resources and is safe to use from any thread. Platform code mirrors this with `AppManager.shared` (iOS) and `AppManager.getInstance()` (Android).
@@ -91,13 +94,15 @@ redb stores typed table metadata for each table and validates the key and value 
 **Database tables:**
 
 - `GlobalFlagTable` - Feature flags and terms acceptance status
-- `GlobalConfigTable` - Network selection, node configuration, color scheme preferences
+- `GlobalConfigTable` - Network selection, node configuration, color scheme preferences, Tor mode (`tor_settings`)
 - `GlobalCacheTable` - Cached data for performance optimization
 - `WalletsTable` - Wallet metadata and configuration
 - `UnsignedTransactionsTable` - Pending transactions awaiting signature
 - `HistoricalPriceTable` - Historical price data for fiat conversions
 
 **Keychain.** Secrets are stored in OS-native keychains via the `KeychainAccess` trait (`rust/crates/cove-device/src/keychain.rs`). This is a UniFFI callback interface that platform code implements - iOS provides the implementation using the iOS Keychain, and Android uses Android KeyStore. Rust code accesses it via `Keychain::global()`, which internally delegates to the platform implementation. The keychain supports encryption/decryption through the `Cryptor` from `cove-util`. `KeychainAccess::get` returns `None` only when the item is missing; any other failure, such as reading while an iOS device is locked, is a `KeychainError::Read`. Rust treats a read error as unknown state, so it never creates, repairs, replaces, or deletes secrets based on it, and bootstrap reports it as `AppInitError::KeychainUnavailable` instead of offering recovery. The iOS and Android startup screens show unlock guidance with a Try Again action that reruns bootstrap, and iOS also retries when protected data becomes available. A `KeychainUnavailable` failure leaves bootstrap not started, so the next `bootstrap()` call, such as one from a recreated Android activity, runs it again instead of returning `AlreadyCalled`. On iOS, saves update an existing item in place and add one only when it is absent, instead of `KeychainSwift.set`'s delete then add, so a failed write keeps the prior value and a concurrent read never sees the item missing.
+
+**Network routing and Tor.** Every outbound connection takes the `NetworkRoute` that `TorService` publishes: build clients with `cove_http::new_client(&route)`, `NodeClient`, or the fee and price clients, never with raw reqwest, electrum, or Esplora constructors, which `rust/clippy.toml` bans. While Tor is on, route resolution never returns a direct route; when Tor can't carry traffic, it fails and the connection doesn't start. The route is part of `NodeConnectionIdentity`, so cached node clients rebuild when the mode changes. See [docs/tor.md](docs/tor.md) for the modes, the traffic Tor covers, and the leak tests.
 
 **Wallet & hardware integrations.** BDK powers transaction management (`rust/src/wallet`, `rust/src/transaction`). TAPSIGNER/SATSCARD + NFC flows live in `rust/src/tap_card` and the dedicated crates under `rust/crates/`. The utilities crate (`cove-util`) concentrates helpers such as result extensions, formatting, and logging.
 

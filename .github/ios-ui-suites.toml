@@ -108,6 +108,10 @@ paths = ["ios/CoveUITests/RenameWalletFullLaunchUITests.swift"]
 suites = ["CoveUITests/RenameWalletFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/TorSettingsFullLaunchUITests.swift"]
+suites = ["CoveUITests/TorSettingsFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift"]
 suites = ["CoveUITests/WatchOnlyUpgradeFullLaunchUITests"]
 

@@ -1,6 +1,9 @@
 //! Runs the `cove-fake-node` binary and drives it over real sockets, the way
 //! the iOS and Android UI tests do
 
+// these tests are the clients the fake node serves, so they dial it directly
+#![allow(clippy::disallowed_methods)]
+
 use std::{
     io::{BufRead as _, BufReader, Read as _, Write as _},
     net::TcpStream,

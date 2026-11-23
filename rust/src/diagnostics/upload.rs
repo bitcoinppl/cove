@@ -113,6 +113,9 @@ pub(crate) enum UploadError {
     #[error("failed to create HTTP client: {0}")]
     Client(reqwest::Error),
 
+    #[error(transparent)]
+    Route(crate::tor::RouteError),
+
     #[error("failed to encode report JSON: {0}")]
     EncodeJson(serde_json::Error),
 
@@ -167,6 +170,7 @@ impl UploadError {
                 "The diagnostics report is too large to submit. You can still share it manually."
                     .to_string()
             }
+            Self::Route(error) => format!("Unable to send the diagnostics report: {error}"),
             Self::Request(error) if error.is_connect() => {
                 "Unable to reach the diagnostics collector. Check your connection and try again."
                     .to_string()
@@ -208,6 +212,7 @@ impl UploadError {
                 format!("collector success response was invalid: {message}")
             }
             Self::Client(error) => format!("failed to create HTTP client: {error}"),
+            Self::Route(error) => format!("no network route: {error}"),
             Self::EncodeJson(error) => format!("failed to encode report JSON: {error}"),
             Self::Gzip(error) => format!("failed to gzip report JSON: {error}"),
             Self::JsonTooLarge { limit } => format!("report JSON exceeded {limit} bytes"),
@@ -236,7 +241,8 @@ pub(crate) async fn submit_report(report: DiagnosticsUploadReport) -> Result<Str
         encrypted_gzipped_json(&report, &recipient)
     })
     .await?;
-    let client = cove_http::new_client_without_redirects().map_err(UploadError::Client)?;
+    let route = crate::tor::current_route().map_err(UploadError::Route)?;
+    let client = cove_http::new_client_without_redirects(&route).map_err(UploadError::Client)?;
 
     for attempt in 1..=MAX_UPLOAD_ATTEMPTS {
         match submit_report_once(&client, body.clone(), PRODUCTION_ENCRYPTION_KEY).await {
@@ -355,6 +361,7 @@ fn upload_error_is_retryable(error: &UploadError) -> bool {
         // only retry pre-connection failures because POST outcomes are otherwise ambiguous
         UploadError::Request(error) => error.is_connect(),
         UploadError::Client(_)
+        | UploadError::Route(_)
         | UploadError::EncodeJson(_)
         | UploadError::Gzip(_)
         | UploadError::JsonTooLarge { .. }
@@ -781,7 +788,8 @@ mod tests {
 
             listener.local_addr().expect("test server has local addr")
         };
-        let client = cove_http::new_client_without_redirects().unwrap();
+        let client =
+            cove_http::new_client_without_redirects(&cove_http::NetworkRoute::Direct).unwrap();
 
         let error = client.post(format!("http://{addr}/reports")).send().await.unwrap_err();
 
@@ -799,7 +807,8 @@ mod tests {
 
             tokio::time::sleep(Duration::from_secs(1)).await;
         });
-        let client = cove_http::new_client_without_redirects().unwrap();
+        let client =
+            cove_http::new_client_without_redirects(&cove_http::NetworkRoute::Direct).unwrap();
 
         let error = client
             .post(format!("http://{addr}/reports"))

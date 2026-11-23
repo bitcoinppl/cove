@@ -227,6 +227,35 @@
     <string name="content_description_more">More</string>
     <string name="content_description_selected">Selected</string>
 
+    <!-- Tor Settings -->
+    <string name="title_settings_tor">Tor</string>
+    <string name="tor_row_off">Off</string>
+    <string name="tor_row_built_in">Built-in</string>
+    <string name="tor_row_proxy">Proxy</string>
+    <string name="tor_section_mode">Mode</string>
+    <string name="tor_mode_off">Off</string>
+    <string name="tor_mode_built_in">Built-in Tor</string>
+    <string name="tor_mode_proxy">Tor proxy</string>
+    <string name="tor_mode_off_footer">Cove connects to your node and to price and fee servers directly.</string>
+    <string name="tor_mode_built_in_footer">Cove runs Tor itself. The first start takes a few seconds while Tor joins the network.</string>
+    <string name="tor_mode_proxy_footer">Use a Tor SOCKS5 proxy you run, such as Orbot.</string>
+    <string name="tor_section_proxy">Proxy</string>
+    <string name="tor_proxy_address_label">Proxy address</string>
+    <string name="tor_use_proxy">Use Proxy</string>
+    <string name="tor_section_status">Status</string>
+    <string name="tor_status_off">Off</string>
+    <string name="tor_status_starting">Connecting… %1$d%%</string>
+    <string name="tor_status_ready">Connected</string>
+    <string name="tor_status_failed">Not connected</string>
+    <string name="tor_status_using_proxy">Using proxy</string>
+    <string name="tor_try_again">Try Again</string>
+    <string name="tor_check_connection">Check Connection</string>
+    <string name="tor_check_is_tor">Traffic is going through Tor</string>
+    <string name="tor_check_not_tor">This proxy isn\'t sending traffic through Tor</string>
+    <string name="tor_section_about">About</string>
+    <string name="tor_about">While Tor is on, connections to your node, fee and price updates, Payjoin, and diagnostics reports go through Tor. If Tor isn\'t connected, Cove waits instead of connecting directly. Google Drive backups and links you open in your browser use your regular connection.</string>
+    <string name="tor_mode_rejected_title">Couldn\'t Change Tor</string>
+
     <!-- More Options Menu -->
     <string name="title_more_options">More Options</string>
     <string name="menu_scan_nfc">Scan NFC</string>

@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TorManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupScreen
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -72,6 +74,13 @@ fun SettingsContainer(
                 is SettingsRoute.Node -> {
                     NodeSettingsScreen(
                         app = app,
+                        modifier = modifier,
+                    )
+                }
+                is SettingsRoute.Tor -> {
+                    TorSettingsScreen(
+                        app = app,
+                        manager = remember { TorManager.getInstance() },
                         modifier = modifier,
                     )
                 }

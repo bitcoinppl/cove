@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.VpnLock
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +65,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.BiometricPolicy
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.TorManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupPresentationBlocker
 import org.bitcoinppl.cove.cloudbackup.LocalCloudBackupPresentationCoordinator
@@ -129,6 +132,7 @@ fun MainSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val cloudBackupManager = remember { app.cloudBackupManager }
+    val torManager = remember { TorManager.getInstance() }
     val cloudBackupPresentationCoordinator = LocalCloudBackupPresentationCoordinator.current
     val showCloudBackupSettings = shouldShowCloudBackupSettings(Auth.isInDecoyMode())
     var isBetaEnabled by remember { mutableStateOf(
@@ -221,6 +225,14 @@ fun MainSettingsScreen(
                                         .Settings(org.bitcoinppl.cove_core.SettingsRoute.Node),
                                 )
                             },
+                        )
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_tor),
+                            subtitle = torModeRowValue(torManager.mode),
+                            icon = Icons.Default.VpnLock,
+                            onClick = { app.pushRoute(Route.Settings(SettingsRoute.Tor)) },
+                            modifier = Modifier.testTag("settings.tor"),
                         )
                         MaterialDivider()
                         MaterialSettingsItem(

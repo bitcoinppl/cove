@@ -1,0 +1,29 @@
+[package]
+name = "cove-tor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cove-http = { path = "../cove-http" }
+
+# tor
+arti-client = { version = "0.48.0", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client"] }
+tor-rtcompat = { version = "0.48.0", default-features = false, features = ["tokio", "rustls"] }
+
+# async
+tokio = { workspace = true, features = ["net", "io-util", "rt", "sync", "time", "macros"] }
+tokio-util = "0.7.18"
+futures = "0.3.32"
+
+parking_lot = { workspace = true }
+rand = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "io-util", "rt-multi-thread", "macros"] }
+rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+
+[lints]
+workspace = true

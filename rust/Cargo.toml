@@ -89,7 +89,7 @@ numfmt = { git = "https://github.com/bitcoinppl/numfmt", rev = "a130b90092457526
 num-bigint = "0.5"
 
 # http client
-reqwest = { version = "0.13.3", features = ["json", "rustls-no-provider"], default-features = false }
+reqwest = { version = "0.13.3", features = ["json", "rustls-no-provider", "socks"], default-features = false }
 
 # time
 jiff = { version = "0.2.24", features = [] }
@@ -104,7 +104,9 @@ eyre = "0.6.12"
 
 # database
 redb = "2.6"
-rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
+# 0.40 is the newest release both Arti's tor-dirmgr (<0.41) and the patched bdk_chain accept, and
+# only one rusqlite can link sqlite3
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
 
 # ids
 nid = "5.0.0"
@@ -141,6 +143,7 @@ cove-bdk = { path = "./crates/cove-bdk" }
 cove-bdk-progressive-scan = { path = "./crates/cove-bdk-progressive-scan" }
 cove-tokio = { path = "./crates/cove-tokio" }
 cove-http = { path = "./crates/cove-http" }
+cove-tor = { path = "./crates/cove-tor" }
 
 # bitcoin
 bitcoin = { workspace = true }
@@ -324,6 +327,13 @@ dtor = "1.0.6"
 
 # test builds talk to Coinkite's card emulator; keep the rev in step with the dependency above
 rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "8248eab8f5914abd35de95dc6a677e8b3b747f30", features = ["emulator"] }
+
+[patch.crates-io]
+# released bdk_chain pins rusqlite 0.31, and only one rusqlite can link sqlite3, so it can't share a
+# build with Arti's tor-dirmgr. This fork of chain-0.23.3 accepts rusqlite 0.36 to 0.40 and stores
+# its u64 timestamps through checked i64 conversions. Drop it once a bdk_chain release widens the
+# range, tracked in bitcoindevkit/bdk#2436
+bdk_chain = { git = "https://github.com/bitcoinppl/bdk", rev = "04429f16f82f606d93f208f4abf8e4f1b341559c" }
 
 [profile.dev]
 debug = "line-tables-only"

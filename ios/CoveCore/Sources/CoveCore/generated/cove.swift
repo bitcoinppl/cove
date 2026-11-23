@@ -10515,6 +10515,225 @@ public func FfiConverterTypeRustSendFlowManager_lower(_ value: RustSendFlowManag
 
 
 
+public protocol RustTorManagerProtocol: AnyObject, Sendable {
+
+    /**
+     * Asks the Tor Project's check service, over Tor, whether traffic leaves through Tor
+     *
+     * Useful for a proxy, which Cove can't otherwise tell apart from a SOCKS proxy that isn't
+     * Tor. The request only ever goes over the Tor route
+     */
+    func checkConnection() async throws  -> TorConnectionCheck
+
+    /**
+     * The proxy address the form starts with
+     */
+    func defaultProxyAddress()  -> String
+
+    func dispatch(action: TorManagerAction)
+
+    func listenForUpdates(reconciler: TorManagerReconciler)
+
+    /**
+     * The initial snapshot; later changes arrive as reconcile messages
+     */
+    func state()  -> TorManagerState
+
+    /**
+     * Checks a typed proxy address, returning it in the form the app saves
+     */
+    func validateProxyAddress(input: String) throws  -> String
+
+}
+open class RustTorManager: RustTorManagerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_rusttormanager(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_rusttormanager_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rusttormanager(handle, $0) }
+    }
+
+
+
+
+    /**
+     * Asks the Tor Project's check service, over Tor, whether traffic leaves through Tor
+     *
+     * Useful for a proxy, which Cove can't otherwise tell apart from a SOCKS proxy that isn't
+     * Tor. The request only ever goes over the Tor route
+     */
+open func checkConnection()async throws  -> TorConnectionCheck  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_rusttormanager_check_connection(
+                    self.uniffiCloneHandle()
+
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeTorConnectionCheck_lift,
+            errorHandler: FfiConverterTypeTorManagerError_lift
+        )
+}
+
+    /**
+     * The proxy address the form starts with
+     */
+open func defaultProxyAddress() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rusttormanager_default_proxy_address(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func dispatch(action: TorManagerAction)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rusttormanager_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeTorManagerAction_lower(action),uniffiCallStatus
+    )
+}
+}
+
+open func listenForUpdates(reconciler: TorManagerReconciler)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rusttormanager_listen_for_updates(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceTorManagerReconciler_lower(reconciler),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * The initial snapshot; later changes arrive as reconcile messages
+     */
+open func state() -> TorManagerState  {
+    return try!  FfiConverterTypeTorManagerState_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rusttormanager_state(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Checks a typed proxy address, returning it in the form the app saves
+     */
+open func validateProxyAddress(input: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeTorManagerError_lift) {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rusttormanager_validate_proxy_address(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(input),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustTorManager: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RustTorManager
+
+    public static func lift(_ handle: UInt64) throws -> RustTorManager {
+        return RustTorManager(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RustTorManager) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustTorManager {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RustTorManager, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustTorManager_lift(_ handle: UInt64) throws -> RustTorManager {
+    return try FfiConverterTypeRustTorManager.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustTorManager_lower(_ value: RustTorManager) -> UInt64 {
+    return FfiConverterTypeRustTorManager.lower(value)
+}
+
+
+
+
+
+
 public protocol RustWalletManagerProtocol: AnyObject, Sendable {
 
     /**
@@ -21732,6 +21951,125 @@ public func FfiConverterTypeTapSignerSetupComplete_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeTapSignerSetupComplete_lower(_ value: TapSignerSetupComplete) -> RustBuffer {
     return FfiConverterTypeTapSignerSetupComplete.lower(value)
+}
+
+
+/**
+ * The answer from the Tor Project's check service
+ */
+public struct TorConnectionCheck: Equatable, Hashable {
+    /**
+     * Whether the request left the network from a Tor exit relay
+     */
+    public var isTor: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Whether the request left the network from a Tor exit relay
+         */isTor: Bool) {
+        self.isTor = isTor
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorConnectionCheck: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorConnectionCheck: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorConnectionCheck {
+        return
+            try TorConnectionCheck(
+                isTor: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TorConnectionCheck, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isTor, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorConnectionCheck_lift(_ buf: RustBuffer) throws -> TorConnectionCheck {
+    return try FfiConverterTypeTorConnectionCheck.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorConnectionCheck_lower(_ value: TorConnectionCheck) -> RustBuffer {
+    return FfiConverterTypeTorConnectionCheck.lower(value)
+}
+
+
+public struct TorManagerState: Equatable, Hashable {
+    /**
+     * The saved mode, `None` when the saved setting can't be read
+     */
+    public var mode: TorMode?
+    public var status: TorStatus
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The saved mode, `None` when the saved setting can't be read
+         */mode: TorMode?, status: TorStatus) {
+        self.mode = mode
+        self.status = status
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorManagerState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorManagerState: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorManagerState {
+        return
+            try TorManagerState(
+                mode: FfiConverterOptionTypeTorMode.read(from: &buf),
+                status: FfiConverterTypeTorStatus.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TorManagerState, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeTorMode.write(value.mode, into: &buf)
+        FfiConverterTypeTorStatus.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerState_lift(_ buf: RustBuffer) throws -> TorManagerState {
+    return try FfiConverterTypeTorManagerState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerState_lower(_ value: TorManagerState) -> RustBuffer {
+    return FfiConverterTypeTorManagerState.lower(value)
 }
 
 
@@ -35947,6 +36285,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case customBlockExplorer(Network
     )
     case trickPinNotice
+    case torSettings
 
 
 
@@ -35999,6 +36338,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         )
 
         case 15: return .trickPinNotice
+
+        case 16: return .torSettings
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -36068,6 +36409,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case .trickPinNotice:
             writeInt(&buf, Int32(15))
+
+
+        case .torSettings:
+            writeInt(&buf, Int32(16))
 
         }
     }
@@ -38716,6 +39061,10 @@ public enum LocalDataResetStage: Equatable, Hashable {
      */
     case diagnostics
     /**
+     * Built-in Tor's network directory and guard state
+     */
+    case tor
+    /**
      * Main database reset and reinitialization
      */
     case database
@@ -38754,7 +39103,9 @@ public struct FfiConverterTypeLocalDataResetStage: FfiConverterRustBuffer {
 
         case 7: return .diagnostics
 
-        case 8: return .database
+        case 8: return .tor
+
+        case 9: return .database
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -38792,8 +39143,12 @@ public struct FfiConverterTypeLocalDataResetStage: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
 
 
-        case .database:
+        case .tor:
             writeInt(&buf, Int32(8))
+
+
+        case .database:
+            writeInt(&buf, Int32(9))
 
         }
     }
@@ -44292,6 +44647,7 @@ public enum SettingsRoute: Equatable, Hashable {
     case network
     case appearance
     case node
+    case tor
     case blockExplorer
     case fiatCurrency
     case wallet(id: WalletId, route: WalletSettingsRoute
@@ -44328,18 +44684,20 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
 
         case 4: return .node
 
-        case 5: return .blockExplorer
+        case 5: return .tor
 
-        case 6: return .fiatCurrency
+        case 6: return .blockExplorer
 
-        case 7: return .wallet(id: try FfiConverterTypeWalletId.read(from: &buf), route: try FfiConverterTypeWalletSettingsRoute.read(from: &buf)
+        case 7: return .fiatCurrency
+
+        case 8: return .wallet(id: try FfiConverterTypeWalletId.read(from: &buf), route: try FfiConverterTypeWalletSettingsRoute.read(from: &buf)
         )
 
-        case 8: return .allWallets
+        case 9: return .allWallets
 
-        case 9: return .about
+        case 10: return .about
 
-        case 10: return .cloudBackup
+        case 11: return .cloudBackup
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -44365,30 +44723,34 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(4))
 
 
-        case .blockExplorer:
+        case .tor:
             writeInt(&buf, Int32(5))
 
 
-        case .fiatCurrency:
+        case .blockExplorer:
             writeInt(&buf, Int32(6))
 
 
-        case let .wallet(id,route):
+        case .fiatCurrency:
             writeInt(&buf, Int32(7))
+
+
+        case let .wallet(id,route):
+            writeInt(&buf, Int32(8))
             FfiConverterTypeWalletId.write(id, into: &buf)
             FfiConverterTypeWalletSettingsRoute.write(route, into: &buf)
 
 
         case .allWallets:
-            writeInt(&buf, Int32(8))
-
-
-        case .about:
             writeInt(&buf, Int32(9))
 
 
-        case .cloudBackup:
+        case .about:
             writeInt(&buf, Int32(10))
+
+
+        case .cloudBackup:
+            writeInt(&buf, Int32(11))
 
         }
     }
@@ -45885,6 +46247,475 @@ public func FfiConverterTypeTapSignerRoute_lift(_ buf: RustBuffer) throws -> Tap
 #endif
 public func FfiConverterTypeTapSignerRoute_lower(_ value: TapSignerRoute) -> RustBuffer {
     return FfiConverterTypeTapSignerRoute.lower(value)
+}
+
+
+
+
+public enum TorManagerAction: Equatable, Hashable {
+
+    /**
+     * Save and apply a mode
+     */
+    case selectMode(TorMode
+    )
+    /**
+     * Start Tor again with the saved mode, such as after the built-in client failed
+     */
+    case restart
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorManagerAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorManagerAction: FfiConverterRustBuffer {
+    typealias SwiftType = TorManagerAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorManagerAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .selectMode(try FfiConverterTypeTorMode.read(from: &buf)
+        )
+
+        case 2: return .restart
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorManagerAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .selectMode(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeTorMode.write(v1, into: &buf)
+
+
+        case .restart:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerAction_lift(_ buf: RustBuffer) throws -> TorManagerAction {
+    return try FfiConverterTypeTorManagerAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerAction_lower(_ value: TorManagerAction) -> RustBuffer {
+    return FfiConverterTypeTorManagerAction.lower(value)
+}
+
+
+
+public
+enum TorManagerError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+
+
+
+    case InvalidProxy(String
+    )
+    case OnionNodeSelected(nodeName: String
+    )
+    case Save(String
+    )
+    case TorOff
+    case CheckFailed(String
+    )
+
+
+
+
+// The local Rust `Display` implementation.
+public var description: String {
+    return try!  FfiConverterString.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_tormanagererror_uniffi_trait_display(
+            FfiConverterTypeTorManagerError_lower(self),uniffiCallStatus
+    )
+}
+    )
+}
+
+
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+
+}
+
+#if compiler(>=6)
+extension TorManagerError: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorManagerError: FfiConverterRustBuffer {
+    typealias SwiftType = TorManagerError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorManagerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+
+
+
+        case 1: return .InvalidProxy(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .OnionNodeSelected(
+            nodeName: try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .Save(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 4: return .TorOff
+        case 5: return .CheckFailed(
+            try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorManagerError, into buf: inout [UInt8]) {
+        switch value {
+
+
+
+
+
+        case let .InvalidProxy(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case let .OnionNodeSelected(nodeName):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(nodeName, into: &buf)
+
+
+        case let .Save(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .TorOff:
+            writeInt(&buf, Int32(4))
+
+
+        case let .CheckFailed(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerError_lift(_ buf: RustBuffer) throws -> TorManagerError {
+    return try FfiConverterTypeTorManagerError.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerError_lower(_ value: TorManagerError) -> RustBuffer {
+    return FfiConverterTypeTorManagerError.lower(value)
+}
+
+
+
+public enum TorManagerReconcileMessage: Equatable, Hashable {
+
+    case mode(TorMode?
+    )
+    case status(TorStatus
+    )
+    /**
+     * A mode change was refused, and the saved mode is unchanged
+     */
+    case modeRejected(TorManagerError
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorManagerReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorManagerReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = TorManagerReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorManagerReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .mode(try FfiConverterOptionTypeTorMode.read(from: &buf)
+        )
+
+        case 2: return .status(try FfiConverterTypeTorStatus.read(from: &buf)
+        )
+
+        case 3: return .modeRejected(try FfiConverterTypeTorManagerError.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorManagerReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .mode(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionTypeTorMode.write(v1, into: &buf)
+
+
+        case let .status(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeTorStatus.write(v1, into: &buf)
+
+
+        case let .modeRejected(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeTorManagerError.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerReconcileMessage_lift(_ buf: RustBuffer) throws -> TorManagerReconcileMessage {
+    return try FfiConverterTypeTorManagerReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorManagerReconcileMessage_lower(_ value: TorManagerReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeTorManagerReconcileMessage.lower(value)
+}
+
+
+
+/**
+ * [`TorSettings`] as the apps see it, with the proxy as text they can show and edit
+ */
+
+public enum TorMode: Equatable, Hashable {
+
+    case off
+    case builtIn
+    case proxy(address: String
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorMode: FfiConverterRustBuffer {
+    typealias SwiftType = TorMode
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorMode {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .off
+
+        case 2: return .builtIn
+
+        case 3: return .proxy(address: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorMode, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .off:
+            writeInt(&buf, Int32(1))
+
+
+        case .builtIn:
+            writeInt(&buf, Int32(2))
+
+
+        case let .proxy(address):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(address, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorMode_lift(_ buf: RustBuffer) throws -> TorMode {
+    return try FfiConverterTypeTorMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorMode_lower(_ value: TorMode) -> RustBuffer {
+    return FfiConverterTypeTorMode.lower(value)
+}
+
+
+
+/**
+ * What Tor is doing, for the settings screen
+ */
+
+public enum TorStatus: Equatable, Hashable {
+
+    case off
+    /**
+     * The built-in client is joining the Tor network, and connections wait for it
+     */
+    case starting(percent: UInt8
+    )
+    /**
+     * The built-in client is carrying traffic
+     */
+    case ready
+    /**
+     * Tor is on but can't carry traffic, so nothing connects until this clears
+     */
+    case failed(message: String
+    )
+    /**
+     * Traffic goes to the user's SOCKS proxy, whose health only shows when a connection runs
+     */
+    case usingProxy
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TorStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTorStatus: FfiConverterRustBuffer {
+    typealias SwiftType = TorStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TorStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .off
+
+        case 2: return .starting(percent: try FfiConverterUInt8.read(from: &buf)
+        )
+
+        case 3: return .ready
+
+        case 4: return .failed(message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 5: return .usingProxy
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: TorStatus, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .off:
+            writeInt(&buf, Int32(1))
+
+
+        case let .starting(percent):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt8.write(percent, into: &buf)
+
+
+        case .ready:
+            writeInt(&buf, Int32(3))
+
+
+        case let .failed(message):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case .usingProxy:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorStatus_lift(_ buf: RustBuffer) throws -> TorStatus {
+    return try FfiConverterTypeTorStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTorStatus_lower(_ value: TorStatus) -> RustBuffer {
+    return FfiConverterTypeTorStatus.lower(value)
 }
 
 
@@ -51601,6 +52432,137 @@ public func FfiConverterCallbackInterfaceTapcardTransportProtocol_lower(_ v: Tap
 
 
 
+public protocol TorManagerReconciler: AnyObject, Sendable {
+
+    func reconcile(message: TorManagerReconcileMessage)
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceTorManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceTorManagerReconciler = UniffiVTableCallbackInterfaceTorManagerReconciler(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceTorManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface TorManagerReconciler: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceTorManagerReconciler.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface TorManagerReconciler: handle missing in uniffiClone")
+            }
+        },
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceTorManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeTorManagerReconcileMessage_lift(message)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceTorManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceTorManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitTorManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_tormanagerreconciler(UniffiCallbackInterfaceTorManagerReconciler.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceTorManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<TorManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceTorManagerReconciler : FfiConverter {
+    typealias SwiftType = TorManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceTorManagerReconciler_lift(_ handle: UInt64) throws -> TorManagerReconciler {
+    return try FfiConverterCallbackInterfaceTorManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceTorManagerReconciler_lower(_ v: TorManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceTorManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol WalletManagerReconciler: AnyObject, Sendable {
 
     func reconcile(message: WalletManagerReconcileMessage)
@@ -52998,6 +53960,30 @@ fileprivate struct FfiConverterOptionTypeTapSignerCmd: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeTapSignerCmd.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeTorMode: FfiConverterRustBuffer {
+    typealias SwiftType = TorMode?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTorMode.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTorMode.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -56110,6 +57096,24 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 54313) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rusttormanager_check_connection() != 22520) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttormanager_default_proxy_address() != 17161) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttormanager_dispatch() != 29962) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttormanager_listen_for_updates() != 4082) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttormanager_state() != 2370) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rusttormanager_validate_proxy_address() != 16199) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56719,6 +57723,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustpendingwalletmanager_new() != 33880) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rusttormanager_new() != 5084) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet() != 39975) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56860,6 +57867,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many() != 45190) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_tormanagerreconciler_reconcile() != 31315) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 44576) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56886,6 +57896,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitSendFlowManagerReconciler()
     uniffiCallbackInitTapcardTransportProtocol()
+    uniffiCallbackInitTorManagerReconciler()
     uniffiCallbackInitWalletManagerReconciler()
     uniffiEnsureCoveDeviceInitialized()
     uniffiEnsureCoveNfcInitialized()

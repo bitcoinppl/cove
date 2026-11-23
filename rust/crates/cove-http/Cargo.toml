@@ -7,6 +7,8 @@ edition = "2024"
 reqwest = { workspace = true }
 rustls = { version = "0.23.40", features = ["ring"], default-features = false }
 webpki-roots = "1.0.7"
+parking_lot = { workspace = true }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true
