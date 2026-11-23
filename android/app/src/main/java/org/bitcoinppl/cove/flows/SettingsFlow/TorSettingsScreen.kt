@@ -133,9 +133,9 @@ fun TorSettingsScreen(
         // the proxy option only opens the form; Use Proxy saves it
         val mode = option.mode ?: return
 
-        // read at tap time: Compose can keep this callback from an earlier composition, whose
-        // saved mode may be stale, and a stale match would drop the change
-        if (mode != manager.mode) manager.dispatch(TorManagerAction.SelectMode(mode))
+        // every pick goes to Rust, which skips one matching the mode it last applied; a check
+        // against the saved mode here would drop a quick reversal while a change is still saving
+        manager.dispatch(TorManagerAction.SelectMode(mode))
     }
 
     Scaffold(

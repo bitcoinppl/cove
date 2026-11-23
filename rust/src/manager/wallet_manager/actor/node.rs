@@ -21,6 +21,9 @@ use crate::{
     wallet::metadata::BlockSizeLast,
 };
 
+/// How long the wallet's connection check waits for a node on a direct route
+const DIRECT_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+
 const HEIGHT_CACHE_FRESH_SECS: u64 = 25;
 const HEIGHT_CACHE_BACKGROUND_REFRESH_SECS: u64 = 120;
 
@@ -466,12 +469,46 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
         "unable to create a connection to the node".to_string()
     })?;
 
+    // Tor's first request can take far longer than a direct one while Tor joins the network
+    let timeout = node_client.check_timeout(DIRECT_CHECK_TIMEOUT);
     node_client
         .check_url()
-        .with_timeout(Duration::from_secs(5))
+        .with_timeout(timeout)
         .await
         .map_err(|_| "unable to connect to node, timeout".to_string())?
         .map_err(|err| err.to_string())?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use cove_http::ProxyAddress;
+
+    use crate::{network::Network, node::Node, test_support::socks_proxy::TorTest};
+
+    // the check gave up after five seconds even over Tor, so a wallet opened while Tor was still
+    // joining the network never started its scan; paused time lets the wait run without delay
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn the_wallet_check_waits_longer_over_tor() {
+        let tor = TorTest::start().await;
+
+        // takes connections and never answers, like a Tor that's still joining the network
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = silent.local_addr().unwrap();
+        tor.use_proxy(ProxyAddress::new_ip(address.ip(), address.port()));
+
+        let node =
+            Node::new_esplora("esplora".into(), "http://node.invalid/api".into(), Network::Bitcoin);
+
+        let started = tokio::time::Instant::now();
+        let result = super::check_node_connection_inner(&node).await;
+        let waited = started.elapsed();
+
+        assert!(result.is_err(), "a proxy that never answers can't pass the check");
+        assert!(waited >= Duration::from_secs(30), "the check gave up over Tor after {waited:?}");
+        drop(silent);
+    }
 }

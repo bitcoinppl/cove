@@ -34,7 +34,19 @@ Host names are resolved by the proxy, never on the device: reqwest and Esplora u
 
 ### Switching modes
 
-Changing the mode stops the old built-in client before publishing the new route, so no stream outlives its mode. Cached clients notice the change because the route is part of `NodeConnectionIdentity` (`rust/src/node.rs`): the wallet actor and the transaction watcher drop a client whose identity no longer matches and build one on the new route. The fee and price clients cache one reqwest client per route through `cove_http::RoutedClient`.
+Each change saves the new mode and publishes its route under one lock, so two quick changes can't save in one order and apply in the other. Choosing the mode that's already applied changes nothing, so the screens send every pick and leave that decision to Rust. Changing the mode stops the old built-in client before publishing the new route, so no stream outlives its mode.
+
+Clients built on the old route stop using it:
+
+- Cached node clients notice the change because the route is part of `NodeConnectionIdentity` (`rust/src/node.rs`): the wallet actor and the transaction watcher drop a client whose identity no longer matches and build one on the new route.
+- A `NodeClient` checks before every request that its route is still current, and fails with `RouteError::Changed` when it isn't, so a client someone still holds can't send more requests on the old route.
+- A wallet scan that is running when the route changes stops at its next batch and fails with `RouteError::Changed`. The next scan runs on the new route.
+- The fee and price clients cache one reqwest client per route through `cove_http::RoutedClient`.
+
+### Known limits
+
+- A single request already in flight when the route changes, such as one batch of a scan or a short sync, finishes on the route it started on.
+- With Tor off, an Esplora server that redirects to a `.onion` address makes the HTTP client look that name up with the system resolver, as it would any redirect target.
 
 ## What goes through Tor
 
@@ -60,11 +72,12 @@ Nodes on the local network don't work while Tor is on: a Tor exit can't reach a 
 The `cove-tor` crate (`rust/crates/cove-tor`) wraps Arti. `BuiltInTor::start` creates an unbootstrapped `TorClient` with on-demand bootstrap, then starts a SOCKS5 server on `127.0.0.1` at a random port that requires a random username and password, so other apps on the device can't use it. Cove's clients reach the built-in client through that server, so built-in and proxy modes share one client code path.
 
 - Each target host gets its own `IsolationToken`, so streams to different servers never share a circuit.
+- Node connection checks, in Settings and before a wallet scan, wait up to 60 seconds over Tor instead of the direct route's limit, since the first request can include joining the network.
 - Bootstrap runs in the background and retries after 5, 15, 30, then 60 seconds. `TorStatus` reports `Starting { percent }`, `Ready`, or `Failed { message }`; connections made before bootstrap finishes wait for it.
 - Arti keeps its state and directory cache in `ROOT_DATA_DIR/tor/{state,cache}` (about 10 MB of cache), and a full wipe removes that directory.
 
 ## Settings screen
 
-`RustTorManager` (`rust/src/manager/tor_manager.rs`) is a process singleton. `state()` is the initial snapshot. User intents go through `dispatch(.selectMode(mode))` and `dispatch(.restart)`, and saving runs off the caller's thread. Reconcile messages carry full values (`Mode`, `Status`, and `ModeRejected` for a refused change), so a reconciler that applies them in order converges on the current state without a revision counter.
+`TorService` publishes its settings, route, and status together as a `TorState` on one `watch` channel. `RustTorManager` (`rust/src/manager/tor_manager.rs`) is a process singleton that forwards each mode or status change from that channel, so a change the service makes on its own, such as turning Tor off after a full wipe, reaches the screen too. `state()` is the initial snapshot. User intents go through `dispatch(.selectMode(mode))` and `dispatch(.restart)`, and saving runs off the caller's thread. Reconcile messages carry full values (`Mode`, `Status`, and `ModeRejected` for a refused change), so a reconciler that applies them in order converges on the current state without a revision counter.
 
 The saved mode is the `tor_settings` key in `GlobalConfigTable`, stored as JSON with explicit names, such as `{"mode":"proxy","address":"127.0.0.1:9050"}`. The table is a string table, so its redb metadata doesn't change.

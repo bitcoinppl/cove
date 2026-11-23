@@ -21,7 +21,6 @@ use std::{
     },
 };
 
-use arc_swap::ArcSwap;
 use cove_http::{NetworkRoute, SocksProxy, route::is_onion_host};
 use cove_tor::{BootstrapState, BuiltInTor, BuiltInTorConfig};
 use parking_lot::Mutex;
@@ -60,6 +59,10 @@ pub enum RouteError {
     /// An onion address needs Tor, and resolving it with the system resolver would leak it
     #[error("turn on Tor in Settings to connect to .onion addresses")]
     OnionNeedsTor,
+
+    /// The client was built for a route that's no longer current, such as before Tor turned on
+    #[error("the Tor setting changed, so this connection was stopped")]
+    Changed,
 }
 
 /// What Tor is doing, for the settings screen
@@ -94,20 +97,23 @@ pub enum SetTorError {
     Save(String),
 }
 
-#[derive(Debug)]
-pub struct TorService {
-    route: ArcSwap<Result<NetworkRoute, RouteError>>,
-    applied: Mutex<Applied>,
-    status: watch::Sender<TorStatus>,
-    /// Bumped on every apply, so a stopped client's late status updates are dropped
-    generation: Arc<AtomicU64>,
+/// What the service last published, read by every client builder and the settings screen
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TorState {
+    /// `None` when the saved settings can't be read
+    pub settings: Option<TorSettings>,
+    pub route: Result<NetworkRoute, RouteError>,
+    pub status: TorStatus,
 }
 
 #[derive(Debug)]
-struct Applied {
-    /// `None` when the saved settings can't be read
-    settings: Option<TorSettings>,
-    built_in: Option<BuiltInTor>,
+pub struct TorService {
+    state: watch::Sender<TorState>,
+    /// The running built-in client. Every change holds this lock from saving to publishing, so
+    /// two quick changes can't save in one order and apply in the other
+    built_in: Mutex<Option<BuiltInTor>>,
+    /// Bumped on every apply, so a stopped client's late status updates are dropped
+    generation: Arc<AtomicU64>,
 }
 
 impl TorService {
@@ -122,39 +128,44 @@ impl TorService {
     }
 
     fn load() -> Self {
+        let loading = TorState {
+            settings: None,
+            route: Err(RouteError::TorUnavailable("loading".into())),
+            status: TorStatus::Off,
+        };
+
         let service = Self {
-            route: ArcSwap::from_pointee(Err(RouteError::TorUnavailable("loading".into()))),
-            applied: Mutex::new(Applied { settings: None, built_in: None }),
-            status: watch::Sender::new(TorStatus::Off),
+            state: watch::Sender::new(loading),
+            built_in: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
         };
 
-        service.apply(read_saved_settings());
+        service.apply(&mut service.built_in.lock(), read_saved_settings());
         service
     }
 
     pub fn route(&self) -> Result<NetworkRoute, RouteError> {
-        self.route.load().as_ref().clone()
+        self.state.borrow().route.clone()
     }
 
-    /// The saved settings, or `None` when they can't be read
-    pub fn settings(&self) -> Option<TorSettings> {
-        self.applied.lock().settings.clone()
-    }
-
-    pub fn status(&self) -> TorStatus {
-        self.status.borrow().clone()
-    }
-
-    pub fn subscribe_status(&self) -> watch::Receiver<TorStatus> {
-        self.status.subscribe()
+    /// Every published change to the settings, route, or status
+    pub fn subscribe(&self) -> watch::Receiver<TorState> {
+        self.state.subscribe()
     }
 
     /// Saves and applies new settings
     ///
     /// Turning Tor off is refused while any network's selected node is an onion node, since
-    /// that node would stop working
+    /// that node would stop working; saving the mode that's already applied changes nothing
     pub fn set_settings(&self, settings: TorSettings) -> Result<(), SetTorError> {
+        let mut built_in = self.built_in.lock();
+
+        // checked under the change lock, so it compares with the mode the last change applied;
+        // choosing the running mode again keeps built-in Tor running instead of restarting it
+        if self.state.borrow().settings.as_ref() == Some(&settings) {
+            return Ok(());
+        }
+
         if settings == TorSettings::Off
             && let Some(node_name) = selected_onion_node()
         {
@@ -166,13 +177,14 @@ impl TorService {
             .set_tor_settings(&settings)
             .map_err(|error| SetTorError::Save(error.to_string()))?;
 
-        self.apply(Ok(Some(settings)));
+        self.apply(&mut built_in, Ok(Some(settings)));
         Ok(())
     }
 
     /// Restarts Tor with the saved settings, such as after the built-in client failed
     pub fn restart(&self) {
-        self.apply(read_saved_settings());
+        let mut built_in = self.built_in.lock();
+        self.apply(&mut built_in, read_saved_settings());
     }
 
     /// Stops Tor and removes its files ahead of a full wipe
@@ -180,11 +192,10 @@ impl TorService {
     /// Connections stay blocked until [`Self::restart`] reads the wiped database, so a wipe that
     /// fails partway never falls back to a direct route while Tor is still saved as on
     pub fn stop_for_wipe(&self) -> std::io::Result<()> {
-        let mut applied = self.applied.lock();
+        let mut built_in = self.built_in.lock();
         self.generation.fetch_add(1, Ordering::AcqRel);
-        applied.built_in = None;
-        applied.settings = None;
-        self.publish(Err(RouteError::TorUnavailable("resetting".into())), TorStatus::Off);
+        *built_in = None;
+        self.publish(None, Err(RouteError::TorUnavailable("resetting".into())), TorStatus::Off);
 
         match std::fs::remove_dir_all(tor_data_dir()) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
@@ -193,63 +204,74 @@ impl TorService {
     }
 
     /// Replaces the running setup with `settings`, publishing its route and status
-    fn apply(&self, settings: Result<Option<TorSettings>, String>) {
-        let mut applied = self.applied.lock();
+    ///
+    /// The caller holds the change lock, whose guard is `built_in`
+    fn apply(
+        &self,
+        built_in: &mut Option<BuiltInTor>,
+        settings: Result<Option<TorSettings>, String>,
+    ) {
         let generation = self.generation.fetch_add(1, Ordering::AcqRel) + 1;
 
         // the old client stops before the new route goes out, so no stream outlives its mode
-        applied.built_in = None;
+        *built_in = None;
 
         let settings = match settings {
             Ok(settings) => settings.unwrap_or(TorSettings::Off),
             Err(error) => {
                 warn!("Tor settings could not be read, blocking connections: {error}");
-                applied.settings = None;
 
                 let message = "Cove couldn't read your Tor settings. Choose a Tor mode again";
                 let failed = TorStatus::Failed { message: message.to_string() };
-                self.publish(Err(RouteError::TorUnavailable(message.to_string())), failed);
+                self.publish(None, Err(RouteError::TorUnavailable(message.to_string())), failed);
                 return;
             }
         };
 
-        applied.settings = Some(settings.clone());
+        let saved = Some(settings.clone());
         match settings {
-            TorSettings::Off => self.publish(Ok(NetworkRoute::Direct), TorStatus::Off),
+            TorSettings::Off => self.publish(saved, Ok(NetworkRoute::Direct), TorStatus::Off),
 
             TorSettings::Proxy(address) => {
                 let proxy = SocksProxy { address, credentials: None };
-                self.publish(Ok(NetworkRoute::Tor(proxy)), TorStatus::UsingProxy);
+                self.publish(saved, Ok(NetworkRoute::Tor(proxy)), TorStatus::UsingProxy);
             }
 
             TorSettings::BuiltIn => match start_built_in() {
-                Ok(built_in) => {
-                    let proxy = built_in.proxy().clone();
-                    self.forward_bootstrap_state(&built_in, generation);
-                    applied.built_in = Some(built_in);
-                    self.publish(Ok(NetworkRoute::Tor(proxy)), TorStatus::Starting { percent: 0 });
+                Ok(started) => {
+                    let route = Ok(NetworkRoute::Tor(started.proxy().clone()));
+                    self.publish(saved, route, TorStatus::Starting { percent: 0 });
+                    self.forward_bootstrap_state(&started, generation);
+                    *built_in = Some(started);
                 }
 
                 Err(message) => {
                     warn!("built-in Tor failed to start: {message}");
                     let failed = TorStatus::Failed { message: message.clone() };
-                    self.publish(Err(RouteError::TorUnavailable(message)), failed);
+                    self.publish(saved, Err(RouteError::TorUnavailable(message)), failed);
                 }
             },
         }
     }
 
-    fn publish(&self, route: Result<NetworkRoute, RouteError>, status: TorStatus) {
-        self.route.store(Arc::new(route));
-        self.status.send_replace(status);
+    fn publish(
+        &self,
+        settings: Option<TorSettings>,
+        route: Result<NetworkRoute, RouteError>,
+        status: TorStatus,
+    ) {
+        self.state.send_replace(TorState { settings, route, status });
     }
 
     fn forward_bootstrap_state(&self, built_in: &BuiltInTor, generation: u64) {
         let Some(runtime) = cove_tokio::handle() else { return };
 
         let mut state = built_in.state();
-        let status = self.status.clone();
+        let published = self.state.clone();
         let current_generation = self.generation.clone();
+
+        // the first pass reads the state the client already reached
+        state.mark_changed();
 
         runtime.spawn(async move {
             // ends when the client stops and drops its sender
@@ -264,11 +286,19 @@ impl TorService {
                     }
                 };
 
-                if current_generation.load(Ordering::Acquire) != generation {
+                // checked under the channel's lock, so a newer apply's status is never overwritten
+                let updated = published.send_if_modified(|published| {
+                    if current_generation.load(Ordering::Acquire) != generation {
+                        return false;
+                    }
+
+                    published.status = next;
+                    true
+                });
+
+                if !updated {
                     return;
                 }
-
-                status.send_replace(next);
             }
         });
     }

@@ -121,9 +121,8 @@ struct TorSettingsScreen: View {
         choice = next
         proxyError = nil
 
-        // picking the saved mode again would restart Tor for nothing
-        if let mode = tor.mode, TorModeChoice(mode) == next { return }
-
+        // every pick goes to Rust, which skips one matching the mode it last applied; a check
+        // against the saved mode here would drop a quick reversal while a change is still saving
         switch next {
         case .off:
             tor.dispatch(action: .selectMode(.off))

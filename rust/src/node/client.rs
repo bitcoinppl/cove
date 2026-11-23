@@ -23,6 +23,8 @@ use cove_bdk_progressive_scan::ScanEvent;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
+use cove_http::NetworkRoute;
+
 use crate::{
     node::{Node, NodeConnectionIdentity},
     tor::RouteError,
@@ -33,10 +35,14 @@ use super::ApiType;
 const ELECTRUM_BATCH_SIZE: usize = 10;
 const ESPLORA_BATCH_SIZE: usize = 1;
 
-/// A blockchain client bound to the node that created it
+/// A blockchain client bound to the node and the route that created it
+///
+/// Each request first checks that the route is still current, so a client built before Tor
+/// turned on stops instead of sending more requests outside Tor
 #[derive(Clone)]
 pub struct NodeClient {
     connection_identity: NodeConnectionIdentity,
+    route: NetworkRoute,
     backend: NodeClientBackend,
 }
 
@@ -148,6 +154,7 @@ impl Error {
             Self::ElectrumGetTransaction(_) => "electrum_get_transaction",
             Self::Route(RouteError::TorUnavailable(_)) => "tor_unavailable",
             Self::Route(RouteError::OnionNeedsTor) => "onion_needs_tor",
+            Self::Route(RouteError::Changed) => "route_changed",
         }
     }
 }
@@ -182,14 +189,46 @@ impl NodeClient {
             }
         };
 
-        Ok(Self { connection_identity: node.connection_identity_on(Some(route)), backend })
+        let connection_identity = node.connection_identity_on(Some(route.clone()));
+        Ok(Self { connection_identity, route, backend })
     }
 
     pub(crate) fn connection_identity(&self) -> &NodeConnectionIdentity {
         &self.connection_identity
     }
 
+    /// How long a reachability check through this client may wait, given how long it waits
+    /// on a direct route
+    pub(crate) fn check_timeout(&self, direct: std::time::Duration) -> std::time::Duration {
+        if self.route.is_tor() { crate::node::TOR_CHECK_URL_TIMEOUT } else { direct }
+    }
+
+    /// Fails when the current route isn't the one this client was built on
+    fn ensure_route(&self) -> Result<(), Error> {
+        match crate::tor::current_route()? {
+            route if route == self.route => Ok(()),
+            _ => Err(RouteError::Changed.into()),
+        }
+    }
+
+    /// Resolves once the current route is no longer the one this client was built on
+    pub(crate) async fn route_changed(&self) {
+        let mut state = crate::tor::TorService::global().subscribe();
+        loop {
+            if state.borrow_and_update().route.as_ref().ok() != Some(&self.route) {
+                return;
+            }
+
+            // the service lives for the whole process, so its channel never closes
+            if state.changed().await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        }
+    }
+
     pub async fn check_url(&self) -> Result<(), Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => {
                 client.get_height().await?;
@@ -204,6 +243,8 @@ impl NodeClient {
     }
 
     pub async fn get_height(&self) -> Result<usize, Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => {
                 let height = client.get_height().await?;
@@ -223,6 +264,8 @@ impl NodeClient {
         full_scan_request: FullScanRequest<KeychainKind>,
         stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
+        self.ensure_route()?;
+
         let full_scan_result = match &self.backend {
             NodeClientBackend::Esplora(client) => {
                 debug!("starting esplora full scan");
@@ -247,36 +290,56 @@ impl NodeClient {
         events: flume::Sender<ScanEvent<KeychainKind>>,
         cancel_token: CancellationToken,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
-        let full_scan_result = match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                debug!("starting progressive esplora full scan");
-                client
-                    .progressive_full_scan(
-                        full_scan_request,
-                        last_revealed_indices,
-                        stop_gap,
-                        events,
-                        cancel_token,
-                    )
-                    .await?
-            }
+        self.ensure_route()?;
 
-            NodeClientBackend::Electrum(client) => {
-                debug!("starting progressive electrum full scan");
-                client
-                    .progressive_full_scan(
-                        full_scan_request,
-                        tx_graph,
-                        last_revealed_indices,
-                        stop_gap,
-                        events,
-                        cancel_token,
-                    )
-                    .await?
+        // a scan can run for minutes, so it stops at its next batch when the route changes
+        // instead of finishing outside Tor
+        let scan_token = cancel_token.child_token();
+        let scan = async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    debug!("starting progressive esplora full scan");
+                    client
+                        .progressive_full_scan(
+                            full_scan_request,
+                            last_revealed_indices,
+                            stop_gap,
+                            events,
+                            scan_token.clone(),
+                        )
+                        .await
+                }
+
+                NodeClientBackend::Electrum(client) => {
+                    debug!("starting progressive electrum full scan");
+                    client
+                        .progressive_full_scan(
+                            full_scan_request,
+                            tx_graph,
+                            last_revealed_indices,
+                            stop_gap,
+                            events,
+                            scan_token.clone(),
+                        )
+                        .await
+                }
             }
         };
 
-        Ok(full_scan_result)
+        tokio::pin!(scan);
+        let (result, route_changed) = tokio::select! {
+            result = &mut scan => (result, false),
+            () = self.route_changed() => {
+                scan_token.cancel();
+                (scan.await, true)
+            }
+        };
+
+        if route_changed && !cancel_token.is_cancelled() {
+            return Err(RouteError::Changed.into());
+        }
+
+        Ok(result?)
     }
 
     pub async fn sync(
@@ -284,6 +347,8 @@ impl NodeClient {
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         scan_request: SyncRequest<(KeychainKind, u32)>,
     ) -> Result<SyncResponse, Error> {
+        self.ensure_route()?;
+
         let scan_result = match &self.backend {
             NodeClientBackend::Esplora(client) => client.sync(scan_request).await?,
             NodeClientBackend::Electrum(client) => client.sync(scan_request, tx_graph).await?,
@@ -295,6 +360,8 @@ impl NodeClient {
         &self,
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => client.get_confirmed_transaction(&txid).await,
             NodeClientBackend::Electrum(client) => client.get_confirmed_transaction(txid).await,
@@ -303,6 +370,8 @@ impl NodeClient {
 
     /// Fetches a transaction from the mempool or chain; returns `None` if not found.
     pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => client.get_transaction(txid).await,
             NodeClientBackend::Electrum(client) => client.get_transaction(txid).await,
@@ -310,6 +379,8 @@ impl NodeClient {
     }
 
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => client.get_block_id().await,
             NodeClientBackend::Electrum(client) => client.get_block_id().await,
@@ -317,6 +388,8 @@ impl NodeClient {
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => {
                 let address = client.check_address_for_txn(address).await?;
@@ -331,6 +404,8 @@ impl NodeClient {
     }
 
     pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => client.broadcast_transaction(txn).await,
             NodeClientBackend::Electrum(client) => client.broadcast_transaction(txn).await,

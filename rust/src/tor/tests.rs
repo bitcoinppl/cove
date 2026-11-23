@@ -121,7 +121,7 @@ async fn unreadable_settings_block_every_connection() {
     TorService::global().restart();
 
     assert!(matches!(current_route(), Err(RouteError::TorUnavailable(_))));
-    assert!(matches!(TorService::global().status(), TorStatus::Failed { .. }));
+    assert!(matches!(TorService::global().subscribe().borrow().status, TorStatus::Failed { .. }));
 
     let node = Node::new_esplora(
         "esplora".into(),
@@ -146,4 +146,56 @@ async fn cached_clients_stop_matching_when_tor_turns_on() {
 
     // the wallet and the transaction watcher drop a client whose identity no longer matches
     assert_ne!(direct_client.connection_identity(), &esplora.connection_identity());
+}
+
+#[tokio::test]
+async fn a_client_built_before_tor_turns_on_stops_instead_of_going_direct() {
+    let tor = TorTest::start().await;
+    let server = ConnectionCounter::start();
+    let node = Node::new_esplora(
+        "esplora".into(),
+        format!("http://{}/api", server.address()),
+        CoveNetwork::Bitcoin,
+    );
+
+    // built on the direct route; an Esplora client connects only when it sends a request
+    let client = NodeClient::new(&node).await.unwrap();
+    tor.use_proxy(closed_proxy_address());
+
+    let error = client.get_height().await.unwrap_err();
+    assert!(matches!(error, crate::node::client::Error::Route(RouteError::Changed)), "{error}");
+    assert_eq!(server.count(), 0, "a client built before Tor turned on reached the server");
+}
+
+#[tokio::test]
+async fn a_running_scan_hears_that_the_route_changed() {
+    let tor = TorTest::start().await;
+    let node = FakeNode::start(Network::Bitcoin);
+    let client = NodeClient::new(&node.esplora_node("esplora")).await.unwrap();
+
+    let route_changed = tokio::spawn({
+        let client = client.clone();
+        async move { client.route_changed().await }
+    });
+
+    tor.use_proxy(closed_proxy_address());
+
+    tokio::time::timeout(std::time::Duration::from_secs(5), route_changed)
+        .await
+        .expect("the client never heard that Tor turned on")
+        .unwrap();
+}
+
+#[tokio::test]
+async fn choosing_the_running_mode_again_changes_nothing() {
+    let tor = TorTest::start().await;
+    let proxy = closed_proxy_address();
+    tor.use_proxy(proxy.clone());
+
+    let mut state = TorService::global().subscribe();
+    state.borrow_and_update();
+
+    // the screens send every pick, and leave it to the service to skip one that changes nothing
+    TorService::global().set_settings(TorSettings::Proxy(proxy)).unwrap();
+    assert!(!state.has_changed().unwrap(), "saving the running mode republished it");
 }

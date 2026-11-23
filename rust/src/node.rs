@@ -57,8 +57,9 @@ pub(crate) struct NodeConnectionIdentity {
 /// How long a node check waits before reporting the node as unreachable
 const CHECK_URL_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// A node check over Tor, which can include building a circuit to an onion service
-const TOR_CHECK_URL_TIMEOUT: Duration = Duration::from_secs(60);
+/// A node check over Tor, whose first request can include joining the Tor network and
+/// building a circuit, sometimes to an onion service
+pub(crate) const TOR_CHECK_URL_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
