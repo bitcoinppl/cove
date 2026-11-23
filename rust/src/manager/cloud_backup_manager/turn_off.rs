@@ -240,12 +240,17 @@ impl OtherBackups {
         }
     }
 
-    /// Whether a commit on this evidence would delete a namespace `confirmed` didn't
+    /// Whether a commit on this evidence breaks what `confirmed` told the user: it would delete a
+    /// namespace `confirmed` didn't list, or it can't list the ones `confirmed` said it would delete
     fn grew_since(&self, confirmed: &Self) -> bool {
         match (self, confirmed) {
             (Self::Listed(now), Self::Listed(then)) => !now.is_subset(then),
             (Self::Listed(now), Self::Unknown) => !now.is_empty(),
-            (Self::Unknown, _) => false,
+
+            // the review promised to delete these, so a recheck that can't list them must say
+            // they stay rather than finish with them left in place
+            (Self::Unknown, Self::Listed(then)) => !then.is_empty(),
+            (Self::Unknown, Self::Unknown) => false,
         }
     }
 

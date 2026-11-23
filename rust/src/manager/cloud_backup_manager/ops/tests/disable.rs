@@ -271,6 +271,36 @@ async fn a_backup_made_with_another_passkey_after_the_review_asks_again_and_dele
     assert!(!globals.cloud.has_namespace(&other_namespace));
 }
 
+/// A review that lists backups made with another passkey promised to delete them, so a recheck
+/// that can't list them asks again instead of finishing with them left in place
+#[tokio::test(flavor = "current_thread")]
+async fn a_recheck_that_cannot_list_other_backups_asks_again_and_deletes_nothing() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let other_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.set_master_key_backup(other_namespace.clone(), vec![4, 5, 6]);
+
+    let review = review_turn_off(&manager).await;
+    assert_eq!(review.impact.other_backups, CloudBackupDisableOtherBackups::Deleted { count: 1 });
+
+    globals.cloud.fail_list_namespaces("listing failed");
+    confirm_turn_off(&manager).await;
+    wait_for_turn_off_run(&manager).await;
+
+    let CloudBackupDisableScreen::Reviewing(again) = turn_off_screen(&manager) else {
+        panic!("expected a new review, got {:?}", turn_off_screen(&manager));
+    };
+    assert!(again.changed_since_confirmation);
+    assert_eq!(again.impact.other_backups, CloudBackupDisableOtherBackups::Unchecked);
+    assert_nothing_turned_off(globals, &namespace);
+    assert!(globals.cloud.has_namespace(&other_namespace));
+}
+
 /// The other backups go first, so a failed delete leaves this device's backup, and Try Again
 /// counts a backup already gone as deleted
 #[tokio::test(flavor = "current_thread")]

@@ -1350,7 +1350,8 @@ asks for consent instead.
    device since the review, or a wallet covering an extra copy lost its secret,
    or a wallet whose own backup is listed left this device while that backup is
    at risk or unchecked, or a backup made with another passkey the review
-   didn't list, or its assessment is worse, the operation ends and a
+   didn't list, or it can't list those backups after a review that said it
+   would delete some, or its assessment is worse, the operation ends and a
    new review replaces the old one with `changed_since_confirmation`. If the
    recheck finds the provider offline or needing authorization, Turn Off ends
    with `DisableNotStarted`; if the configuration changed, it is rejected as
