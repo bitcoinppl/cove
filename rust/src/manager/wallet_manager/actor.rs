@@ -29,8 +29,9 @@ mod transaction_confirmation;
 mod transactions;
 
 use super::payjoin::{
-    PayjoinActor, PayjoinConfig, PayjoinDeadline, PayjoinSessionId, PayjoinSessionPersister,
-    PayjoinStatus, PayjoinTransactionKind, SessionResumption, resume_session,
+    PayjoinActor, PayjoinConfig, PayjoinDeadline, PayjoinFeePaid, PayjoinSessionId,
+    PayjoinSessionPersister, PayjoinStatus, PayjoinTransactionKind, SessionResumption,
+    resume_session,
 };
 use crate::manager::deferred_sender::MessageSender;
 use act_zero::{runtimes::tokio::spawn_actor, *};
@@ -135,7 +136,7 @@ enum PayjoinPhase {
 
     /// The last session's terminal transaction was broadcast and its record cleared; no
     /// Payjoin work is running
-    Completed(PayjoinBroadcast),
+    Completed(PayjoinCompletion),
 }
 
 #[derive(Debug)]
@@ -150,6 +151,13 @@ struct PayjoinBroadcast {
     session_id: PayjoinSessionId,
     txid: Txid,
     kind: PayjoinTransactionKind,
+}
+
+/// A session's broadcast terminal transaction and what it cost the wallet in fees
+#[derive(Debug, Clone)]
+struct PayjoinCompletion {
+    broadcast: PayjoinBroadcast,
+    fee_paid: Option<PayjoinFeePaid>,
 }
 
 impl PayjoinPhase {
@@ -174,11 +182,14 @@ impl PayjoinPhase {
                 kind: broadcast.kind,
             },
 
-            Self::Completed(broadcast) => PayjoinStatus::Completed {
-                session_id: broadcast.session_id.clone(),
-                txid: Arc::new(broadcast.txid.into()),
-                kind: broadcast.kind,
-            },
+            Self::Completed(PayjoinCompletion { broadcast, fee_paid }) => {
+                PayjoinStatus::Completed {
+                    session_id: broadcast.session_id.clone(),
+                    txid: Arc::new(broadcast.txid.into()),
+                    kind: broadcast.kind,
+                    fee_paid: fee_paid.clone(),
+                }
+            }
         }
     }
 }
@@ -3395,7 +3406,7 @@ mod tests {
 
         // a v1 endpoint fails sender setup after the session record is saved, so the payment
         // takes the fallback without contacting a payjoin directory
-        let intent = PayjoinIntent::new("https://payjoin.example/pj".to_string());
+        let intent = PayjoinIntent::new("https://payjoin.example/pj".to_string(), None);
         let result = call!(addr.initiate_payment(psbt, UnsignedPaymentMode::Payjoin { intent }))
             .await
             .expect("initiate_payment actor responds");

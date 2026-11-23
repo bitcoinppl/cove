@@ -9,6 +9,9 @@ use bitcoin::hashes::{Hash as _, sha256};
 use nid::Nanoid;
 use serde::{Deserialize, Serialize};
 
+use cove_types::amount::Amount;
+
+use super::PayjoinFeeContribution;
 use crate::transaction::TxId;
 
 /// Identifies one Payjoin payment attempt, from its confirm screen to its broadcast
@@ -31,7 +34,7 @@ impl PayjoinSessionId {
     }
 }
 
-/// The receiver endpoint and identity that start one Payjoin payment
+/// The receiver endpoint, identity and fee offer that start one Payjoin payment
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
 pub struct PayjoinIntent {
     /// Identifies this payment in every status the wallet reports for it
@@ -39,13 +42,32 @@ pub struct PayjoinIntent {
 
     /// The receiver's BIP 77 endpoint, taken from its validated pj URI
     pub endpoint: String,
+
+    /// What the payment offers toward the fee of the receiver's coin, `None` when it offers
+    /// nothing, see [`PayjoinFeeContribution`]
+    pub fee_contribution: Option<Arc<PayjoinFeeContribution>>,
 }
 
 impl PayjoinIntent {
-    /// Starts a new payment attempt to `endpoint`
-    pub(crate) fn new(endpoint: String) -> Self {
-        Self { session_id: PayjoinSessionId::generate(), endpoint }
+    /// Starts a new payment attempt to `endpoint`, offering `fee_contribution`
+    pub(crate) fn new(endpoint: String, fee_contribution: Option<PayjoinFeeContribution>) -> Self {
+        Self {
+            session_id: PayjoinSessionId::generate(),
+            endpoint,
+            fee_contribution: fee_contribution.map(Arc::new),
+        }
     }
+}
+
+/// What a Payjoin payment cost this wallet in fees, once its transaction was broadcast
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct PayjoinFeePaid {
+    /// Everything the wallet spent beyond the amount the receiver asked for
+    pub total: Arc<Amount>,
+
+    /// The part of `total` the receiver took from the change for the coin it added, zero for a
+    /// payment sent without Payjoin
+    pub fee_help: Arc<Amount>,
 }
 
 /// Which transaction a Payjoin session ended by broadcasting
@@ -82,7 +104,14 @@ pub enum PayjoinStatus {
     Broadcasting { session_id: PayjoinSessionId, txid: Arc<TxId>, kind: PayjoinTransactionKind },
 
     /// The session's final transaction was broadcast and saved to the wallet
-    Completed { session_id: PayjoinSessionId, txid: Arc<TxId>, kind: PayjoinTransactionKind },
+    Completed {
+        session_id: PayjoinSessionId,
+        txid: Arc<TxId>,
+        kind: PayjoinTransactionKind,
+
+        /// What the payment cost in fees, `None` when the wallet could not work it out
+        fee_paid: Option<PayjoinFeePaid>,
+    },
 }
 
 /// When a Payjoin session stops waiting for the receiver and broadcasts the original

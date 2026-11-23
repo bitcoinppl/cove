@@ -8,7 +8,10 @@ use crate::{
     color_scheme::ColorSchemeSelection,
     database::Database,
     fiat::FiatCurrency,
-    manager::auth_manager::{AUTH_MANAGER, AuthSettings},
+    manager::{
+        auth_manager::{AUTH_MANAGER, AuthSettings},
+        wallet_manager::payjoin::PayjoinFeeHelp,
+    },
     network::Network,
     node::Node,
     router::{NewWalletRoute, Route, Router},
@@ -64,6 +67,7 @@ impl FullWipeCompletion {
         Updater::send_update(AppMessage::SelectedNetworkChanged(self.selected_network));
         Updater::send_update(AppMessage::ColorSchemeChanged(self.color_scheme));
         Updater::send_update(AppMessage::FiatCurrencyChanged(self.fiat_currency));
+        Updater::send_update(AppMessage::PayjoinFeeHelpChanged(PayjoinFeeHelp::default()));
         Updater::send_update(AppMessage::SelectedNodeChanged(self.selected_node.clone()));
         Updater::send_update(AppMessage::WalletsChanged);
         AUTH_MANAGER.publish(&self.auth);

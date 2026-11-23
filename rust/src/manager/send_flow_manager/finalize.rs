@@ -230,9 +230,20 @@ impl RustSendFlowManager {
                 // parsing keeps only a BIP 77 v2 endpoint, so a BIP 78 request is paid normally
                 WalletType::Hot => {
                     let mode = match payjoin {
-                        Some(payjoin) => UnsignedPaymentMode::Payjoin {
-                            intent: PayjoinIntent::new(payjoin.endpoint),
-                        },
+                        Some(payjoin) => {
+                            // fixed now, so the confirm screen shows exactly what is offered
+                            let fee_contribution =
+                                match manager.payjoin_fee_contribution(details.clone()).await {
+                                    Ok(fee_contribution) => fee_contribution,
+                                    Err(error) => {
+                                        let error = SendFlowError::from(error);
+                                        return me.send_alert_async(error).await;
+                                    }
+                                };
+
+                            let intent = PayjoinIntent::new(payjoin.endpoint, fee_contribution);
+                            UnsignedPaymentMode::Payjoin { intent }
+                        }
                         None => UnsignedPaymentMode::Standard,
                     };
 

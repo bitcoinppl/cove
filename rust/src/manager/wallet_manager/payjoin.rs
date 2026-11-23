@@ -32,13 +32,17 @@ use crate::{
 use super::actor::WalletActor;
 
 mod config;
+mod fee_contribution;
 mod status;
 #[cfg(debug_assertions)]
 mod ui_test_relay;
 
 pub(crate) use config::PayjoinConfig;
+pub use fee_contribution::{PayjoinFeeContribution, PayjoinFeeHelp};
 pub(crate) use status::{PayjoinDeadline, unix_now_secs};
-pub use status::{PayjoinIntent, PayjoinSessionId, PayjoinStatus, PayjoinTransactionKind};
+pub use status::{
+    PayjoinFeePaid, PayjoinIntent, PayjoinSessionId, PayjoinStatus, PayjoinTransactionKind,
+};
 
 #[cfg(test)]
 pub(crate) use config::OhttpRelays;
@@ -522,11 +526,13 @@ fn recipient_output_index(psbt: &Psbt, is_mine: impl Fn(&Script) -> bool) -> Res
 
 /// Builds the v2 sender state machine from a signed PSBT and payjoin endpoint
 ///
+/// `fee_contribution` is what the confirm screen showed the payment offers the receiver, and
 /// `is_mine` reports whether an output script belongs to the sending wallet
 pub(crate) fn build_sender(
     signed_psbt: Psbt,
     fallback_tx: &BdkTransaction,
     endpoint: String,
+    fee_contribution: Option<&PayjoinFeeContribution>,
     network: bitcoin::Network,
     persister: &PayjoinSessionPersister,
     is_mine: impl Fn(&Script) -> bool,
@@ -555,9 +561,18 @@ pub(crate) fn build_sender(
         })
         .unwrap_or(BdkFeeRate::BROADCAST_MIN);
 
+    // the confirm screen showed exactly this offer, so it is passed as is rather than
+    // recomputed from the signed transaction. Offering nothing still names a zero amount: with
+    // one recipient the receiver already knows which output is the change, and clamping lets a
+    // payment without change build with no offer at all
+    let (max_fee_contribution, change_index, clamp) = match fee_contribution {
+        Some(contribution) => (contribution.max_bdk(), Some(contribution.change_index()), false),
+        None => (bitcoin::Amount::ZERO, None, true),
+    };
+
     let sender = SenderBuilder::from_parts(signed_psbt, &pj_param, &address, Some(amount))
         .always_disable_output_substitution()
-        .build_recommended(fee_rate)
+        .build_with_additional_fee(max_fee_contribution, change_index, fee_rate, clamp)
         .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?
         .save(persister)
         .map_err(|e| eyre::eyre!("failed to persist payjoin session: {e:?}"))?;

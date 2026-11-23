@@ -87,6 +87,7 @@ pub enum WalletData {
     ScanState(ScanState),
     ReceiveAddressCache(ReceiveAddressCache),
     PayjoinSenderSession(PayjoinSenderSession),
+    PayjoinFees(PayjoinFees),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, uniffi::Enum)]
@@ -94,6 +95,7 @@ pub enum WalletDataKey {
     ScanState(WalletAddressType),
     ReceiveAddressCache,
     PayjoinSenderSession,
+    PayjoinFees,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, uniffi::Enum)]
@@ -148,6 +150,15 @@ pub enum PendingAction {
     BroadcastFallback,
     BroadcastProposal { transaction: TransactionBytes },
 }
+
+/// The fee this wallet paid for each Payjoin proposal it broadcast, by txid, in sats
+///
+/// A proposal spends a coin of the receiver's too, so its fee mixes both sides' shares and the
+/// wallet cannot tell its own share from the transaction alone. The session works it out
+/// before its record is cleared, and transaction details read it from here
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(transparent)]
+pub struct PayjoinFees(std::collections::BTreeMap<bitcoin::Txid, u64>);
 
 /// Event log for an in-flight payjoin sender session, allowing it to survive app restarts
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -405,6 +416,30 @@ impl WalletDataDb {
 
     pub fn delete_payjoin_sender_session(&self) -> Result<()> {
         self.delete(WalletDataKey::PayjoinSenderSession)
+    }
+
+    /// The fee this wallet paid for the Payjoin proposal `txid`, `None` when it is not one
+    pub(crate) fn payjoin_fee(&self, txid: bitcoin::Txid) -> Result<Option<bitcoin::Amount>> {
+        let fees = self.payjoin_fees()?;
+        Ok(fees.0.get(&txid).copied().map(bitcoin::Amount::from_sat))
+    }
+
+    /// Records the fee this wallet paid for the Payjoin proposal `txid`
+    pub(crate) fn save_payjoin_fee(&self, txid: bitcoin::Txid, fee: bitcoin::Amount) -> Result<()> {
+        let mut fees = self.payjoin_fees()?;
+        fees.0.insert(txid, fee.to_sat());
+
+        self.set(WalletDataKey::PayjoinFees, WalletData::PayjoinFees(fees))
+    }
+
+    fn payjoin_fees(&self) -> Result<PayjoinFees> {
+        let value = self.get(WalletDataKey::PayjoinFees)?;
+
+        let Some(WalletData::PayjoinFees(fees)) = value else {
+            return Ok(PayjoinFees::default());
+        };
+
+        Ok(fees)
     }
 
     fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
@@ -753,6 +788,7 @@ impl WalletDataKey {
             Self::ScanState(WalletAddressType::Legacy) => "scan_state_legacy",
             Self::ReceiveAddressCache => "receive_address_cache",
             Self::PayjoinSenderSession => "payjoin_sender_session",
+            Self::PayjoinFees => "payjoin_fees",
         }
     }
 }
@@ -1078,6 +1114,25 @@ mod tests {
         db.delete_payjoin_sender_session().unwrap();
 
         assert_eq!(db.get_payjoin_sender_session().unwrap(), None);
+    }
+
+    /// Each proposal keeps its own fee, and a later save does not drop an earlier one
+    #[test]
+    fn payjoin_fees_are_kept_per_transaction() {
+        use bitcoin::hashes::Hash as _;
+
+        let wallet_id = WalletId::preview_new_random();
+        let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
+        let first = bitcoin::Txid::from_byte_array([1; 32]);
+        let second = bitcoin::Txid::from_byte_array([2; 32]);
+        let unknown = bitcoin::Txid::from_byte_array([3; 32]);
+
+        db.save_payjoin_fee(first, bitcoin::Amount::from_sat(2_090)).unwrap();
+        db.save_payjoin_fee(second, bitcoin::Amount::from_sat(1_410)).unwrap();
+
+        assert_eq!(db.payjoin_fee(first).unwrap(), Some(bitcoin::Amount::from_sat(2_090)));
+        assert_eq!(db.payjoin_fee(second).unwrap(), Some(bitcoin::Amount::from_sat(1_410)));
+        assert_eq!(db.payjoin_fee(unknown).unwrap(), None);
     }
 
     #[test]

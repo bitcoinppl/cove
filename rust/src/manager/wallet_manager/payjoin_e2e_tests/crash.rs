@@ -375,7 +375,7 @@ impl WalletProcess {
             .expect("the payment builds");
 
         // a stop in the first two steps fails the start, which the relaunch then recovers
-        let mode = UnsignedPaymentMode::Payjoin { intent: PayjoinIntent::new(endpoint) };
+        let mode = UnsignedPaymentMode::Payjoin { intent: PayjoinIntent::new(endpoint, None) };
         let _started = call!(self.actor.initiate_payment(psbt.clone(), mode))
             .await
             .expect("the wallet actor answers");

@@ -171,10 +171,13 @@ impl TransactionDetailsPresentation {
 }
 
 impl TransactionDetails {
+    /// `payjoin_fee` is the fee the wallet paid when this is a Payjoin proposal it sent, which
+    /// the transaction alone cannot tell apart from the receiver's share
     pub fn try_new(
         wallet: &BdkWallet,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
         labels: Labels,
+        payjoin_fee: Option<bitcoin::Amount>,
     ) -> Result<Self, Error> {
         let txid = tx.tx_node.txid;
         let sent_and_received: SentAndReceived = wallet.sent_and_received(&tx.tx_node.tx).into();
@@ -195,11 +198,15 @@ impl TransactionDetails {
             }
         };
 
-        let fee = wallet
-            .calculate_fee(&tx_details)
-            .tap_err(|e| note_fee_error("fee", e))
-            .ok()
-            .map(Into::into);
+        // a proposal's own fee includes the receiver's share, which this wallet did not pay
+        let fee = match payjoin_fee {
+            Some(fee) => Some(fee.into()),
+            None => wallet
+                .calculate_fee(&tx_details)
+                .tap_err(|e| note_fee_error("fee", e))
+                .ok()
+                .map(Into::into),
+        };
         let fee_rate = wallet
             .calculate_fee_rate(&tx_details)
             .tap_err(|e| note_fee_error("fee rate", e))
