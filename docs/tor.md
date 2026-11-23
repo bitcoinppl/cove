@@ -71,7 +71,7 @@ Nodes on the local network don't work while Tor is on: a Tor exit can't reach a 
 
 ## Built-in Tor
 
-The `cove-tor` crate (`rust/crates/cove-tor`) wraps Arti. `BuiltInTor::start` creates an unbootstrapped `TorClient` with on-demand bootstrap, then starts a SOCKS5 server on `127.0.0.1` at a random port that requires a random username and password, so other apps on the device can't use it. Cove's clients reach the built-in client through that server, so built-in and proxy modes share one client code path.
+The `cove-tor` crate (`rust/crates/cove-tor`) wraps Arti. `BuiltInTor::start` creates an unbootstrapped `TorClient` with on-demand bootstrap, then starts a SOCKS5 server on `127.0.0.1` at a random port that requires a random username and password, so other apps on the device can't use it. A client that doesn't finish the SOCKS handshake within 10 seconds is disconnected. Cove's clients reach the built-in client through that server, so built-in and proxy modes share one client code path.
 
 - Each target host gets its own `IsolationToken`, so streams to different servers never share a circuit.
 - Node connection checks, in Settings and before a wallet scan, wait up to 60 seconds over Tor instead of the direct route's limit, since the first request can include joining the network.

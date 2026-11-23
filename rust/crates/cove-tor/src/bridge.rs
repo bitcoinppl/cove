@@ -26,6 +26,10 @@ use crate::socks::{self, Reply, Target};
 /// the Tor network; clients give up sooner on their own timeouts
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// How long a client has to finish the SOCKS handshake, so a local app that connects and sends
+/// nothing can't hold the connection open
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Opens streams for the bridge
 pub trait Connector: Send + Sync + 'static {
     type Stream: AsyncRead + AsyncWrite + Unpin + Send + 'static;
@@ -111,10 +115,17 @@ async fn handle_stream<C: Connector>(
     credentials: &SocksCredentials,
     connector: &C,
 ) {
-    let target = match socks::accept(&mut stream, credentials).await {
-        Ok(target) => target,
-        Err(error) => {
+    let handshake =
+        tokio::time::timeout(HANDSHAKE_TIMEOUT, socks::accept(&mut stream, credentials));
+    let target = match handshake.await {
+        Ok(Ok(target)) => target,
+        Ok(Err(error)) => {
             debug!("Tor proxy refused a client at {peer}: {error}");
+            return;
+        }
+
+        Err(_) => {
+            debug!("Tor proxy dropped a client at {peer} that never finished the handshake");
             return;
         }
     };
