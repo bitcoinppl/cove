@@ -1022,6 +1022,30 @@ impl WalletActor {
         self.start_payjoin_terminal_broadcast(session_id, proposal_tx, kind);
     }
 
+    /// Clears a stored session whose committed terminal transaction a confirmed wallet
+    /// transaction conflicts with, returning whether it did
+    ///
+    /// Recovery runs this first, so it never broadcasts a transaction that can no longer
+    /// confirm. The payment already went out as the conflicting transaction, normally the
+    /// original the receiver broadcast, and the wallet shows it like any other
+    pub(crate) fn clear_conflicted_payjoin_session(&mut self) -> bool {
+        let Some(terminal) = self.payjoin_store.pending_transaction() else {
+            return false;
+        };
+
+        if !payjoin_terminal_conflicted(&self.wallet.bdk, &terminal) {
+            return false;
+        }
+
+        if let Err(error) = self.payjoin_store.delete_session() {
+            warn!("failed to clear a payjoin session a confirmed spend replaced: {error}");
+            return false;
+        }
+
+        warn!("cleared payjoin session {}: a confirmed spend replaced it", terminal.compute_txid());
+        true
+    }
+
     async fn payjoin_terminal_tx_in_wallet(&mut self, txid: Txid) -> ActorResult<bool> {
         Produces::ok(self.wallet.bdk.get_tx(txid).is_some())
     }
@@ -1419,20 +1443,26 @@ async fn broadcast_payjoin_terminal_with_client(
 
 /// Whether a Payjoin session's committed terminal transaction needs no more broadcasting
 ///
-/// That holds once the wallet has it, or once a confirmed transaction spends one of its
-/// inputs, since it can then never confirm. BIP 77 lets the receiver broadcast the signed
-/// original itself, so when a stored proposal's broadcast fails and the original confirms, the
-/// proposal can only fail again, and retrying it would block every later send
+/// That holds once the wallet has it, or once [`payjoin_terminal_conflicted`]
 fn payjoin_terminal_settled(wallet: &bdk_wallet::Wallet, terminal: &BdkTransaction) -> bool {
-    if wallet.get_tx(terminal.compute_txid()).is_some() {
-        return true;
-    }
+    wallet.get_tx(terminal.compute_txid()).is_some()
+        || payjoin_terminal_conflicted(wallet, terminal)
+}
 
+/// Whether another confirmed wallet transaction spends one of the terminal transaction's
+/// inputs, so it can never confirm
+///
+/// BIP 77 lets the receiver broadcast the signed original itself, so when a stored proposal's
+/// broadcast fails and the original confirms, the proposal can only fail again, and retrying
+/// it would block every later send
+fn payjoin_terminal_conflicted(wallet: &bdk_wallet::Wallet, terminal: &BdkTransaction) -> bool {
+    let txid = terminal.compute_txid();
     let inputs: HashSet<OutPoint> =
         terminal.input.iter().map(|input| input.previous_output).collect();
 
     wallet.transactions().any(|tx| {
         tx.chain_position.is_confirmed()
+            && tx.tx_node.txid != txid
             && tx.tx_node.tx.input.iter().any(|input| inputs.contains(&input.previous_output))
     })
 }
