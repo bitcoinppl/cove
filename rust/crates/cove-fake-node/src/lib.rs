@@ -35,7 +35,7 @@ use tokio::{net::TcpListener, sync::watch};
 pub use chain::{
     Balance, BroadcastError, ChainTx, FakeChain, HistoryEntry, MerkleProof, TxLocation,
 };
-pub use control::{Gate, LoggedRequest, Protocol, RuleBuilder, RuleHandle};
+pub use control::{Gate, LoggedRequest, Protocol, RuleBuilder, RuleHandle, Scripted};
 pub use control_api::{ControlServer, RESET_BLOCKS};
 
 use control::Control;
