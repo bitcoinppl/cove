@@ -1043,11 +1043,16 @@ upload wrote. Only when every record counts is the source namespace deleted,
 and only once the provider reports each of those active records uploaded at
 that revision (see [Deleting Recovered Sources](#deleting-recovered-sources)).
 
-The Other Backups summary, which decides whether Recover is offered, still
-counts only records whose ID no local wallet uses, since it reads no record
-before a passkey opens its namespace. A namespace whose only records share IDs
-with local wallets is not offered on its own, though a Recover started for
-another namespace reads it too.
+The Other Backups summary decides whether Recover is offered. It reads no
+record before a passkey opens its namespace, so it judges a namespace by its
+record IDs alone. It counts every record whose ID no local hot wallet holding
+its seed uses: an ID no local wallet uses, or one a watch-only, cold or
+hardware wallet uses, or a hot wallet whose secret is gone, since that record
+may hold the seed. A namespace whose only records share IDs with local wallets
+that hold their seed is not offered. A failed read of the local wallets counts
+the record, so a namespace is offered rather than a seed hidden. A namespace
+offered this way may hold only another public copy; when the current backup
+holds that copy, Recover deletes the namespace.
 
 ## Deleting Recovered Sources
 

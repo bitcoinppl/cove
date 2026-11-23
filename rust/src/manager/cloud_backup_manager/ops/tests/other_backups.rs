@@ -91,9 +91,8 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let metadata = xpub_only_wallet_metadata();
+    let metadata = save_hot_wallet("Savings", random_mnemonic());
     let local_record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
-    persist_xpub_wallets(vec![metadata]);
 
     let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files(current_namespace.clone(), Vec::new());
@@ -126,7 +125,34 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn other_backup_summary_hides_namespaces_without_missing_wallets() {
+async fn other_backup_summary_hides_namespaces_holding_only_seeds_on_this_device() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = save_hot_wallet("Savings", random_mnemonic());
+    let local_record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+
+    let other_master_key = cove_cspp::master_key::MasterKey::generate();
+    let other_namespace = other_master_key.namespace_id();
+    globals.cloud.set_master_key_backup(other_namespace.clone(), vec![1, 2, 3]);
+    globals
+        .cloud
+        .set_wallet_files(other_namespace, vec![wallet_filename_from_record_id(&local_record_id)]);
+
+    let summary =
+        manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
+
+    assert_eq!(summary.namespace_count, 0);
+    assert_eq!(summary.wallet_count, 0);
+    assert!(summary.passkey_hints.is_empty());
+}
+
+/// Another folder may hold the seed of a wallet this device has only as watch-only, and the
+/// summary can't read it before the passkey opens it, so it offers that folder
+#[tokio::test(flavor = "current_thread")]
+async fn other_backup_summary_offers_a_namespace_that_may_hold_a_watch_only_wallets_seed() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -146,9 +172,8 @@ async fn other_backup_summary_hides_namespaces_without_missing_wallets() {
     let summary =
         manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
 
-    assert_eq!(summary.namespace_count, 0);
-    assert_eq!(summary.wallet_count, 0);
-    assert!(summary.passkey_hints.is_empty());
+    assert_eq!(summary.namespace_count, 1);
+    assert_eq!(summary.wallet_count, 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -487,10 +512,12 @@ async fn recover_other_backups_keeps_partially_moved_namespace() {
     assert_eq!(report.wallets_failed, 1);
     assert!(globals.cloud.has_namespace(&other_namespace));
 
+    // the restored wallet is watch-only, so the summary still counts its record, which it can't
+    // tell from a seed without the passkey
     let summary =
         manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
     assert_eq!(summary.namespace_count, 1);
-    assert_eq!(summary.wallet_count, 1);
+    assert_eq!(summary.wallet_count, 2);
 }
 
 #[tokio::test(flavor = "current_thread")]
