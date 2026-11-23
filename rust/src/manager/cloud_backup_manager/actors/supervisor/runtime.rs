@@ -1318,6 +1318,7 @@ impl Runtime {
             },
             Self::FinishingDisable { committed, op, .. } => PolicyBody::FinishingDisable {
                 namespace_id: committed.namespace_id.clone(),
+                other_namespace_ids: committed.other_namespace_ids.clone(),
                 op: op.as_ref().map(|op| op.0.claim),
             },
             Self::DriveAccountSwitch { op } => {
@@ -1467,6 +1468,7 @@ mod tests {
             retry_after: None,
             disposition: DisableDisposition::DeleteRemote,
             try_again_failed: false,
+            other_namespace_ids: Default::default(),
         }
     }
 

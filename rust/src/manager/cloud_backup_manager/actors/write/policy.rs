@@ -9,6 +9,7 @@
 //! pause, and a command from an older configuration can't recreate remote data a newer one
 //! deleted
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -120,6 +121,8 @@ pub(crate) enum PolicyBody {
     },
     FinishingDisable {
         namespace_id: String,
+        /// Backups made with another passkey the commit deletes before `namespace_id`
+        other_namespace_ids: BTreeSet<String>,
         op: Option<CloudBackupExclusiveOperationClaim>,
     },
     AccountSwitch {
@@ -225,8 +228,13 @@ impl WritePolicy {
             },
 
             C::TurnOffDelete { claim, namespace_id } => match &self.body {
-                B::FinishingDisable { namespace_id: committed, op: Some(running) }
-                    if running == claim && committed == namespace_id =>
+                B::FinishingDisable {
+                    namespace_id: committed,
+                    other_namespace_ids,
+                    op: Some(running),
+                } if running == claim
+                    && (committed == namespace_id
+                        || other_namespace_ids.contains(namespace_id)) =>
                 {
                     Decision::Run
                 }

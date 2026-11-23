@@ -909,7 +909,7 @@ mod tests {
         use crate::manager::cloud_backup_manager::InventoryReadAt;
         use crate::manager::cloud_backup_manager::turn_off::{
             DisableEvidence, DisableImpact, ImpactFacts, ListingEvidence, LocalEvidence,
-            LocalWallet, OtherBackupsCount, OwnSeedCoverage,
+            LocalWallet, OtherBackups, OwnSeedCoverage,
         };
 
         let listing = wallets.iter().map(|(name, ..)| format!("record-{name}")).collect();
@@ -929,7 +929,7 @@ mod tests {
             namespace_id: "ns".into(),
             listing: ListingEvidence::Listed(listing),
             local: LocalEvidence::Read { read_at: InventoryReadAt::default(), wallets: local },
-            other_backups: OtherBackupsCount::Counted(0),
+            other_backups: OtherBackups::Listed(Default::default()),
         };
 
         let facts = ImpactFacts::from(impact_inputs_for(wallets));

@@ -918,6 +918,11 @@ mod tests {
         let ordinary = CommandClass::Ordinary { generation };
         let cleanup = CommandClass::SourceCleanup { generation };
         let policy = |body| WritePolicy { generation, body };
+        let finishing_disable = |op| PolicyBody::FinishingDisable {
+            namespace_id: "ns".into(),
+            other_namespace_ids: ["listed".to_owned()].into(),
+            op,
+        };
         let row_delete = |claim| CommandClass::RowDelete {
             claim,
             authorization: Arc::new(test_authorization(generation)),
@@ -989,25 +994,24 @@ mod tests {
                 CommandClass::TurnOffDelete { claim: turn_off, namespace_id: "ns".into() },
                 Decision::Stale,
             ),
-            // only the committed Turn Off deletes, and only the namespace it committed to
+            // only the committed Turn Off deletes, and only the namespaces it committed to
             (
-                policy(PolicyBody::FinishingDisable {
-                    namespace_id: "ns".into(),
-                    op: Some(turn_off),
-                }),
+                policy(finishing_disable(Some(turn_off))),
                 CommandClass::TurnOffDelete { claim: turn_off, namespace_id: "ns".into() },
                 Decision::Run,
             ),
             (
-                policy(PolicyBody::FinishingDisable {
-                    namespace_id: "ns".into(),
-                    op: Some(turn_off),
-                }),
+                policy(finishing_disable(Some(turn_off))),
+                CommandClass::TurnOffDelete { claim: turn_off, namespace_id: "listed".into() },
+                Decision::Run,
+            ),
+            (
+                policy(finishing_disable(Some(turn_off))),
                 CommandClass::TurnOffDelete { claim: turn_off, namespace_id: "other".into() },
                 Decision::Stale,
             ),
             (
-                policy(PolicyBody::FinishingDisable { namespace_id: "ns".into(), op: None }),
+                policy(finishing_disable(None)),
                 ordinary.clone(),
                 Decision::Paused(PauseReason::TurnOff),
             ),

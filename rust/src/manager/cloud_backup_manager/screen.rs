@@ -35,11 +35,11 @@ pub(crate) use self::types::CloudBackupActionAvailability;
 use self::types::CloudBackupActions;
 pub(crate) use self::types::{
     CloudBackupDeleteConfirmation, CloudBackupDisableConfirmation, CloudBackupDisableImpact,
-    CloudBackupDisableNotStartedReason, CloudBackupDisableReview, CloudBackupDisableScreen,
-    CloudBackupFinishingDisableStage, CloudBackupInventoryAssessment, CloudBackupKeyTrust,
-    CloudBackupListedRecord, CloudBackupNamedCount, CloudBackupOutcome, CloudBackupOwnRecord,
-    CloudBackupOwnRow, CloudBackupRejection, CloudBackupScreenAction, CloudBackupTurnOffFailure,
-    CloudBackupUnreadableKind,
+    CloudBackupDisableNotStartedReason, CloudBackupDisableOtherBackups, CloudBackupDisableReview,
+    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupInventoryAssessment,
+    CloudBackupKeyTrust, CloudBackupListedRecord, CloudBackupNamedCount, CloudBackupOutcome,
+    CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupRejection, CloudBackupScreenAction,
+    CloudBackupTurnOffFailure, CloudBackupUnreadableKind,
 };
 pub use self::types::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,

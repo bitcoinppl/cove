@@ -642,8 +642,7 @@ it, and on Android a confirmed upload binds the Drive account, which onboarding
 must not do before the user has chosen one. Both run without a tap. The Other
 Backups list shows each folder that holds a master key, in a format this app
 reads or not, and fails when the provider can't read a folder, since that folder
-may hold a backup; Turn Off counts the same list, and Delete Other Backups
-deletes it.
+may hold a backup; Turn Off and Delete Other Backups delete the same list.
 
 Enable behavior depends on what discovery proved:
 
@@ -1276,7 +1275,7 @@ asks for consent instead.
    running operation replaces that body, so the two never exist together: any
    operation start, body change, Cancel or `LeaveDetail` ends it. The review
    lists the namespace, reads this device's wallets and the secret each holds
-   from the keychain, and counts other backup namespaces, all silently, and
+   from the keychain, and lists other backup namespaces, all silently, and
    never asks for a passkey or lets the provider ask for consent; the recheck
    after the drain gathers the same way. The listing proves which records are
    this device's own backups. An own backup is at risk when this device doesn't
@@ -1314,10 +1313,10 @@ asks for consent instead.
    joins it.
 
    Gathering this evidence is bounded. A listing that hasn't answered within 20
-   seconds is dropped and makes the impact unknown, which asks twice. The count
-   of other backups never holds it: the count is left out when it isn't in by
-   the time the listing is. This device's wallets are read last, after the
-   listing, so their secrets are as close to a commit as the evidence gets.
+   seconds is dropped and makes the impact unknown, which asks twice. The list
+   of other backups runs beside it under the same deadline; one that fails or
+   misses it leaves them unchecked. This device's wallets are read last, after
+   the listing, so their secrets are as close to a commit as the evidence gets.
 
    Tapping Turn Off again is the dialogs' Check Again. Rust offers it by naming
    `TurnOff` on the `TurnOffDialogs` surface while the review's assessment
@@ -1336,17 +1335,22 @@ asks for consent instead.
    listed record is this device's own backup or an extra copy, known safe by
    the rules above. Anything else asks twice: an empty backup, anything
    not on this device, a local wallet's missing secret, anything unchecked,
-   unreadable or unsupported, or an assessment that isn't complete; a failed
-   listing makes it unknown. Names are capped at three with a count of the
-   rest. Backups made with another passkey are a line in the dialog and are
-   left in place.
+   unreadable or unsupported, an assessment that isn't complete, or any
+   backup made with another passkey; a failed listing makes it unknown. Names
+   are capped at three with a count of the rest. Turn Off leaves a clean
+   slate: it deletes the backups made with another passkey too
+   (`CloudBackupDisableOtherBackups::Deleted`), which Cove can't read without
+   their passkey, so the dialog says wallets not on this device may go with
+   them. When they couldn't be listed (`Unchecked`), the dialog says so and
+   Turn Off leaves them.
 3. **Consent.** `ConfirmDisable { review_id }` is admitted only for the review
    on screen. It starts the Turn Off operation, which drains as above, then
    gathers the evidence again, keychain read included. If the fresh impact puts
    any new record in a risk category, such as a wallet whose secret left this
    device since the review, or a wallet covering an extra copy lost its secret,
    or a wallet whose own backup is listed left this device while that backup is
-   at risk or unchecked, or its assessment is worse, the operation ends and a
+   at risk or unchecked, or a backup made with another passkey the review
+   didn't list, or its assessment is worse, the operation ends and a
    new review replaces the old one with `changed_since_confirmation`. If the
    recheck finds the provider offline or needing authorization, Turn Off ends
    with `DisableNotStarted`; if the configuration changed, it is rejected as
@@ -1372,8 +1376,13 @@ asks for consent instead.
    outcome (or `Rejected(ReviewStale)` when the configuration changed) and
    leaves backup on.
 6. **After the commit** the body is `FinishingDisable` and only goes forward: it
-   deletes the namespace (already gone counts as deleted), clears this device's
-   Cloud Backup keychain items and sync rows, and writes `Disabled`. A failed
+   deletes the backups made with another passkey that the recheck listed, then
+   the namespace (already gone counts as deleted), clears this device's Cloud
+   Backup keychain items and sync rows, and writes `Disabled`. The commit saves
+   those other namespaces in the record (`other_namespace_ids`), and the write
+   policy runs a Turn Off delete only for them and the namespace, so a resume
+   never deletes a backup another device made since. They go first, so a run
+   that fails partway leaves this device's namespace. A failed
    run shows `Failed { reason }` and persists `retry_after`. `ResumeDisable` is
    Try Again. A launch resumes it at once, and a reconnect or cloud change
    resumes it after `retry_after`; a reconnect that comes earlier arms one

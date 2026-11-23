@@ -23,8 +23,9 @@ use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommittedDisable, DisableDisposition,
 };
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupDisableConfirmation, CloudBackupDisableImpact, CloudBackupDisableReview,
-    CloudBackupInventoryAssessment, CloudBackupNamedCount, CloudBackupTurnOffFailure,
+    CloudBackupDisableConfirmation, CloudBackupDisableImpact, CloudBackupDisableOtherBackups,
+    CloudBackupDisableReview, CloudBackupInventoryAssessment, CloudBackupNamedCount,
+    CloudBackupTurnOffFailure,
 };
 use crate::manager::cloud_backup_manager::wallets::LocalSecret;
 use crate::manager::cloud_backup_manager::{
@@ -137,8 +138,8 @@ pub(crate) struct DisableEvidence {
     pub(crate) listing: ListingEvidence,
     /// This device's wallets and the secrets each holds now
     pub(crate) local: LocalEvidence,
-    /// Namespaces made with another passkey; Turn Off leaves them in place
-    pub(crate) other_backups: OtherBackupsCount,
+    /// Namespaces made with another passkey, which Turn Off deletes with this one
+    pub(crate) other_backups: OtherBackups,
 }
 
 /// What the namespace's wallet listing returned
@@ -218,20 +219,45 @@ impl OwnSeedCoverage {
     }
 }
 
-/// How many namespaces another passkey made, which the dialog shows as information only
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OtherBackupsCount {
-    Counted(u32),
-    /// The count failed, or hadn't answered when the listing was in
+/// The namespaces another passkey made, which Turn Off deletes with this device's own
+///
+/// Cove can't read them without their passkey, so deleting any asks twice. Only the namespaces
+/// listed here are committed, so one another device makes after the review is never deleted
+/// unseen
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum OtherBackups {
+    Listed(BTreeSet<String>),
+    /// The list failed or missed the evidence deadline, so Turn Off leaves any there are
     Unknown,
 }
 
-impl OtherBackupsCount {
-    /// The count the dialog shows; an unknown count leaves the line out
-    fn shown(self) -> u32 {
+impl OtherBackups {
+    /// The namespaces a commit on this evidence deletes; none when they couldn't be listed
+    pub(crate) fn to_delete(&self) -> BTreeSet<String> {
         match self {
-            Self::Counted(count) => count,
-            Self::Unknown => 0,
+            Self::Listed(namespaces) => namespaces.clone(),
+            Self::Unknown => BTreeSet::new(),
+        }
+    }
+
+    /// Whether a commit on this evidence would delete a namespace `confirmed` didn't
+    fn grew_since(&self, confirmed: &Self) -> bool {
+        match (self, confirmed) {
+            (Self::Listed(now), Self::Listed(then)) => !now.is_subset(then),
+            (Self::Listed(now), Self::Unknown) => !now.is_empty(),
+            (Self::Unknown, _) => false,
+        }
+    }
+
+    fn screen(&self) -> CloudBackupDisableOtherBackups {
+        match self {
+            Self::Listed(namespaces) if namespaces.is_empty() => {
+                CloudBackupDisableOtherBackups::NoneFound
+            }
+            Self::Listed(namespaces) => {
+                CloudBackupDisableOtherBackups::Deleted { count: count(namespaces) }
+            }
+            Self::Unknown => CloudBackupDisableOtherBackups::Unchecked,
         }
     }
 }
@@ -313,7 +339,7 @@ pub(crate) struct DisableImpact {
     unchecked: BTreeSet<String>,
     unreadable: BTreeSet<String>,
     unsupported: BTreeSet<String>,
-    other_backups: u32,
+    other_backups: OtherBackups,
     /// Present only when every listed record is known safe, which is all that asks once
     known_safe: Option<KnownSafe>,
 }
@@ -330,11 +356,12 @@ enum RecordRisk {
 }
 
 /// The proof that lets Turn Off ask once: a complete inventory, a current read of this device's
-/// wallets, a namespace that lists at least one record, and every listed record read and known
-/// safe to delete
+/// wallets, a namespace that lists at least one record, every listed record read and known
+/// safe to delete, and no other backup listed for deletion
 ///
 /// Only [`KnownSafe::prove`] makes one, from the risks [`DisableImpact::assess`] told for every
-/// listed record, so an empty backup, or one record at risk or untold, asks twice
+/// listed record, so an empty backup, one record at risk or untold, or another backup Cove can't
+/// read without its passkey asks twice
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct KnownSafe(());
 
@@ -342,8 +369,13 @@ impl KnownSafe {
     fn prove(
         assessment: CloudBackupInventoryAssessment,
         risks: impl IntoIterator<Item = RecordRisk>,
+        other_backups: &OtherBackups,
     ) -> Option<Self> {
         if assessment != CloudBackupInventoryAssessment::Complete {
+            return None;
+        }
+
+        if !other_backups.to_delete().is_empty() {
             return None;
         }
 
@@ -382,7 +414,7 @@ impl DisableImpact {
             unchecked: BTreeSet::new(),
             unreadable: BTreeSet::new(),
             unsupported: BTreeSet::new(),
-            other_backups: evidence.other_backups.shown(),
+            other_backups: evidence.other_backups.clone(),
             known_safe: None,
         };
 
@@ -433,7 +465,7 @@ impl DisableImpact {
             };
         }
 
-        impact.known_safe = KnownSafe::prove(impact.assessment, risks);
+        impact.known_safe = KnownSafe::prove(impact.assessment, risks, &impact.other_backups);
         impact
     }
 
@@ -547,6 +579,11 @@ impl DisableImpact {
         RecordRisk::AtRisk
     }
 
+    /// The other backups a commit on this impact deletes
+    pub(crate) fn other_namespaces_to_delete(&self) -> BTreeSet<String> {
+        self.other_backups.to_delete()
+    }
+
     /// What Restore Them First restores: the one wallet not on this device, or all of them
     pub(crate) fn restore_target(&self) -> Option<RestoreTarget> {
         match self.not_on_device.len() {
@@ -605,6 +642,7 @@ impl DisableImpact {
             || new_ids(&self.unchecked, &confirmed.unchecked)
             || new_ids(&self.unreadable, &confirmed.unreadable)
             || new_ids(&self.unsupported, &confirmed.unsupported)
+            || self.other_backups.grew_since(&confirmed.other_backups)
             || assessment_rank(self.assessment) > assessment_rank(confirmed.assessment)
     }
 
@@ -626,7 +664,7 @@ impl DisableImpact {
             unchecked: count(&self.unchecked),
             unreadable: count(&self.unreadable),
             unsupported: count(&self.unsupported),
-            other_backups: self.other_backups,
+            other_backups: self.other_backups.screen(),
             confirmation: self.confirmation(),
         }
     }
@@ -888,7 +926,7 @@ pub(crate) mod test_support {
                 read_at: InventoryReadAt::default(),
                 wallets: BTreeMap::new(),
             },
-            other_backups: OtherBackupsCount::Counted(0),
+            other_backups: OtherBackups::Listed(BTreeSet::new()),
         }
     }
 }
@@ -931,7 +969,7 @@ mod tests {
             namespace_id: "ns".into(),
             listing: ListingEvidence::Listed(ids(listing)),
             local: LocalEvidence::Read { read_at: InventoryReadAt::default(), wallets },
-            other_backups: OtherBackupsCount::Counted(0),
+            other_backups: OtherBackups::Listed(BTreeSet::new()),
         }
     }
 

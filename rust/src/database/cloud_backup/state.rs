@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use serde::{Deserialize, Serialize};
 
@@ -499,6 +501,14 @@ pub struct PersistedDisablingCloudBackup {
     /// stale
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub try_again_failed: bool,
+    /// Backups made with another passkey that the review listed, which finishing deletes before
+    /// this namespace
+    ///
+    /// Fixed at the commit, so a resume deletes only what the user confirmed and never a backup
+    /// another device made since. Absent in records written before Turn Off deleted them, which
+    /// leave them in place
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub other_namespace_ids: BTreeSet<String>,
 }
 
 /// What a committed disable still has to do to finish

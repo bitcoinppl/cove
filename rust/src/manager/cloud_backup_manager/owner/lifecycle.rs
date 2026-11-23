@@ -6,6 +6,8 @@
 //! activation, the account switch, Turn Off) call the typed methods here with their results;
 //! none of them can build a mutation of the record themselves
 
+use std::collections::BTreeSet;
+
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
 
@@ -73,6 +75,8 @@ pub(crate) struct CommittedDisable {
     pub(crate) disposition: DisableDisposition,
     /// A Try Again the user tapped has failed since the commit
     pub(crate) try_again_failed: bool,
+    /// Backups made with another passkey that finishing deletes before `namespace_id`
+    pub(crate) other_namespace_ids: BTreeSet<String>,
 }
 
 /// What a committed disable still has to do to finish
@@ -106,11 +110,13 @@ pub(crate) enum DisablingRecord {
 
 /// What the user reviewed before Turn Off commits
 ///
-/// This is the minimal form of the review: the namespace that was checked for blockers. It
-/// does not yet carry the inventory or configuration generation the user confirmed
+/// This is the minimal form of the review: the namespace that was checked for blockers and the
+/// other backups the recheck listed for deletion. It does not yet carry the inventory or
+/// configuration generation the user confirmed
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DisableCommitReview {
     pub(crate) namespace_id: String,
+    pub(crate) other_namespace_ids: BTreeSet<String>,
 }
 
 /// Result of committing a disable
@@ -143,6 +149,7 @@ impl CommittedDisable {
                 retry_after: record.retry_after,
                 disposition: record.disposition.into(),
                 try_again_failed: record.try_again_failed,
+                other_namespace_ids: record.other_namespace_ids.clone(),
             }),
             None => DisablingRecord::Unnormalized,
         }
@@ -629,6 +636,7 @@ impl LifecycleWriter {
             retry_after: None,
             disposition: DisableDisposition::DeleteRemote,
             try_again_failed: false,
+            other_namespace_ids: review.other_namespace_ids.clone(),
         };
 
         // the namespace this configuration uses lives in the keychain, outside the record
@@ -658,6 +666,7 @@ impl LifecycleWriter {
                         retry_after: None,
                         disposition: PersistedDisableDisposition::DeleteRemote,
                         try_again_failed: false,
+                        other_namespace_ids: committed.other_namespace_ids.clone(),
                     },
                 );
                 Ok(CommitDisable::Committed(committed.clone()))
