@@ -2,6 +2,6 @@
 
 pub mod bridge;
 pub mod built_in;
-pub mod socks;
 
-pub use built_in::{BootstrapState, BuiltInTor, BuiltInTorConfig, StartError};
+pub use built_in::{BootstrapState, BuiltInTor, StartError};
+pub use tor_socksproto::{SocksAddr, SocksStatus};

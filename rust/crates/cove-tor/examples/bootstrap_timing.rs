@@ -1,20 +1,19 @@
-//! Times a built-in Tor start and one request through it, for the startup numbers in the docs
+//! Times a built-in Tor start and one request through it
 //!
 //! `cargo run -p cove-tor --release --example bootstrap_timing -- <dir>` starts cold when `<dir>`
 //! is empty and warm when an earlier run left its cache there
 
 use std::{path::PathBuf, time::Instant};
 
-use cove_tor::{BootstrapState, BuiltInTor, BuiltInTorConfig};
+use cove_tor::{BootstrapState, BuiltInTor};
 
 #[tokio::main]
 async fn main() {
     let dir = PathBuf::from(std::env::args().nth(1).expect("usage: bootstrap_timing <dir>"));
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let config = BuiltInTorConfig { state_dir: dir.join("state"), cache_dir: dir.join("cache") };
     let started = Instant::now();
-    let tor = BuiltInTor::start(config, &tokio::runtime::Handle::current()).unwrap();
+    let tor = BuiltInTor::start(&dir, &tokio::runtime::Handle::current()).unwrap();
 
     let mut state = tor.state();
     while *state.borrow_and_update() != BootstrapState::Ready {

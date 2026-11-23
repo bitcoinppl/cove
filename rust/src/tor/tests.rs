@@ -6,6 +6,7 @@
 use bdk_wallet::KeychainKind;
 use bdk_wallet::chain::{TxGraph, spk_client::SyncRequest};
 use bitcoin::Network;
+use cove_http::NetworkRoute;
 
 use super::{RouteError, SetTorError, TorService, TorSettings, TorStatus, current_route};
 use crate::{
@@ -36,11 +37,28 @@ fn port_of(node: &Node) -> u16 {
 #[tokio::test]
 async fn node_traffic_goes_through_the_proxy_with_names_resolved_there() {
     let tor = TorTest::start().await;
-    let node = FakeNode::start(Network::Bitcoin);
-    node.chain().mine(3);
-
     let proxy = RecordingSocksProxy::start();
     tor.use_proxy(proxy.proxy_address());
+
+    assert_node_traffic_goes_through(&proxy).await;
+}
+
+// built-in Tor's bridge only serves clients that send its credentials, so a client that drops
+// them fails here instead of in the field
+#[tokio::test]
+async fn node_traffic_authenticates_to_the_built_in_bridge() {
+    let _tor = TorTest::start().await;
+    let proxy = RecordingSocksProxy::start_with_credentials();
+    let service = TorService::global();
+    let route = Ok(NetworkRoute::Tor(proxy.socks_proxy()));
+    service.publish(Some(TorSettings::BuiltIn), route, TorStatus::Ready);
+
+    assert_node_traffic_goes_through(&proxy).await;
+}
+
+async fn assert_node_traffic_goes_through(proxy: &RecordingSocksProxy) {
+    let node = FakeNode::start(Network::Bitcoin);
+    node.chain().mine(3);
 
     let esplora = behind_proxy(node.esplora_node("esplora"));
     let electrum = behind_proxy(node.electrum_node("electrum"));

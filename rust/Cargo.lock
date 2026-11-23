@@ -1900,10 +1900,12 @@ dependencies = [
  "parking_lot",
  "rand 0.10.4",
  "rustls",
+ "subtle",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tor-rtcompat",
+ "tor-socksproto",
  "tracing",
 ]
 

@@ -136,18 +136,6 @@ impl ProxyAddress {
 
         Ok(Self { host: parse_host(host)?, port })
     }
-
-    pub const fn port(&self) -> u16 {
-        self.port
-    }
-
-    /// The host without brackets, as a SOCKS client dials it
-    pub fn host(&self) -> String {
-        match &self.host {
-            ProxyHost::Ip(ip) => ip.to_string(),
-            ProxyHost::Name(name) => name.clone(),
-        }
-    }
 }
 
 fn split_host_port(input: &str) -> Result<(&str, &str), ProxyAddressError> {
@@ -218,11 +206,9 @@ mod tests {
     fn parses_ipv4_ipv6_and_names() {
         let ipv4 = ProxyAddress::parse("127.0.0.1:9050").unwrap();
         assert_eq!(ipv4.to_string(), "127.0.0.1:9050");
-        assert_eq!(ipv4.host(), "127.0.0.1");
 
         let ipv6 = ProxyAddress::parse(" [::1]:9150 ").unwrap();
         assert_eq!(ipv6.to_string(), "[::1]:9150");
-        assert_eq!(ipv6.host(), "::1");
 
         let name = ProxyAddress::parse("socks5h://Proxy.Home.Lan:9050").unwrap();
         assert_eq!(name.to_string(), "proxy.home.lan:9050");
@@ -241,16 +227,13 @@ mod tests {
     }
 
     #[test]
-    fn proxy_url_resolves_names_through_the_proxy() {
+    fn debug_output_hides_the_proxy_password() {
         let address = ProxyAddress::parse("127.0.0.1:9050").unwrap();
-        let without_auth = SocksProxy { address: address.clone(), credentials: None };
-        assert_eq!(without_auth.url(), "socks5h://127.0.0.1:9050");
-
         let credentials =
             SocksCredentials { username: "cove".to_string(), password: "secret".to_string() };
-        let with_auth = SocksProxy { address, credentials: Some(credentials) };
-        assert_eq!(with_auth.url(), "socks5h://cove:secret@127.0.0.1:9050");
-        assert!(!format!("{with_auth:?}").contains("secret"));
+        let proxy = SocksProxy { address, credentials: Some(credentials) };
+
+        assert!(!format!("{proxy:?}").contains("secret"));
     }
 
     #[test]

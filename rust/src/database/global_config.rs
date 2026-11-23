@@ -351,8 +351,7 @@ impl GlobalConfigTable {
     pub(crate) fn tor_settings(&self) -> Result<Option<TorSettings>> {
         let Some(json) = self.get(GlobalConfigKey::TorSettings)? else { return Ok(None) };
 
-        let settings = TorSettings::from_json(&json)
-            .map_err(|error| GlobalConfigTableError::Read(error.to_string()))?;
+        let settings = TorSettings::from_json(&json).map_err_str(GlobalConfigTableError::Read)?;
 
         Ok(Some(settings))
     }

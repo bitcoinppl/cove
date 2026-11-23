@@ -9,6 +9,7 @@ cove-http = { path = "../cove-http" }
 # tor
 arti-client = { version = "0.48.0", default-features = false, features = ["tokio", "rustls", "compression", "onion-service-client"] }
 tor-rtcompat = { version = "0.48.0", default-features = false, features = ["tokio", "rustls"] }
+tor-socksproto = { version = "0.48.0", default-features = false, features = ["proxy-handshake"] }
 
 # async
 tokio = { workspace = true, features = ["net", "io-util", "rt", "sync", "time", "macros"] }
@@ -16,6 +17,7 @@ tokio-util = "0.7.18"
 futures = "0.3.32"
 
 parking_lot = { workspace = true }
+subtle = "2.6.1"
 rand = { workspace = true }
 hex = { workspace = true }
 thiserror = { workspace = true }

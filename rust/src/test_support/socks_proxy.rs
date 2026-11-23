@@ -1,27 +1,28 @@
 //! A SOCKS5 proxy that records every stream it opens, standing in for Tor in leak tests
 //!
-//! It resolves host names only from its own table, the way a Tor exit resolves them. A client
-//! that looked a name up itself before connecting would fail on the `.invalid` names the tests
-//! use, so a recorded name proves the name went through the proxy
+//! It is the built-in Tor bridge with a connector that dials loopback instead of Tor. It resolves
+//! host names only from its own table, the way a Tor exit resolves them. A client that looked a
+//! name up itself before connecting would fail on the `.invalid` names the tests use, so a
+//! recorded name proves the name went through the proxy
 
 #![allow(clippy::disallowed_methods, reason = "the fixture dials the servers behind it")]
 
 use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener as StdTcpListener},
+    net::{Ipv4Addr, SocketAddr, TcpListener as StdTcpListener},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
 };
 
-use cove_http::ProxyAddress;
-use parking_lot::Mutex;
-use tokio::{
-    io::{AsyncReadExt as _, AsyncWriteExt as _},
-    net::{TcpListener, TcpStream},
-    sync::MutexGuard,
+use cove_http::{ProxyAddress, SocksCredentials, SocksProxy};
+use cove_tor::{
+    SocksAddr, SocksStatus,
+    bridge::{BoundBridge, Connector},
 };
+use parking_lot::Mutex;
+use tokio::{net::TcpStream, sync::MutexGuard};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     database::Database,
@@ -44,36 +45,49 @@ pub(crate) enum ProxiedTarget {
 }
 
 pub(crate) struct RecordingSocksProxy {
-    address: SocketAddr,
+    proxy: SocksProxy,
     targets: Arc<Mutex<Vec<ProxiedTarget>>>,
 }
 
 impl RecordingSocksProxy {
-    /// Starts a proxy that resolves [`PROXY_ONLY_HOST`] to loopback
+    /// Starts a proxy without auth, as an external Tor proxy such as Orbot runs
     pub(crate) fn start() -> Self {
-        let names =
-            HashMap::from([(PROXY_ONLY_HOST.to_string(), IpAddr::from(Ipv4Addr::LOCALHOST))]);
-        let listener = StdTcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("proxy binds");
-        listener.set_nonblocking(true).expect("proxy listener is non-blocking");
+        Self::start_with(None)
+    }
 
-        let address = listener.local_addr().expect("proxy has an address");
+    /// Starts a proxy that needs a username and password, as built-in Tor's bridge does
+    pub(crate) fn start_with_credentials() -> Self {
+        let credentials =
+            SocksCredentials { username: "cove".to_string(), password: "test-secret".to_string() };
+        Self::start_with(Some(credentials))
+    }
+
+    fn start_with(credentials: Option<SocksCredentials>) -> Self {
+        let bridge = BoundBridge::bind(credentials).expect("proxy binds");
+        let proxy = bridge.proxy().clone();
         let targets = Arc::new(Mutex::new(Vec::new()));
-        let recorded = targets.clone();
+        let connector = Arc::new(RecordingConnector { targets: targets.clone() });
 
+        // its own runtime outlives each test's runtime and never waits on the app's
         std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("proxy runtime starts");
 
-            runtime.block_on(serve(listener, Arc::new(names), recorded));
+            runtime.block_on(bridge.serve(connector, CancellationToken::new()));
         });
 
-        Self { address, targets }
+        Self { proxy, targets }
     }
 
     pub(crate) fn proxy_address(&self) -> ProxyAddress {
-        ProxyAddress::new_ip(self.address.ip(), self.address.port())
+        self.proxy.address.clone()
+    }
+
+    /// The proxy with its credentials, as a route into Tor carries it
+    pub(crate) fn socks_proxy(&self) -> SocksProxy {
+        self.proxy.clone()
     }
 
     pub(crate) fn targets(&self) -> Vec<ProxiedTarget> {
@@ -81,80 +95,33 @@ impl RecordingSocksProxy {
     }
 }
 
-async fn serve(
-    listener: StdTcpListener,
-    names: Arc<HashMap<String, IpAddr>>,
+struct RecordingConnector {
     targets: Arc<Mutex<Vec<ProxiedTarget>>>,
-) {
-    let listener = TcpListener::from_std(listener).expect("proxy listener joins the runtime");
-    while let Ok((stream, _)) = listener.accept().await {
-        let names = names.clone();
-        let targets = targets.clone();
-        tokio::spawn(async move {
-            let _ = handle(stream, &names, &targets).await;
-        });
-    }
 }
 
-async fn handle(
-    mut stream: TcpStream,
-    names: &HashMap<String, IpAddr>,
-    targets: &Mutex<Vec<ProxiedTarget>>,
-) -> std::io::Result<()> {
-    // greeting: accept without auth, as an external Tor proxy such as Orbot does
-    let mut greeting = [0; 2];
-    stream.read_exact(&mut greeting).await?;
-    let mut methods = vec![0; greeting[1].into()];
-    stream.read_exact(&mut methods).await?;
-    stream.write_all(&[5, 0]).await?;
+impl Connector for RecordingConnector {
+    type Stream = TcpStream;
 
-    let mut request = [0; 4];
-    stream.read_exact(&mut request).await?;
+    async fn connect(&self, target: SocksAddr, port: u16) -> Result<TcpStream, SocksStatus> {
+        let (recorded, destination) = match target {
+            SocksAddr::Ip(ip) => {
+                let address = SocketAddr::new(ip, port);
+                (ProxiedTarget::Address(address), Some(address))
+            }
 
-    let target = match request[3] {
-        1 => {
-            let mut ip = [0; 4];
-            stream.read_exact(&mut ip).await?;
-            let port = stream.read_u16().await?;
-            ProxiedTarget::Address(SocketAddr::from((ip, port)))
-        }
+            SocksAddr::Hostname(name) => {
+                let name: &str = name.as_ref();
+                let destination = (name == PROXY_ONLY_HOST)
+                    .then(|| SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
+                (ProxiedTarget::Name(name.to_string(), port), destination)
+            }
+        };
 
-        3 => {
-            let length = stream.read_u8().await?;
-            let mut name = vec![0; length.into()];
-            stream.read_exact(&mut name).await?;
-            let port = stream.read_u16().await?;
-            ProxiedTarget::Name(String::from_utf8_lossy(&name).into_owned(), port)
-        }
+        self.targets.lock().push(recorded);
 
-        _ => {
-            let mut ip = [0; 16];
-            stream.read_exact(&mut ip).await?;
-            let port = stream.read_u16().await?;
-            ProxiedTarget::Address(SocketAddr::from((ip, port)))
-        }
-    };
-
-    targets.lock().push(target.clone());
-
-    let destination = match &target {
-        ProxiedTarget::Address(address) => Some(*address),
-        ProxiedTarget::Name(name, port) => names.get(name).map(|ip| SocketAddr::new(*ip, *port)),
-    };
-
-    let remote = match destination {
-        Some(destination) => TcpStream::connect(destination).await.ok(),
-        None => None,
-    };
-
-    let Some(mut remote) = remote else {
-        stream.write_all(&[5, 4, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
-        return Ok(());
-    };
-
-    stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
-    tokio::io::copy_bidirectional(&mut stream, &mut remote).await?;
-    Ok(())
+        let destination = destination.ok_or(SocksStatus::HOST_UNREACHABLE)?;
+        TcpStream::connect(destination).await.map_err(|_| SocksStatus::CONNECTION_REFUSED)
+    }
 }
 
 /// A listener that counts connections and closes them, standing in for a server that must
