@@ -10,6 +10,7 @@ package org.bitcoinppl.cove_core
  */
 fun Throwable.uniffiErrorText(): String? =
     when (this) {
+        is org.bitcoinppl.cove_core.AddressOwnershipException -> toString()
         is org.bitcoinppl.cove_core.AppException -> toString()
         is org.bitcoinppl.cove_core.AppInitException -> message
         is org.bitcoinppl.cove_core.AuthException -> toString()

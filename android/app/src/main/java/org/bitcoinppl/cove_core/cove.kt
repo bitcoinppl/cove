@@ -1395,6 +1395,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_trick_pin_notice(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_try_wallet_mode(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_wallet_mode(
     ): Short
     external fun uniffi_cove_checksum_method_globalflagtable_get(
@@ -2470,6 +2472,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_globalconfigtable_set_trick_pin_notice(`ptr`: Long,`notice`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_globalconfigtable_trick_pin_notice(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_try_wallet_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_wallet_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4440,6 +4444,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_trick_pin_notice() != 14611.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_try_wallet_mode() != 65109.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_wallet_mode() != 27720.toShort()) {
@@ -14056,6 +14063,15 @@ public interface GlobalConfigTableInterface {
      */
     fun `trickPinNotice`(): DuplicateTrickPin?
 
+    /**
+     * The wallet mode, or an error when the setting cannot be read
+     *
+     * [`Self::wallet_mode`] reads an unreadable setting as main mode. Code that decides which
+     * mode's wallets a caller may see uses this instead, so a read failure during a decoy
+     * session cannot expose main-mode wallets
+     */
+    fun `tryWalletMode`(): WalletMode
+
     fun `walletMode`(): WalletMode
 
     companion object
@@ -14539,6 +14555,27 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_trick_pin_notice(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The wallet mode, or an error when the setting cannot be read
+     *
+     * [`Self::wallet_mode`] reads an unreadable setting as main mode. Code that decides which
+     * mode's wallets a caller may see uses this instead, so a read failure during a decoy
+     * session cannot expose main-mode wallets
+     */
+    @Throws(DatabaseException::class)override fun `tryWalletMode`(): WalletMode {
+            return FfiConverterTypeWalletMode.lift(
+    callWithHandle {
+    uniffiRustCallWithError(DatabaseException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_try_wallet_mode(
         it,
         _status)
 }
@@ -38374,6 +38411,17 @@ sealed class AddressOwnershipException: kotlin.Exception() {
     }
 
     /**
+     * Whether the app is in main or decoy mode could not be read, so no wallets are searched
+     */
+    class WalletModeUnavailable(
+
+        val v1: kotlin.String
+        ) : AddressOwnershipException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
      * The lookup's mode is not, or stopped being, the app's active mode, so its result would
      * reveal the other mode's wallets and is withheld
      */
@@ -38417,7 +38465,10 @@ public object FfiConverterTypeAddressOwnershipError : FfiConverterRustBuffer<Add
             2 -> AddressOwnershipException.WalletListUnavailable(
                 FfiConverterString.read(buf),
                 )
-            3 -> AddressOwnershipException.WalletModeChanged()
+            3 -> AddressOwnershipException.WalletModeUnavailable(
+                FfiConverterString.read(buf),
+                )
+            4 -> AddressOwnershipException.WalletModeChanged()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -38430,6 +38481,11 @@ public object FfiConverterTypeAddressOwnershipError : FfiConverterRustBuffer<Add
                 + FfiConverterString.allocationSize(value.v1)
             )
             is AddressOwnershipException.WalletListUnavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is AddressOwnershipException.WalletModeUnavailable -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -38453,8 +38509,13 @@ public object FfiConverterTypeAddressOwnershipError : FfiConverterRustBuffer<Add
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is AddressOwnershipException.WalletModeChanged -> {
+            is AddressOwnershipException.WalletModeUnavailable -> {
                 buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is AddressOwnershipException.WalletModeChanged -> {
+                buf.putInt(4)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

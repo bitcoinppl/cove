@@ -5,6 +5,8 @@
 
 extension AddressError: CustomStringConvertible {}
 
+extension AddressOwnershipError: CustomStringConvertible {}
+
 extension AppError: CustomStringConvertible {}
 
 extension AppInitError: CustomStringConvertible {
