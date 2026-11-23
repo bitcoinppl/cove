@@ -19,6 +19,7 @@ use crate::manager::wallet_manager::{
 };
 use crate::network::Network;
 use crate::node::Node;
+use crate::router::UnsignedPaymentMode;
 use crate::test_support::fake_node::FakeNode;
 use crate::transaction::Transaction;
 use crate::wallet::metadata::WalletId;
@@ -280,7 +281,10 @@ impl OriginalWallet {
         .expect("the send builds");
 
         let send_txid = psbt.unsigned_tx.compute_txid();
-        manager.initiate_payment(Arc::new(Psbt(psbt)), None).await.expect("the send broadcasts");
+        manager
+            .initiate_payment(Arc::new(Psbt(psbt)), UnsignedPaymentMode::Standard)
+            .await
+            .expect("the send broadcasts");
         screen.until_scan_settles().await;
         node.chain().confirm(send_txid);
 

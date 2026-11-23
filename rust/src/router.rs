@@ -8,6 +8,7 @@ pub const WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS: u32 = 250;
 use crate::{
     app::FfiApp,
     database::{Database, global_config::SelectedWalletTarget},
+    manager::wallet_manager::payjoin::PayjoinIntent,
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
@@ -115,14 +116,23 @@ pub struct SendRouteConfirmArgs {
     pub id: WalletId,
     pub details: Arc<ConfirmDetails>,
     pub input: SendConfirmationInput,
-    pub payjoin_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendConfirmationInput {
-    Unsigned,
+    Unsigned { mode: UnsignedPaymentMode },
     SignedTransaction(Arc<BitcoinTransaction>),
     SignedPsbt(Arc<Psbt>),
+}
+
+/// How an unsigned hot wallet payment is sent once the user confirms it
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum UnsignedPaymentMode {
+    /// Sign and broadcast the payment as built
+    Standard,
+
+    /// Offer the receiver a Payjoin first, falling back to the payment as built
+    Payjoin { intent: PayjoinIntent },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -385,14 +395,10 @@ impl RouteFactory {
         &self,
         id: WalletId,
         details: Arc<ConfirmDetails>,
-        payjoin_endpoint: Option<String>,
+        mode: UnsignedPaymentMode,
     ) -> Route {
-        let args = SendRouteConfirmArgs {
-            id,
-            details,
-            input: SendConfirmationInput::Unsigned,
-            payjoin_endpoint,
-        };
+        let args =
+            SendRouteConfirmArgs { id, details, input: SendConfirmationInput::Unsigned { mode } };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)
@@ -408,7 +414,6 @@ impl RouteFactory {
             id,
             details,
             input: SendConfirmationInput::SignedTransaction(transaction),
-            payjoin_endpoint: None,
         };
 
         let send = SendRoute::Confirm(args);
@@ -421,12 +426,8 @@ impl RouteFactory {
         details: Arc<ConfirmDetails>,
         psbt: Arc<Psbt>,
     ) -> Route {
-        let args = SendRouteConfirmArgs {
-            id,
-            details,
-            input: SendConfirmationInput::SignedPsbt(psbt),
-            payjoin_endpoint: None,
-        };
+        let args =
+            SendRouteConfirmArgs { id, details, input: SendConfirmationInput::SignedPsbt(psbt) };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)
