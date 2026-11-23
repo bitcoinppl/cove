@@ -300,23 +300,19 @@ impl PayjoinSessionPersister {
         self.store.save(session)
     }
 
-    /// Returns the txid committed in the session's terminal marker, if any.
-    /// Used by the send gate to detect stale-cleanup state without a network call.
-    pub(crate) fn pending_txid(&self) -> Option<bitcoin::Txid> {
+    /// The transaction committed in the session's terminal marker, if any
+    ///
+    /// The send gate reads it to tell, without a network call, whether the session still has
+    /// work left
+    pub(crate) fn pending_transaction(&self) -> Option<BdkTransaction> {
         let session = self.store.session().ok()??;
-        match &session.pending_action {
-            None => None,
-            Some(PendingAction::BroadcastFallback) => {
-                consensus::deserialize::<BdkTransaction>(session.fallback_tx.as_ref())
-                    .ok()
-                    .map(|tx| tx.compute_txid())
-            }
-            Some(PendingAction::BroadcastProposal { transaction }) => {
-                consensus::deserialize::<BdkTransaction>(transaction.as_ref())
-                    .ok()
-                    .map(|tx| tx.compute_txid())
-            }
-        }
+        let transaction = match &session.pending_action {
+            None => return None,
+            Some(PendingAction::BroadcastFallback) => session.fallback_tx.as_ref(),
+            Some(PendingAction::BroadcastProposal { transaction }) => transaction.as_ref(),
+        };
+
+        consensus::deserialize::<BdkTransaction>(transaction).ok()
     }
 }
 

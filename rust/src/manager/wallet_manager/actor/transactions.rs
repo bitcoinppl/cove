@@ -611,10 +611,10 @@ impl WalletActor {
 
     /// Whether a new payment may start, given the last Payjoin session
     ///
-    /// A stored session record blocks sending until its terminal transaction is saved in the
-    /// wallet and the record is cleared. When the transaction is already saved this clears the
-    /// record itself, otherwise it restarts the record's recovery, so a retained record never
-    /// needs an app restart to unblock sending
+    /// A stored session record blocks sending until its terminal transaction is settled, see
+    /// [`payjoin_terminal_settled`], and the record is cleared. When the transaction is already
+    /// settled this clears the record itself, otherwise it restarts the record's recovery, so a
+    /// retained record never needs an app restart to unblock sending
     fn payjoin_send_gate(&mut self) -> Result<(), Error> {
         if !self.payjoin_phase.is_idle() {
             return Err(payjoin_in_progress_error());
@@ -624,13 +624,13 @@ impl WalletActor {
             Ok(None) => Ok(()),
 
             Ok(Some(_)) => {
-                // If the session has a terminal marker and the tx is already in the local
-                // wallet, the only remaining work is session cleanup — no network needed.
+                // If the session has a terminal marker the local wallet already settles, the
+                // only remaining work is session cleanup — no network needed.
                 // Attempt it here so this send can proceed without requiring a restart.
                 let can_cleanup = self
                     .payjoin_store
-                    .pending_txid()
-                    .is_some_and(|txid| self.wallet.bdk.get_tx(txid).is_some());
+                    .pending_transaction()
+                    .is_some_and(|tx| payjoin_terminal_settled(&self.wallet.bdk, &tx));
 
                 if !can_cleanup {
                     // Broadcast hasn't completed yet, re-dispatch so the user doesn't need to restart.
@@ -1415,6 +1415,26 @@ async fn broadcast_payjoin_terminal_with_client(
     }
 
     Ok(())
+}
+
+/// Whether a Payjoin session's committed terminal transaction needs no more broadcasting
+///
+/// That holds once the wallet has it, or once a confirmed transaction spends one of its
+/// inputs, since it can then never confirm. BIP 77 lets the receiver broadcast the signed
+/// original itself, so when a stored proposal's broadcast fails and the original confirms, the
+/// proposal can only fail again, and retrying it would block every later send
+fn payjoin_terminal_settled(wallet: &bdk_wallet::Wallet, terminal: &BdkTransaction) -> bool {
+    if wallet.get_tx(terminal.compute_txid()).is_some() {
+        return true;
+    }
+
+    let inputs: HashSet<OutPoint> =
+        terminal.input.iter().map(|input| input.previous_output).collect();
+
+    wallet.transactions().any(|tx| {
+        tx.chain_position.is_confirmed()
+            && tx.tx_node.tx.input.iter().any(|input| inputs.contains(&input.previous_output))
+    })
 }
 
 /// Pick the unsigned transaction records that are settled by the wallet's canonical transactions

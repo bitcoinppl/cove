@@ -4995,6 +4995,61 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn send_gate_clears_a_stored_proposal_once_a_confirmed_tx_spends_its_coin() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+        test_keychain();
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        let block = BlockId { height: 1, hash: BlockHash::from_byte_array([6; 32]) };
+        insert_checkpoint(&mut wallet.bdk, block);
+
+        let coin = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(100_000));
+        let paid_to = ScriptBuf::new_op_return([1]);
+        let spend = |value| BdkTransaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn { previous_output: coin, ..Default::default() }],
+            output: vec![TxOut { value: Amount::from_sat(value), script_pubkey: paid_to.clone() }],
+        };
+
+        // the receiver broadcast the original itself and it confirmed, so the proposal saved
+        // for broadcast spends a coin that is gone and can never confirm
+        let original = spend(99_000);
+        let proposal = spend(98_500);
+        bdk_wallet::test_utils::insert_tx(&mut wallet.bdk, original.clone());
+        bdk_wallet::test_utils::insert_anchor(
+            &mut wallet.bdk,
+            original.compute_txid(),
+            ConfirmationBlockTime { block_id: block, confirmation_time: 0 },
+        );
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        persister.create_session(PayjoinSessionId::generate(), &original, unix_now_secs()).unwrap();
+        persister.set_pending_proposal(&proposal).unwrap();
+
+        actor.use_test_wallet_data_db(db);
+
+        let outcome = actor_value(actor.check_payjoin_send_gate_for_test().await).await;
+
+        let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
+        assert!(session.is_none(), "gate should clear a proposal a confirmed tx conflicts with");
+        assert_eq!(
+            outcome,
+            Err(super::Error::PayjoinSessionError(
+                "previous payjoin session cleared; please confirm your payment again".to_string()
+            ))
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn broadcast_payjoin_terminal_skips_rebroadcast_when_tx_already_in_wallet() {
         // the actor opens its wallet database at the shared wallet-data root
         let _guard = crate::test_support::global_state_test_lock().lock().await;
