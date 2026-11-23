@@ -5,6 +5,9 @@ extension XCUIApplication {
     /// The test mnemonic every full-launch test funds and imports
     static let testMnemonic = (Array(repeating: "abandon", count: 11) + ["about"]).joined(separator: " ")
 
+    /// BIP39's "legal winner" test vector, a second wallet for tests that need two of the user's own
+    static let secondMnemonic = "legal winner thank year wave sausage worth useful legal winner thank yellow"
+
     /// Launches the app, relaunching once if the bootstrap watchdog fires on a cold simulator
     func launch(expecting readyElement: XCUIElement) {
         launch()
@@ -120,13 +123,57 @@ extension XCUIApplication {
     /// Walks Add Wallet from the sidebar to the 12-word import, enters the test mnemonic and
     /// lands on the new wallet
     func importTestMnemonicFromAddWallet() {
+        openAddWalletWordsImport()
+        enterTestMnemonicAndImport()
+        waitForImportedWallet()
+    }
+
+    /// Walks Add Wallet from the sidebar to the 12-word import, scans `words` in through the QR
+    /// seam and lands on the new wallet
+    ///
+    /// Scanning fills every word at once, so a phrase whose words the keyboard would autocomplete
+    /// differently from the test mnemonic needs no typing; `qr` must be configured before launch
+    func importFromAddWallet(scanning words: String, with qr: QrScript) throws {
+        openAddWalletWordsImport()
+
+        // the simulator's scanner shows its zoom button over the simulated camera
+        let scanner = buttons["1x"]
+        tapButton(named: "hotWalletImport.scanQr", until: scanner)
+        try qr.show([words])
+        XCTAssertTrue(scanner.waitForNonExistence(timeout: 15), "the scanner never took the recovery words")
+
+        let lastWord = textFields["hotWalletImport.word.12"]
+        let expected = String(words.split(separator: " ").last ?? "")
+        waitUntil(lastWord, matches: NSPredicate(format: "value == %@", expected), timeout: 10, "the scan didn't fill the words")
+
+        buttons["hotWalletImport.import"].tap()
+        waitForImportedWallet()
+    }
+
+    /// Opens the wallet the sidebar lists as `name` and waits for its screen
+    func selectWallet(named name: String) {
+        tapButton(named: "app.sidebar.open")
+        tapButton(named: name)
+        waitForLabel(element("selectedWallet.title"), equalTo: name, timeout: 15)
+        XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 15))
+    }
+
+    /// The name of the wallet on screen
+    var selectedWalletName: String {
+        let title = element("selectedWallet.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 15), "no wallet is on screen")
+        return title.label
+    }
+
+    private func openAddWalletWordsImport() {
         tapButton(named: "app.sidebar.open")
         tapButton(named: "Add Wallet")
         tapButton(startingWith: "On This Device", until: buttons["Import existing wallet"])
         tapButton(startingWith: "Import existing wallet", until: buttons["12 Words"])
         tapButton(startingWith: "12 Words", until: navigationBars["Import Wallet"])
-        enterTestMnemonicAndImport()
+    }
 
+    private func waitForImportedWallet() {
         // keeps native segwit when the node shows activity on other address types too
         let keepCurrent = button(startingWith: "Keep Current")
         let balance = element("selectedWallet.balance")
