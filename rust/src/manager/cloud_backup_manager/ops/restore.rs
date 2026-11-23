@@ -64,10 +64,11 @@ impl CurrentNamespace {
         match reader.lookup_entry(record_id).await? {
             WalletBackupLookup::Found(entry) => Ok(Some(entry)),
             WalletBackupLookup::NotFound => Ok(None),
-            WalletBackupLookup::UnsupportedVersion(version) => Err(CloudBackupError::Internal(
-                format!("read current wallet backup: unsupported wallet backup version {version}")
-                    .into(),
-            )),
+            WalletBackupLookup::UnsupportedVersion(version) => {
+                Err(CloudBackupError::Compatibility(format!(
+                    "read current wallet backup: unsupported wallet backup version {version}"
+                )))
+            }
         }
     }
 }

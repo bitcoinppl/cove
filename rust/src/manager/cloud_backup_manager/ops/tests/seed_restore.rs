@@ -12,8 +12,10 @@ use cove_device::keychain::WalletSecret as KeychainWalletSecret;
 use cove_tap_card::{TapSigner, TapSignerState};
 
 use super::*;
-use crate::manager::cloud_backup_manager::CloudBackupRestoreReport;
 use crate::manager::cloud_backup_manager::wallets::WalletBackupReader;
+use crate::manager::cloud_backup_manager::{
+    CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CloudBackupRestoreReport,
+};
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{HardwareWalletMetadata, WalletId};
 use crate::wallet_secret::WalletSecretExt as _;
@@ -1022,6 +1024,7 @@ async fn recover_other_backups_keeps_a_seed_in_its_source_while_the_current_reco
     let report = recover_other_backups_for_test(&manager).await.unwrap();
 
     assert_eq!((report.wallets_restored, report.wallets_failed), (0, 1));
+    assert_eq!(report.failed_wallet_errors, vec![CLOUD_BACKUP_COMPATIBILITY_MESSAGE.to_string()]);
     assert_eq!(local_wallet(&watch_only.id).wallet_type, WalletType::Cold);
     assert!(!seed.is_held_by(&watch_only.id));
     assert!(globals.cloud.has_namespace(&other));
