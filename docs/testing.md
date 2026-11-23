@@ -194,6 +194,8 @@ Until 2026-11-16 a `shared-root-data` test group ran the backup and wallet-data 
 
 Within one test process, every Cloud Backup manager reads and writes the same persisted state. A test that simulates an app restart by starting a second manager first passes the old one to `shut_down_manager_for_restart` (`ops::test_support`). The old manager's actors and its pending upload verifier hold it weakly, so they keep running while the test holds it and can settle work through the old manager instead of the new one.
 
+Tests that need the shared `cove_tokio` handle run their actors on one process-long runtime (`test_support::ensure_tokio_runtime`). A test can return while one of those actors is still closing its wallet database, and SQLCipher 4.7 and later free their memory from an `atexit` handler, so that close crashed the exiting process with SIGSEGV in `sqlite3FreeCodecArg`. The runtime registers its own `atexit` handler right after SQLCipher's, so it runs first and stops the runtime, dropping its tasks, before SQLCipher shuts down. The Cloud Backup sequence tests stop their own runtime for the same reason.
+
 A test that must use something outside its process, such as a fixed port or a fixed path under `/tmp`, should take a free port or a temporary directory instead. If it can't, put just that test in a nextest [test group](https://nexte.st/docs/configuration/test-groups/) with `max-threads = 1`, and explain in a comment what it shares.
 
 ### Time-box debugging

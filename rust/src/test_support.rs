@@ -345,6 +345,10 @@ pub(crate) fn ensure_tokio_runtime() {
 
     INIT.get_or_init(|| {
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let runtime_state = TEST_RUNTIME.get_or_init(|| TestRuntime {
+            stop: tokio::sync::Notify::new(),
+            stopped: AtomicBool::new(false),
+        });
 
         std::thread::Builder::new()
             .name("cove-test-tokio".into())
@@ -357,11 +361,55 @@ pub(crate) fn ensure_tokio_runtime() {
                 runtime.block_on(async move {
                     cove_tokio::init();
                     sender.send(()).expect("signal cove test tokio runtime");
-                    std::future::pending::<()>().await;
+                    runtime_state.stop.notified().await;
                 });
+
+                // drops every task still on the runtime, such as a wallet actor that owns a
+                // database, so their connections close before SQLCipher shuts down
+                runtime.shutdown_timeout(Duration::from_secs(2));
+                runtime_state.stopped.store(true, Ordering::Release);
             })
             .expect("spawn cove test tokio runtime thread");
 
         receiver.recv().expect("wait for cove test tokio runtime");
+        stop_test_runtime_at_exit();
     });
+}
+
+/// The shared test runtime's stop signal, and word that it stopped
+struct TestRuntime {
+    stop: tokio::sync::Notify,
+    stopped: AtomicBool,
+}
+
+static TEST_RUNTIME: OnceLock<TestRuntime> = OnceLock::new();
+
+/// Stops the shared test runtime when the process exits, before SQLCipher shuts down
+///
+/// SQLCipher 4.7 and later free their memory from an `atexit` handler, so a wallet actor that
+/// was still closing its database on this runtime crashed the exiting test process. Handlers
+/// run in reverse order of registration, so this one is registered after SQLCipher's
+fn stop_test_runtime_at_exit() {
+    extern "C" fn stop_test_runtime() {
+        let Some(runtime) = TEST_RUNTIME.get() else { return };
+        runtime.stop.notify_one();
+
+        // the main thread's thread-locals are gone by now, which channels and parking need, so
+        // this polls; it's bounded, so a task that won't stop can't hang the exit
+        for _ in 0..500 {
+            if runtime.stopped.load(Ordering::Acquire) {
+                return;
+            }
+
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    // SAFETY: initializing SQLite has no preconditions, and SQLCipher registers its own exit
+    // handler during it, so the one registered next runs first
+    #[cfg(unix)]
+    unsafe {
+        rusqlite::ffi::sqlite3_initialize();
+        libc::atexit(stop_test_runtime);
+    }
 }
