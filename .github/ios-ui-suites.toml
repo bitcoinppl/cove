@@ -108,6 +108,10 @@ paths = ["ios/CoveUITests/RenameWalletFullLaunchUITests.swift"]
 suites = ["CoveUITests/RenameWalletFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/AddressOwnershipSendFullLaunchUITests.swift"]
+suites = ["CoveUITests/AddressOwnershipSendFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift"]
 suites = ["CoveUITests/WatchOnlyUpgradeFullLaunchUITests"]
 
@@ -263,7 +267,10 @@ paths = [
     "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift",
     "ios/Cove/Flows/SendFlow/Common/SendFlowUtxoCustomAmountSheetView.swift",
 ]
-suites = ["CoveUITests/UtxoLockFullLaunchUITests"]
+suites = [
+    "CoveUITests/UtxoLockFullLaunchUITests",
+    "CoveUITests/AddressOwnershipSendFullLaunchUITests",
+]
 
 # the keyTeleport route, which RouteView shows with KeyTeleportContainer
 [[rule]]

@@ -252,3 +252,32 @@ coverage = [
 ]
 # 1.4.0: android FAIL, every send labelled the account Main
 # the android tests check only the shared account row, so each screen still needs an agent look
+
+[[row]]
+id = "s06-set-amount-names-the-wallet-that-owns-the-address"
+section = "6"
+title = "Set Amount names the wallet that owns the send address"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/address_ownership.rs",
+    "rust/src/address_ownership/**",
+    "rust/src/manager/send_flow_manager/address_input.rs",
+    "rust/src/manager/send_flow_manager/address_ownership.rs",
+    "ios/Cove/Flows/SendFlow/SendFlowManager.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/SendFlowSetAmountScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/CoinControlSetAmountScreen.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/AddressOwnershipSendFullLaunchUITests.swift::testSetAmountNamesTheWalletThatOwnsTheAddress",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/AddressOwnershipSendFullLaunchTest.kt::setAmountNamesTheWalletThatOwnsTheAddress",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::the_apps_are_told_which_of_the_users_wallets_owns_the_address",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::a_note_for_a_replaced_address_is_never_sent",
+]
+# the ui tests enter the sending wallet's own receive address, then another wallet's, then one no wallet owns, checking the note names this wallet, then the other wallet by name, then disappears; coin control's Set Amount names the other wallet for its change address
+# a note that arrives after the address changed is dropped in rust and hidden by the apps; that race needs timing neither the ui tests nor an agent can control, so only a_note_for_a_replaced_address_is_never_sent covers it

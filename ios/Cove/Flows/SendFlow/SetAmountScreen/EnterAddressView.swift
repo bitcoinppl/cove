@@ -46,6 +46,7 @@ struct EnterAddressView: View {
                     Label(ownershipMessage, systemImage: "person.crop.circle.badge.checkmark")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("sendFlow.addressOwnership")
 
                     Spacer()
                 }
