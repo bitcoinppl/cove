@@ -246,9 +246,13 @@ impl NodeClient {
     ) -> Result<T, Error> {
         self.ensure_route()?;
 
+        // the route is checked first, so a call that becomes ready in the same poll as a route
+        // change isn't polled again, where it could start its next request on the old route
         tokio::select! {
-            result = call => result,
+            biased;
+
             () = self.route_changed() => Err(RouteError::Changed.into()),
+            result = call => result,
         }
     }
 

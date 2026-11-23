@@ -224,7 +224,7 @@ where
         }
 
         if !pending_anchors.is_empty() {
-            let anchors = batch_fetch_anchors(client, &pending_anchors)?;
+            let anchors = batch_fetch_anchors(client, &pending_anchors, cancel_token)?;
             for (txid, anchor) in anchors {
                 insert_tx_status(
                     &mut partial_update,
@@ -268,7 +268,8 @@ where
 fn batch_fetch_anchors<E>(
     client: &BdkElectrumClient<E>,
     txs_with_heights: &[(Txid, usize)],
-) -> std::result::Result<Vec<(Txid, ConfirmationBlockTime)>, electrum_client::Error>
+    cancel_token: &tokio_util::sync::CancellationToken,
+) -> Result<Vec<(Txid, ConfirmationBlockTime)>>
 where
     E: ElectrumApi,
 {
@@ -280,13 +281,20 @@ where
 
     let headers = client.inner.batch_block_header(needed_heights.iter())?;
     let height_to_header = needed_heights.into_iter().zip(headers).collect::<HashMap<u32, _>>();
+
+    // the header batch can take a while, and a scan cancelled meanwhile, such as by a route
+    // change, sends no proof requests
+    if cancel_token.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
+
     let proofs = client.inner.batch_transaction_get_merkle(txs_with_heights.iter())?;
     if proofs.len() != txs_with_heights.len() {
-        return Err(electrum_client::Error::Message(format!(
+        return Err(Error::Electrum(electrum_client::Error::Message(format!(
             "merkle proof batch returned {} proofs for {} requested transactions",
             proofs.len(),
             txs_with_heights.len()
-        )));
+        ))));
     }
 
     for ((txid, height), proof) in txs_with_heights.iter().copied().zip(proofs) {
@@ -834,10 +842,10 @@ mod tests {
     fn missing_batch_header_returns_provider_error() {
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
 
-        let result = batch_fetch_anchors(&client, &[(txid(1), 2)]);
+        let result = batch_fetch_anchors(&client, &[(txid(1), 2)], &CancellationToken::new());
 
         assert!(
-            matches!(result, Err(electrum_client::Error::Message(message)) if message == "block header for height 2 not returned by server")
+            matches!(result, Err(Error::Electrum(electrum_client::Error::Message(message))) if message == "block header for height 2 not returned by server")
         );
     }
 
@@ -845,10 +853,10 @@ mod tests {
     fn short_merkle_batch_returns_provider_error() {
         let client = BdkElectrumClient::new(FakeElectrum::with_merkle_response_limit(0));
 
-        let result = batch_fetch_anchors(&client, &[(txid(1), 2)]);
+        let result = batch_fetch_anchors(&client, &[(txid(1), 2)], &CancellationToken::new());
 
         assert!(
-            matches!(result, Err(electrum_client::Error::Message(message)) if message == "merkle proof batch returned 0 proofs for 1 requested transactions")
+            matches!(result, Err(Error::Electrum(electrum_client::Error::Message(message))) if message == "merkle proof batch returned 0 proofs for 1 requested transactions")
         );
     }
 
