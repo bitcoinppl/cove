@@ -40,12 +40,12 @@ Clients built on the old route stop using it:
 
 - Cached node clients notice the change because the route is part of `NodeConnectionIdentity` (`rust/src/node.rs`): the wallet actor and the transaction watcher drop a client whose identity no longer matches and build one on the new route.
 - A `NodeClient` checks before every request that its route is still current, and fails with `RouteError::Changed` when it isn't, so a client someone still holds can't send more requests on the old route.
-- A wallet scan that is running when the route changes stops at its next batch and fails with `RouteError::Changed`. The next scan runs on the new route.
+- A scan or sync that is still running when the route changes is dropped and fails with `RouteError::Changed`, so it sends none of its remaining requests on the old route. A wallet scan stopped this way runs again once a route is available, on a node client rebuilt for the new route.
 - The fee and price clients cache one reqwest client per route through `cove_http::RoutedClient`.
 
 ### Known limits
 
-- Work already running when the route changes finishes its current step on the route it started on: one batch of a scan, including the extra history pages an Esplora batch fetches, or one short sync.
+- Electrum work runs on a blocking thread that dropping it can't stop. A running Electrum scan stops after the batch in flight, but a running Electrum sync, which covers a handful of addresses, finishes its requests on the connection it already has to the same server. Both results are discarded.
 - The wallet's connection check limits the node check to 60 seconds over Tor, but an Electrum connection that stalls while it's being opened waits for Electrum's own 90-second SOCKS timeout.
 - With Tor off, an Esplora server that redirects to a `.onion` address makes the HTTP client look that name up with the system resolver, as it would any redirect target.
 

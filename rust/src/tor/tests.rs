@@ -3,13 +3,18 @@
 //! These drive the app's real node clients against the fake node, with a recording SOCKS5
 //! proxy standing in for Tor
 
+use bdk_wallet::KeychainKind;
+use bdk_wallet::chain::{TxGraph, spk_client::SyncRequest};
 use bitcoin::Network;
 
 use super::{RouteError, SetTorError, TorService, TorSettings, TorStatus, current_route};
 use crate::{
     database::{Database, global_config::GlobalConfigKey},
     network::Network as CoveNetwork,
-    node::{Node, client::NodeClient},
+    node::{
+        Node,
+        client::{Error as NodeClientError, NodeClient},
+    },
     test_support::{
         fake_node::FakeNode,
         socks_proxy::{
@@ -167,23 +172,36 @@ async fn a_client_built_before_tor_turns_on_stops_instead_of_going_direct() {
     assert_eq!(server.count(), 0, "a client built before Tor turned on reached the server");
 }
 
+// a sync sends one request per address, so a sync that started on the direct route used to
+// send the rest of them outside Tor after Tor turned on
 #[tokio::test]
-async fn a_running_scan_hears_that_the_route_changed() {
+async fn a_running_sync_stops_when_tor_turns_on() {
     let tor = TorTest::start().await;
-    let node = FakeNode::start(Network::Bitcoin);
-    let client = NodeClient::new(&node.esplora_node("esplora")).await.unwrap();
 
-    let route_changed = tokio::spawn({
-        let client = client.clone();
-        async move { client.route_changed().await }
-    });
+    // takes connections and never answers, so the sync is still running when Tor turns on
+    let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/api", silent.local_addr().unwrap());
+    let node = Node::new_esplora("esplora".into(), url, CoveNetwork::Bitcoin);
+    let client = NodeClient::new(&node).await.unwrap();
 
+    let script = bitcoin::ScriptBuf::new_op_return([1; 20]);
+    let request =
+        SyncRequest::builder().spks_with_indexes([((KeychainKind::External, 0), script)]).build();
+
+    let sync = tokio::spawn(async move { client.sync(&TxGraph::default(), request).await });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     tor.use_proxy(closed_proxy_address());
 
-    tokio::time::timeout(std::time::Duration::from_secs(5), route_changed)
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), sync)
         .await
-        .expect("the client never heard that Tor turned on")
+        .expect("the sync kept running on the direct route after Tor turned on")
         .unwrap();
+
+    assert!(
+        matches!(result, Err(NodeClientError::Route(RouteError::Changed))),
+        "expected the sync to stop because the route changed, got {result:?}"
+    );
+    drop(silent);
 }
 
 #[tokio::test]

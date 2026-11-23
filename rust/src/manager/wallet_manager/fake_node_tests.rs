@@ -32,7 +32,10 @@ use crate::{
     mnemonic::MnemonicExt as _,
     network::Network,
     node::Node,
-    test_support::fake_node::{FakeNode, wait_until},
+    test_support::{
+        fake_node::{FakeNode, wait_until},
+        socks_proxy::{RecordingSocksProxy, TorTest},
+    },
     transaction::{Transaction, TxId, ffi::BitcoinTransaction},
     wallet::{
         Wallet, WalletAddressType,
@@ -845,6 +848,44 @@ async fn send_opens_only_after_the_initial_scan_completes() {
     let balance = Arc::new(manager.balance().await.expect("the balance reads"));
     assert_eq!(balance.0.confirmed, Amount::from_sat(100_000));
     manager.clone().new_send_flow_manager(balance).expect("Send opens once the scan completes");
+}
+
+/// A scan that was running on the direct route when Tor turned on stops instead of finishing
+/// outside Tor, and the wallet scans again through Tor rather than being left with an incomplete
+/// initial scan
+#[tokio::test(flavor = "current_thread")]
+async fn a_scan_stopped_by_turning_tor_on_finishes_through_tor() {
+    // holds the global state lock for the whole test, and turns Tor off at the end
+    let tor = TorTest::start().await;
+    let mut fx = Fixture::signet();
+
+    let wallet =
+        import_mnemonic_with_target(fresh_mnemonic(), fx.network, WalletMode::Main).unwrap();
+
+    let (manager, mut screen) = fx.open(wallet.id.clone());
+    let funded = fx.node.chain().pay(&receive_script(&manager, 0).await, Amount::from_sat(100_000));
+    fx.node.chain().confirm(funded);
+
+    let (scan_gate, scan_rule) = fx.node.on("/scripthash/").hold();
+    manager.start_wallet_scan().await.expect("the scan starts");
+    wait_until("the scan to reach the node directly", || scan_gate.waiting() > 0).await;
+
+    let proxy = RecordingSocksProxy::start();
+    tor.use_proxy(proxy.proxy_address());
+
+    // the gate stays shut until the new scan reaches the proxy, so the old scan can't finish
+    wait_until("the wallet to reach the node through Tor", || !proxy.targets().is_empty()).await;
+    drop(scan_rule);
+    scan_gate.open();
+
+    screen
+        .until("the wallet screen to learn the ledger is complete", |message| {
+            matches!(message, Msg::LedgerStateChanged(WalletLedgerState::Complete))
+        })
+        .await;
+
+    let balance = manager.balance().await.expect("the balance reads");
+    assert_eq!(balance.0.confirmed, Amount::from_sat(100_000));
 }
 
 /// Discovery of imported words finds history on the other address types while the wallet's own

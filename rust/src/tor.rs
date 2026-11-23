@@ -49,6 +49,21 @@ pub fn route_for_host(host: &str) -> Result<NetworkRoute, RouteError> {
     Ok(route)
 }
 
+/// Resolves with the route once one is available, such as after Tor finishes turning on
+pub async fn usable_route() -> NetworkRoute {
+    let mut state = TOR.subscribe();
+    loop {
+        if let Ok(route) = &state.borrow_and_update().route {
+            return route.clone();
+        }
+
+        // the service lives for the whole process, so its channel never closes
+        if state.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    }
+}
+
 /// Why no route is available
 #[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
 pub enum RouteError {

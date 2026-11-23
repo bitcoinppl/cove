@@ -109,7 +109,7 @@ pub(crate) enum WalletScanEventKind {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-enum RunningScan {
+pub(crate) enum RunningScan {
     Full(FullScanType),
     Incremental,
 }

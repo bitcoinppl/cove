@@ -226,6 +226,22 @@ impl NodeClient {
         }
     }
 
+    /// Runs a call that sends several requests, dropping it once the route changes
+    ///
+    /// A scan or sync can run for minutes, so without this it would keep sending its remaining
+    /// requests on a route that's no longer current, outside Tor after Tor turns on
+    async fn on_route<T>(
+        &self,
+        call: impl std::future::Future<Output = Result<T, Error>>,
+    ) -> Result<T, Error> {
+        self.ensure_route()?;
+
+        tokio::select! {
+            result = call => result,
+            () = self.route_changed() => Err(RouteError::Changed.into()),
+        }
+    }
+
     pub async fn check_url(&self) -> Result<(), Error> {
         self.ensure_route()?;
 
@@ -264,21 +280,22 @@ impl NodeClient {
         full_scan_request: FullScanRequest<KeychainKind>,
         stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
-        self.ensure_route()?;
+        self.on_route(async {
+            let full_scan_result = match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    debug!("starting esplora full scan");
+                    client.full_scan(full_scan_request, stop_gap).await?
+                }
 
-        let full_scan_result = match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                debug!("starting esplora full scan");
-                client.full_scan(full_scan_request, stop_gap).await?
-            }
+                NodeClientBackend::Electrum(client) => {
+                    debug!("starting electrum full scan");
+                    client.full_scan(full_scan_request, tx_graph, stop_gap).await?
+                }
+            };
 
-            NodeClientBackend::Electrum(client) => {
-                debug!("starting electrum full scan");
-                client.full_scan(full_scan_request, tx_graph, stop_gap).await?
-            }
-        };
-
-        Ok(full_scan_result)
+            Ok(full_scan_result)
+        })
+        .await
     }
 
     pub async fn start_progressive_wallet_scan(
@@ -290,13 +307,12 @@ impl NodeClient {
         events: flume::Sender<ScanEvent<KeychainKind>>,
         cancel_token: CancellationToken,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
-        self.ensure_route()?;
-
-        // a scan can run for minutes, so it stops at its next batch when the route changes
-        // instead of finishing outside Tor
-        let scan_token = cancel_token.child_token();
+        // dropping the scan can leave an Electrum batch running on a blocking thread, so the
+        // child token is cancelled when this returns and that batch is its last
+        let scan_token = cancel_token.child_token().drop_guard();
         let scan = async {
-            match &self.backend {
+            let scan_token = scan_token.token().clone();
+            let result = match &self.backend {
                 NodeClientBackend::Esplora(client) => {
                     debug!("starting progressive esplora full scan");
                     client
@@ -305,7 +321,7 @@ impl NodeClient {
                             last_revealed_indices,
                             stop_gap,
                             events,
-                            scan_token.clone(),
+                            scan_token,
                         )
                         .await
                 }
@@ -319,27 +335,16 @@ impl NodeClient {
                             last_revealed_indices,
                             stop_gap,
                             events,
-                            scan_token.clone(),
+                            scan_token,
                         )
                         .await
                 }
-            }
+            };
+
+            Ok(result?)
         };
 
-        tokio::pin!(scan);
-        let (result, route_changed) = tokio::select! {
-            result = &mut scan => (result, false),
-            () = self.route_changed() => {
-                scan_token.cancel();
-                (scan.await, true)
-            }
-        };
-
-        if route_changed && !cancel_token.is_cancelled() {
-            return Err(RouteError::Changed.into());
-        }
-
-        Ok(result?)
+        self.on_route(scan).await
     }
 
     pub async fn sync(
@@ -347,13 +352,15 @@ impl NodeClient {
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         scan_request: SyncRequest<(KeychainKind, u32)>,
     ) -> Result<SyncResponse, Error> {
-        self.ensure_route()?;
+        self.on_route(async {
+            let scan_result = match &self.backend {
+                NodeClientBackend::Esplora(client) => client.sync(scan_request).await?,
+                NodeClientBackend::Electrum(client) => client.sync(scan_request, tx_graph).await?,
+            };
 
-        let scan_result = match &self.backend {
-            NodeClientBackend::Esplora(client) => client.sync(scan_request).await?,
-            NodeClientBackend::Electrum(client) => client.sync(scan_request, tx_graph).await?,
-        };
-        Ok(scan_result)
+            Ok(scan_result)
+        })
+        .await
     }
 
     pub async fn get_confirmed_transaction(
