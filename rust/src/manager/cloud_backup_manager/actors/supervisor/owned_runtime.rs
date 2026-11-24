@@ -511,11 +511,6 @@ impl OwnedRuntime {
         self.runtime.cancel_restore(claim)
     }
 
-    /// Lets the restore with `claim` write through the lane once its activation committed
-    pub(crate) fn note_restore_activated(&mut self, claim: CloudBackupExclusiveOperationClaim) {
-        self.mutate(|runtime| runtime.note_restore_activated(claim));
-    }
-
     /// Restore All's run flags don't change the policy
     pub(crate) fn restore_all_mut(
         &mut self,

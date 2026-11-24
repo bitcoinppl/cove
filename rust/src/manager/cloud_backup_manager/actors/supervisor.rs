@@ -766,17 +766,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        let committed = self
-            .runtime
-            .commit(|lifecycle| Self::commit_restored_namespace(&manager, lifecycle, commit));
-
-        // the body stays off until the restore ends, so the lane learns of the activation here and
-        // runs the restore's wrapper write-back while it still pauses the dirty wallet uploads
-        if committed.is_ok() {
-            self.runtime.note_restore_activated(claim);
-        }
-
-        Produces::ok(committed)
+        Produces::ok(
+            self.runtime
+                .commit(|lifecycle| Self::commit_restored_namespace(&manager, lifecycle, commit)),
+        )
     }
 
     pub(crate) fn start_enable(

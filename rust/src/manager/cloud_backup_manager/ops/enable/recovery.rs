@@ -93,16 +93,10 @@ impl RustCloudBackupManager {
         // finalization records it for confirmation, as a fresh Enable does its new wrapper
         let opened_wrapper =
             &preparation.merge_namespaces[preparation.active_index].matched.opened_wrapper;
-        let master_key_wrapper_revision = opened_wrapper.revision().to_owned();
-        writes
-            .upload_master_key_backup(
-                cloud.clone(),
-                active_namespace_id.clone(),
-                opened_wrapper.json().to_vec(),
-            )
+        let wrapper_completion = writes
+            .write_back_opened_wrapper(&active_namespace_id, opened_wrapper)
             .await
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
-        let uploaded_at = cove_util::time::unix_timestamp_secs_or_zero();
 
         let active_critical_key = preparation.active_critical_key;
         let uploaded_wallets = CloudBackupStore::global()
@@ -139,8 +133,7 @@ impl RustCloudBackupManager {
             namespace_id: active_namespace_id,
             passkey,
             active_critical_key,
-            master_key_wrapper_revision,
-            uploaded_at,
+            wrapper_completion,
             uploaded_wallets,
             pending_uploads,
             cleanup_sources,

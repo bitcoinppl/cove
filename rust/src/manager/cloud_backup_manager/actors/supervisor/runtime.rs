@@ -233,8 +233,6 @@ pub(crate) struct RestoreRun {
     pub(crate) cancellation: Arc<AtomicBool>,
     /// Set once the run commits a local wallet, so cloud-only rows are reclassified when it ends
     pub(crate) committed_local_wallet: bool,
-    /// Set once a restore committed the namespace it activates, so the lane runs its own writes
-    activated_namespace: bool,
     /// The permit of the tap that started it; dropping the run revokes it
     permit: Option<PermitGrant>,
 }
@@ -244,22 +242,7 @@ impl RestoreRun {
         claim: CloudBackupExclusiveOperationClaim,
         cancellation: Arc<AtomicBool>,
     ) -> Self {
-        Self {
-            claim,
-            cancellation,
-            committed_local_wallet: false,
-            activated_namespace: false,
-            permit: None,
-        }
-    }
-
-    /// What a restore on a device without a configured backup may write
-    fn off_writes(&self) -> OffWrites {
-        if self.activated_namespace {
-            OffWrites::ActivatedRestore(self.claim)
-        } else {
-            OffWrites::Restore(self.claim)
-        }
+        Self { claim, cancellation, committed_local_wallet: false, permit: None }
     }
 
     /// Asks the worker to stop and revokes the tap's permit
@@ -1129,19 +1112,6 @@ impl Runtime {
         Ok(())
     }
 
-    /// Notes that the restore with `claim` committed the namespace it activates
-    ///
-    /// The lane runs the restore's own writes from here on, which it needs to write back the
-    /// master key wrapper its passkey opened
-    pub(crate) fn note_restore_activated(&mut self, claim: CloudBackupExclusiveOperationClaim) {
-        if let Self::Disabled { op: Some(DisabledOp::Restore(run)) }
-        | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)), .. } = self
-            && run.claim == claim
-        {
-            run.activated_namespace = true;
-        }
-    }
-
     pub(crate) fn restore(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
         match self {
             Self::Disabled { op: Some(DisabledOp::Restore(run)) }
@@ -1328,14 +1298,14 @@ impl Runtime {
                 op: op.as_ref().map(|op| match op {
                     DisabledOp::Enable(run) => OffWrites::Enable(run.claim),
                     DisabledOp::DiscardEnable(run) => OffWrites::Discard(run.claim),
-                    DisabledOp::Restore(run) => run.off_writes(),
+                    DisabledOp::Restore(run) => OffWrites::Restore(run.claim),
                 }),
             },
             Self::PendingEnableRecovery { op, .. } => PolicyBody::Off {
                 op: op.as_ref().map(|op| match op {
                     RecoveryOp::Continue(run) => OffWrites::Enable(run.claim),
                     RecoveryOp::Discard(run) => OffWrites::Discard(run.claim),
-                    RecoveryOp::Restore(run) => run.off_writes(),
+                    RecoveryOp::Restore(run) => OffWrites::Restore(run.claim),
                 }),
             },
             Self::Configured(body) => PolicyBody::Configured {

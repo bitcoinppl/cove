@@ -635,6 +635,20 @@ impl RestoreOperation {
         active: &RestorableNamespace,
     ) -> Result<(), CloudBackupError> {
         self.ensure_current().await?;
+
+        // the namespace must hold its key before activation queues the wallet uploads, so a
+        // failed write-back fails the restore before anything is activated; the wallets it
+        // restored stay, and a second restore activates the namespace once the write lands
+        let wrapper_completion = match &active.passkey {
+            Some(passkey) => Some(
+                self.writes
+                    .write_back_opened_wrapper(&active.namespace_id, &passkey.opened_wrapper)
+                    .await
+                    .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?,
+            ),
+            None => None,
+        };
+
         let master_key = MasterKey::from_bytes(*active.master_key.as_bytes());
         let passkey = active.passkey.as_ref().map(RestoredPasskeyMaterial::from);
         let wallets = CloudBackupStore::global().all_wallets()?;
@@ -653,24 +667,14 @@ impl RestoreOperation {
         )
         .await?;
 
-        if let Some(passkey) = &active.passkey {
-            self.write_back_opened_wrapper(&active.namespace_id, &passkey.opened_wrapper).await;
+        // the wrapper is already in the cloud, so a failure here only skips its confirmation
+        if let Some(completion) = wrapper_completion
+            && let Err(error) = self.writes.apply_completion(completion).await
+        {
+            warn!("Restore: failed to record the written-back master key wrapper: {error}");
         }
 
         Ok(())
-    }
-
-    /// Writes the wrapper the passkey opened back to the namespace this restore just activated
-    ///
-    /// It runs before any wallet upload into the namespace can: activation queues those uploads
-    /// as ordinary writes, which the lane pauses while the restore runs and resumes only once
-    /// the restore ends, and the restore waits here for the lane's answer first. A failure
-    /// doesn't fail the restore, whose wallets are already restored; the wrapper row is then
-    /// absent, and sync health asks the provider about the key as it would for any namespace
-    async fn write_back_opened_wrapper(&self, namespace_id: &str, wrapper: &DownloadedWrapper) {
-        if let Err(error) = self.writes.write_back_opened_wrapper(namespace_id, wrapper).await {
-            warn!("Restore: failed to write back the opened master key wrapper: {error}");
-        }
     }
 
     async fn download_wallets_for_restore(

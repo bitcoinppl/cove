@@ -1052,19 +1052,14 @@ mod tests {
                 CommandClass::EnableDiscard(discard),
                 Decision::Run,
             ),
-            // a restore writes through its claim only once it activated its namespace
+            // a restore writes back the wrapper it opened through its claim, and pauses the rest
             (
                 policy(PolicyBody::Off { op: Some(OffWrites::Restore(enable)) }),
-                CommandClass::Operation(enable),
-                Decision::Stale,
-            ),
-            (
-                policy(PolicyBody::Off { op: Some(OffWrites::ActivatedRestore(enable)) }),
                 CommandClass::Operation(enable),
                 Decision::Run,
             ),
             (
-                policy(PolicyBody::Off { op: Some(OffWrites::ActivatedRestore(enable)) }),
+                policy(PolicyBody::Off { op: Some(OffWrites::Restore(enable)) }),
                 ordinary.clone(),
                 Decision::Paused(PauseReason::BackupOff),
             ),

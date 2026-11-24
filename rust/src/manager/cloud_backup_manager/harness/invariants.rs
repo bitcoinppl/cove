@@ -857,10 +857,9 @@ fn running_claim(body: &PolicyBody) -> Option<CloudBackupExclusiveOperationClaim
     match body {
         PolicyBody::Configured { op } => op.map(|ConfiguredWrites { claim, .. }| claim),
         PolicyBody::Off { op } => op.map(|op| match op {
-            OffWrites::Enable(claim)
-            | OffWrites::Discard(claim)
-            | OffWrites::Restore(claim)
-            | OffWrites::ActivatedRestore(claim) => claim,
+            OffWrites::Enable(claim) | OffWrites::Discard(claim) | OffWrites::Restore(claim) => {
+                claim
+            }
         }),
         PolicyBody::FinishingDisable { op, .. } | PolicyBody::AccountSwitch { op } => *op,
         PolicyBody::Closed(_) => None,

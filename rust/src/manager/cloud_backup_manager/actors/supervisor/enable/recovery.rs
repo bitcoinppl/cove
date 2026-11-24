@@ -78,8 +78,7 @@ impl CloudBackupSupervisor {
             namespace_id,
             passkey,
             active_critical_key,
-            master_key_wrapper_revision,
-            uploaded_at,
+            wrapper_completion,
             uploaded_wallets,
             mut pending_uploads,
             cleanup_sources,
@@ -92,12 +91,6 @@ impl CloudBackupSupervisor {
 
         // the wrapper written back before the wallets is confirmed with them, as a fresh
         // Enable's new wrapper is
-        let wrapper_completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
-            namespace_id.clone(),
-            CloudBackupRecordKey::MasterKeyWrapper,
-            master_key_wrapper_revision,
-            uploaded_at,
-        );
         pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
 
         let pending_completion =

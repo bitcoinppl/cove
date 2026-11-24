@@ -209,31 +209,32 @@ impl CloudBackupWriteClient {
     }
 
     /// Writes a master key wrapper a passkey opened back to the namespace it came from, and
-    /// records it for upload confirmation
+    /// returns the completion that records it for upload confirmation
     ///
     /// A provider can hand out a stale local copy of a namespace deleted elsewhere and report it
     /// uploaded; once the delete syncs, the wrapper is gone, and wallets written there land in a
     /// namespace no device can decrypt. Writing the opened bytes back before any wallet makes the
-    /// namespace hold its key again, and on a healthy provider rewrites the same bytes
+    /// namespace hold its key again, and on a healthy provider rewrites the same bytes. The caller
+    /// applies the completion once the namespace it activates is committed, and the completion's
+    /// confirmation clock starts only after the write landed
     pub(crate) async fn write_back_opened_wrapper(
         &self,
         namespace_id: &str,
         wrapper: &DownloadedWrapper,
-    ) -> Result<(), CloudBackupError> {
-        let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
+    ) -> Result<CloudBackupWriteCompletion, CloudBackupError> {
+        self.upload_master_key_backup(
+            CloudStorage::global_explicit_client(),
+            namespace_id.to_owned(),
+            wrapper.json().to_vec(),
+        )
+        .await?;
+
+        Ok(CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
             namespace_id.to_owned(),
             CloudBackupRecordKey::MasterKeyWrapper,
             wrapper.revision().to_owned(),
             cove_util::time::unix_timestamp_secs_or_zero(),
-        );
-
-        self.upload_master_key_backup_with_completion(
-            CloudStorage::global_explicit_client(),
-            namespace_id.to_owned(),
-            wrapper.json().to_vec(),
-            completion,
-        )
-        .await
+        ))
     }
 
     pub(crate) async fn finalize_uploaded_wallets(
