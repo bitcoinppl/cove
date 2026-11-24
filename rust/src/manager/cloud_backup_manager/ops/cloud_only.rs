@@ -11,6 +11,7 @@ use super::{
     CLOUD_BACKUP_IO_CONCURRENCY, CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE, blocking_cloud_error,
     load_master_key_for_cloud_action,
 };
+use crate::backup::import::CloudRestorePlacement;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobConfirmedState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
@@ -65,7 +66,11 @@ impl CloudBackupPreparedWalletRestore {
             })?;
 
         let outcome = wallet.restore_cloud_only(&local_wallets)?;
-        if matches!(outcome, CloudOnlyRestoreOutcome::Restored { .. }) {
+
+        // the record is the restored wallet's own backup only under the backup's wallet id
+        if let CloudOnlyRestoreOutcome::Restored { wallet: restored, .. } = &outcome
+            && restored.placement() == CloudRestorePlacement::BackupWalletId
+        {
             self.record_restored_backup(&wallet);
         }
 
@@ -278,15 +283,26 @@ impl RustCloudBackupManager {
         result
     }
 
-    /// Queues the upload of a local wallet a restore just added a secret to, straight after the
-    /// upgrade commits, so the wallet's own backup gains the secret even if the restore result is
-    /// never applied
+    /// Queues the upload of a local wallet whose own backup a restore just made stale or left
+    /// missing, straight after the restore commits, so it is uploaded even if the restore result
+    /// is never applied
+    ///
+    /// That is a wallet a restore added a secret to, and a wallet restored under a new wallet id,
+    /// which the backup's record does not describe
     pub(crate) fn handle_cloud_only_restore_committed(
         &self,
         result: &Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) {
-        if let Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id, .. }) = result {
-            self.handle_restored_secret_added(wallet_id.clone());
+        match result {
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id, .. }) => {
+                self.handle_restored_wallet_needs_backup(wallet_id.clone());
+            }
+            Ok(CloudOnlyRestoreOutcome::Restored { wallet, .. })
+                if wallet.placement() == CloudRestorePlacement::NewWalletId =>
+            {
+                self.handle_restored_wallet_needs_backup(wallet.metadata().id.clone());
+            }
+            _ => {}
         }
     }
 

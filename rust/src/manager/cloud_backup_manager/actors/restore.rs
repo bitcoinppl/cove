@@ -13,7 +13,6 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
-use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::{
     CLOUD_BACKUP_LOAD_FAILED_MESSAGE, try_restore_from_local_master_key,
@@ -137,35 +136,30 @@ struct RestoreApplication {
 
 /// The one failure category a restore can report when no wallet was restored
 ///
-/// A run where every wallet hit a local conflict must keep that category: the
-/// reader has to learn their local data was kept unchanged
+/// A run where every wallet found the keychain unreadable must keep that category: the
+/// reader has to learn that unlocking the device and retrying can finish it
 #[derive(Clone, Copy)]
 enum RestoreFailureCategory {
     None,
-    LocalConflict(LocalWalletConflict),
+    LocalKeychainUnavailable,
     Mixed,
 }
 
 impl RestoreFailureCategory {
     fn record(self, error: &CloudBackupError) -> Self {
-        let CloudBackupError::LocalWalletConflict(conflict) = *error else {
-            return Self::Mixed;
-        };
-
-        match self {
-            Self::None => Self::LocalConflict(conflict),
-            Self::LocalConflict(recorded) if recorded == conflict => self,
-            // unreadable and mismatched items are both local data the restore kept, so the
-            // mismatch copy stays truthful for the whole run
-            Self::LocalConflict(_) => Self::LocalConflict(LocalWalletConflict::Mismatch),
-            Self::Mixed => Self::Mixed,
+        match (self, error) {
+            (
+                Self::None | Self::LocalKeychainUnavailable,
+                CloudBackupError::LocalKeychainUnavailable,
+            ) => Self::LocalKeychainUnavailable,
+            _ => Self::Mixed,
         }
     }
 
     /// The error to report when every wallet in the run failed
     fn all_failed_error(self) -> CloudBackupError {
         match self {
-            Self::LocalConflict(conflict) => CloudBackupError::LocalWalletConflict(conflict),
+            Self::LocalKeychainUnavailable => CloudBackupError::LocalKeychainUnavailable,
             Self::None | Self::Mixed => {
                 CloudBackupError::Internal("all wallets failed to restore".into())
             }
@@ -542,7 +536,7 @@ impl RestoreOperation {
         {
             self.ensure_current().await?;
             match restore_session.restore_downloaded(wallet) {
-                Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
+                Ok(WalletRestoreOutcome::Restored { labels_warning, .. }) => {
                     resolution = resolution.restored(*namespace_index);
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {

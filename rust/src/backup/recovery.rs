@@ -12,7 +12,7 @@ use std::{
 };
 
 use bdk_wallet::{bitcoin::bip32::Xpub, descriptor::ExtendedDescriptor};
-use cove_device::keychain::Keychain;
+use cove_device::keychain::{Keychain, KeychainError};
 use cove_types::WalletId;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -337,8 +337,60 @@ fn delete_keychain_kind(keychain: &Keychain, id: &WalletId, kind: KeychainArtifa
 
 fn capture_keychain_fingerprints(
     id: &WalletId,
-) -> Result<BTreeMap<String, ArtifactFingerprint>, BackupError> {
+) -> Result<BTreeMap<String, ArtifactFingerprint>, WalletKeychainReadError> {
     WalletKeychainItems::read(id).map(|items| items.fingerprints())
+}
+
+/// A keychain item a wallet id owns that could not be read
+#[derive(Debug, thiserror::Error)]
+#[error("{item} snapshot: {source}")]
+pub(crate) struct WalletKeychainReadError {
+    item: &'static str,
+    #[source]
+    source: KeychainError,
+}
+
+impl WalletKeychainReadError {
+    /// Whether the platform could not read the keychain at all, such as while the device is
+    /// locked, so the same read can succeed later
+    ///
+    /// Any other failure means an item is stored but cannot be decoded, which a retry won't fix
+    pub(crate) fn is_keychain_unavailable(&self) -> bool {
+        matches!(self.source, KeychainError::Read(_))
+    }
+}
+
+impl From<WalletKeychainReadError> for BackupError {
+    fn from(error: WalletKeychainReadError) -> Self {
+        Self::Keychain(error.to_string())
+    }
+}
+
+/// Why a restore snapshot could not be captured
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SnapshotCaptureError {
+    /// A keychain item the wallet id owns could not be read
+    ///
+    /// `storage_occupied` says whether a metadata row, BDK store or wallet data already
+    /// reserves the wallet id, which the snapshot checks before reading the keychain
+    #[error("{error}")]
+    Keychain {
+        #[source]
+        error: WalletKeychainReadError,
+        storage_occupied: bool,
+    },
+
+    #[error(transparent)]
+    Backup(#[from] BackupError),
+}
+
+impl From<SnapshotCaptureError> for BackupError {
+    fn from(error: SnapshotCaptureError) -> Self {
+        match error {
+            SnapshotCaptureError::Keychain { error, .. } => error.into(),
+            SnapshotCaptureError::Backup(error) => error,
+        }
+    }
 }
 
 /// The keychain items a wallet id owns, read once for both fingerprinting and comparison
@@ -350,22 +402,19 @@ pub(crate) struct WalletKeychainItems {
 }
 
 impl WalletKeychainItems {
-    fn read(id: &WalletId) -> Result<Self, BackupError> {
+    fn read(id: &WalletId) -> Result<Self, WalletKeychainReadError> {
         let keychain = Keychain::global();
+        let read_error = |item| move |source| WalletKeychainReadError { item, source };
 
         Ok(Self {
-            secret: keychain
-                .get_wallet_secret(id)
-                .map_err_prefix("wallet secret snapshot", BackupError::Keychain)?,
-            xpub: keychain
-                .get_wallet_xpub(id)
-                .map_err_prefix("wallet xpub snapshot", BackupError::Keychain)?,
+            secret: keychain.get_wallet_secret(id).map_err(read_error("wallet secret"))?,
+            xpub: keychain.get_wallet_xpub(id).map_err(read_error("wallet xpub"))?,
             descriptors: keychain
                 .get_public_descriptor(id)
-                .map_err_prefix("wallet descriptor snapshot", BackupError::Keychain)?,
+                .map_err(read_error("wallet descriptor"))?,
             tap_signer_backup: keychain
                 .get_tap_signer_backup(id)
-                .map_err_prefix("TapSigner backup snapshot", BackupError::Keychain)?,
+                .map_err(read_error("TapSigner backup"))?,
         })
     }
 
@@ -447,7 +496,7 @@ pub(crate) struct RestoreArtifactSnapshot {
 
 impl RestoreArtifactSnapshot {
     pub(crate) fn capture(id: &ValidatedRestoreWalletId) -> Result<Self, BackupError> {
-        Self::capture_with_keychain_items(id).map(|(snapshot, _)| snapshot)
+        Ok(Self::capture_with_keychain_items(id).map(|(snapshot, _)| snapshot)?)
     }
 
     /// Captures the snapshot and returns the keychain items it fingerprinted
@@ -456,7 +505,7 @@ impl RestoreArtifactSnapshot {
     /// instead of reading the keychain a second time
     pub(crate) fn capture_with_keychain_items(
         id: &ValidatedRestoreWalletId,
-    ) -> Result<(Self, WalletKeychainItems), BackupError> {
+    ) -> Result<(Self, WalletKeychainItems), SnapshotCaptureError> {
         let metadata_present = metadata_exists(id)?;
 
         for entry in crate::database::wallet_data::wallet_data_root_entries()
@@ -469,18 +518,10 @@ impl RestoreArtifactSnapshot {
                 return Err(BackupError::InvalidWalletId(format!(
                     "wallet id collides with existing path: {}",
                     id.as_wallet_id()
-                )));
+                ))
+                .into());
             }
         }
-
-        let keychain_items_read = WalletKeychainItems::read(id.as_wallet_id())?;
-        let keychain_entries = keychain_items_read
-            .fingerprints()
-            .into_iter()
-            .map(|(kind, fingerprint)| (kind, Some(fingerprint)))
-            .collect::<BTreeMap<_, _>>();
-        let keychain_items = !keychain_entries.is_empty()
-            || Keychain::global().wallet_items_exist(id.as_wallet_id());
 
         let mut bdk_paths = HashSet::new();
         let mut bdk_fingerprints = BTreeMap::new();
@@ -527,6 +568,19 @@ impl RestoreArtifactSnapshot {
             || wallet_data_directory
                 .as_ref()
                 .is_some_and(|fingerprint| fingerprint.kind != ArtifactKind::Directory);
+
+        // the keychain is read last, so a failed read still reports whether storage reserves
+        // the wallet id
+        let storage_occupied = metadata_present || !bdk_paths.is_empty() || wallet_data_occupied;
+        let keychain_items_read = WalletKeychainItems::read(id.as_wallet_id())
+            .map_err(|error| SnapshotCaptureError::Keychain { error, storage_occupied })?;
+        let keychain_entries = keychain_items_read
+            .fingerprints()
+            .into_iter()
+            .map(|(kind, fingerprint)| (kind, Some(fingerprint)))
+            .collect::<BTreeMap<_, _>>();
+        let keychain_items = !keychain_entries.is_empty()
+            || Keychain::global().wallet_items_exist(id.as_wallet_id());
 
         let snapshot = Self {
             metadata: metadata_present,

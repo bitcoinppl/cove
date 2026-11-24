@@ -307,6 +307,69 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn recover_other_backups_deletes_the_source_of_a_wallet_moved_to_a_new_id() {
+    use crate::mnemonic::MnemonicExt as _;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let prf_key = [7u8; 32];
+    let other_master_key = cove_cspp::master_key::MasterKey::generate();
+    let other_namespace = other_master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&other_master_key, &prf_key, &[9; 32])
+            .unwrap();
+    globals.cloud.set_master_key_backup(
+        other_namespace.clone(),
+        serde_json::to_vec(&encrypted_master).unwrap(),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        other_namespace.clone(),
+        record_id.clone(),
+        encrypted_remote_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
+    );
+
+    // the keychain xpub under the backup's wallet id belongs to another seed, so the backup
+    // restores under a new wallet id
+    let unrelated_xpub =
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong")
+            .unwrap()
+            .xpub(wallet.network.into());
+    Keychain::global().save_wallet_xpub(&wallet.id, unrelated_xpub).unwrap();
+    globals.cloud.set_wallet_files(
+        other_namespace.clone(),
+        vec![wallet_filename_from_record_id(&record_id)],
+    );
+
+    let report = recover_other_backups_for_test(&manager).await.unwrap();
+
+    assert_eq!((report.wallets_restored, report.wallets_failed), (1, 0));
+    let wallets = Database::global().wallets().get_all(wallet.network, wallet.wallet_mode).unwrap();
+    let [restored] = wallets.as_slice() else {
+        panic!("expected exactly the restored wallet, found {wallets:?}");
+    };
+    assert_ne!(restored.id, wallet.id);
+    assert_eq!(Keychain::global().get_wallet_xpub(&wallet.id).unwrap(), Some(unrelated_xpub));
+
+    // the source is deleted only after the restored wallet's own backup uploaded
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let restored_record_id = cove_cspp::backup_data::wallet_record_id(restored.id.as_ref());
+    assert!(globals.cloud.has_wallet_backup(&current_namespace, &restored_record_id));
+    assert!(!globals.cloud.has_namespace(&other_namespace));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_current_namespace_not_found_fails_closed_without_source_delete() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

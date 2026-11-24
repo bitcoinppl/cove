@@ -76,7 +76,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
             .restore_downloaded(&wallet)
             .unwrap();
 
-    let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
+    let WalletRestoreOutcome::Restored { labels_warning, .. } = outcome else {
         panic!("expected restored wallet");
     };
 
@@ -1698,7 +1698,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
         .await
         .unwrap();
 
-    let CloudOnlyRestoreOutcome::Restored { labels_warning } = outcome else {
+    let CloudOnlyRestoreOutcome::Restored { labels_warning, .. } = outcome else {
         panic!("expected restored wallet");
     };
 
@@ -1876,10 +1876,13 @@ async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
     let first_outcome = prepared.restore_record(&first_record_id).await.unwrap();
-    assert_eq!(first_outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None });
+    assert!(matches!(
+        first_outcome,
+        CloudOnlyRestoreOutcome::Restored { labels_warning: None, .. }
+    ));
 
     let second_outcome = prepared.restore_record(&second_record_id).await.unwrap();
-    let CloudOnlyRestoreOutcome::Restored { labels_warning } = second_outcome else {
+    let CloudOnlyRestoreOutcome::Restored { labels_warning, .. } = second_outcome else {
         panic!("expected second wallet to restore");
     };
 
@@ -2320,35 +2323,95 @@ async fn restore_after_reinstall_adopts_surviving_keychain_items() {
     assert_eq!(second_report.wallets_failed, 0);
 }
 
+/// Stores a master key for a new namespace, locally and in the fake cloud, as a backup made on
+/// this device before a reinstall would have
+fn seed_restorable_namespace(globals: &TestGlobals) -> cove_cspp::master_key::MasterKey {
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals.cloud.set_master_key_backup(namespace, serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    master_key
+}
+
+/// Uploads `wallet`'s backup to the fake cloud, then removes its local data the way a reinstall
+/// does, leaving only its keychain items
+async fn back_up_then_reinstall(
+    globals: &TestGlobals,
+    master_key: &cove_cspp::master_key::MasterKey,
+    wallet: &WalletMetadata,
+) {
+    let namespace = master_key.namespace_id();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_reinstalled_wallet_backup_bytes(wallet, master_key, "reinstall-revision", 2)
+            .await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+}
+
+// the reported failure: a wallet imported from its descriptor stores the descriptor's account
+// xpub and keeps it once its seed is added, so after a reinstall a restore that compared it to
+// the master xpub refused the wallet on every retry
 #[tokio::test(flavor = "current_thread", start_paused = true)]
-async fn restore_keeps_the_conflict_category_when_every_wallet_conflicts() {
+async fn restore_after_reinstall_brings_back_a_wallet_whose_seed_was_added_after_import() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    reset_cloud_backup_test_state(&manager, globals);
+    let master_key = seed_restorable_namespace(globals);
+
+    let network = crate::network::Network::Signet;
+    Database::global().global_config.set_selected_network(network).unwrap();
+    let mnemonic =
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong").unwrap();
+    let export = crate::wallet::test_support::public_descriptor_export(&mnemonic, network);
+    let imported = crate::wallet::Wallet::try_new_persisted_from_xpub(export).unwrap().metadata;
+    let upgraded = crate::manager::import_wallet_manager::import_mnemonic_with_target(
+        mnemonic,
+        network,
+        imported.wallet_mode,
+    )
+    .unwrap();
+    assert_eq!((upgraded.id.clone(), upgraded.wallet_type), (imported.id.clone(), WalletType::Hot));
+
+    back_up_then_reinstall(globals, &master_key, &upgraded).await;
+    Database::global().wallets.delete(&upgraded.id).unwrap();
+    let before = raw_wallet_keychain_entries(&upgraded.id);
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(
+        (report.wallets_restored, report.wallets_failed, report.failed_wallet_errors),
+        (1, 0, Vec::new())
+    );
+    assert_eq!(raw_wallet_keychain_entries(&upgraded.id), before);
+    let restored = Database::global()
+        .wallets()
+        .get(&upgraded.id, network, upgraded.wallet_mode)
+        .unwrap()
+        .expect("the wallet comes back under its own id");
+    assert_eq!(restored.wallet_type, WalletType::Hot);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_moves_a_wallet_beside_keychain_data_it_cannot_adopt() {
     use crate::mnemonic::MnemonicExt as _;
 
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
-
     reset_cloud_backup_test_state(&manager, globals);
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let namespace = master_key.namespace_id();
-    let encrypted_master =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
-    globals
-        .cloud
-        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
-    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+    let master_key = seed_restorable_namespace(globals);
 
     let wallet = xpub_only_wallet_metadata();
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
-    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
-    globals.cloud.set_wallet_backup(
-        namespace.clone(),
-        record_id.clone(),
-        encrypted_reinstalled_wallet_backup_bytes(&wallet, &master_key, "conflict-revision", 2)
-            .await,
-    );
-    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+    back_up_then_reinstall(globals, &master_key, &wallet).await;
 
     // the surviving keychain xpub belongs to another seed, so it cannot be adopted
     let unrelated_xpub =
@@ -2359,12 +2422,53 @@ async fn restore_keeps_the_conflict_category_when_every_wallet_conflicts() {
     let before = raw_wallet_keychain_entries(&wallet.id);
 
     let operation = new_restore_operation_for_test(&manager).await;
-    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
 
-    assert!(matches!(
-        error,
-        CloudBackupError::LocalWalletConflict(crate::backup::import::LocalWalletConflict::Mismatch)
-    ));
+    assert_eq!((report.wallets_restored, report.wallets_failed), (1, 0));
+    assert_eq!(raw_wallet_keychain_entries(&wallet.id), before);
+
+    let wallets = Database::global().wallets().get_all(wallet.network, wallet.wallet_mode).unwrap();
+    let [restored] = wallets.as_slice() else {
+        panic!("expected exactly the restored wallet, found {wallets:?}");
+    };
+    assert_ne!(restored.id, wallet.id);
+    assert_eq!(
+        Keychain::global().get_wallet_xpub(&restored.id).unwrap().map(|xpub| xpub.to_string()),
+        Some(sample_xpub(&wallet))
+    );
+
+    // the backup's record describes the old wallet id, so the restored wallet uploads its own
+    let restored_row = Database::global()
+        .cloud_blob_sync_states
+        .get(&cove_cspp::backup_data::wallet_record_id(restored.id.as_ref()))
+        .unwrap();
+    assert!(
+        matches!(&restored_row, Some(row) if row.is_dirty()),
+        "restored wallet should be queued for upload, found {restored_row:?}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_reports_an_unreadable_keychain_when_every_wallet_hits_it() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    reset_cloud_backup_test_state(&manager, globals);
+    let master_key = seed_restorable_namespace(globals);
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    back_up_then_reinstall(globals, &master_key, &wallet).await;
+    let before = raw_wallet_keychain_entries(&wallet.id);
+
+    // a locked device cannot read the keychain, so nothing may be written until it can
+    let xpub_key = format!("{}{}", wallet.id, crate::test_support::WALLET_XPUB_KEY_SUFFIX);
+    globals.keychain.fail_reads_for(xpub_key.as_str());
+    let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+    globals.keychain.clear_read_failures();
+
+    assert!(matches!(error, CloudBackupError::LocalKeychainUnavailable));
     assert_eq!(raw_wallet_keychain_entries(&wallet.id), before);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),

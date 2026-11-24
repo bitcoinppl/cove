@@ -155,7 +155,7 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
         )
         .await
         .unwrap();
-    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None }));
+    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None, .. }));
 
     let restored = Database::global()
         .wallets()

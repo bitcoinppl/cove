@@ -220,8 +220,8 @@ impl RustCloudBackupManager {
                 };
 
                 match restore_session.restore_downloaded(&wallet) {
-                    Ok(WalletRestoreOutcome::Restored { .. }) => {
-                        restored_wallets.push(wallet.metadata)
+                    Ok(WalletRestoreOutcome::Restored { wallet: restored, .. }) => {
+                        restored_wallets.push(restored.into_metadata())
                     }
                     Ok(WalletRestoreOutcome::SkippedDuplicate) => {}
                     Err(error) => {

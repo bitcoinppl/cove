@@ -3,7 +3,9 @@ use std::str::FromStr as _;
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletBackupVersion, WalletEntry};
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorageClient, CloudStorageError};
-use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
+use cove_device::keychain::{
+    Keychain, KeychainError, WalletSecret as KeychainWalletSecret, WalletXprv,
+};
 use cove_util::ResultExt as _;
 use cove_util::json::JsonDecodeError;
 use tracing::{info, warn};
@@ -12,7 +14,7 @@ use zeroize::Zeroizing;
 use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
 use crate::backup::import::{
-    CloudRestoreError, LabelRestoreBehavior, LabelRestoreWarning, LocalWalletConflict,
+    CloudRestoreError, CloudRestoredWallet, LabelRestoreBehavior, LabelRestoreWarning,
     restore_wallet_labels,
 };
 use crate::backup::model::{WalletBackup, WalletSecret};
@@ -289,15 +291,16 @@ pub(crate) struct WalletRestoreSession(ExistingWalletIdentitySet);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletRestoreOutcome {
-    Restored { labels_warning: Option<LabelRestoreWarning> },
+    Restored { wallet: CloudRestoredWallet, labels_warning: Option<LabelRestoreWarning> },
     SkippedDuplicate,
 }
 
 /// What restoring one cloud-only record did to the local wallets
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudOnlyRestoreOutcome {
-    /// The backup was restored as a new local wallet
-    Restored { labels_warning: Option<LabelRestoreWarning> },
+    /// The backup was restored as a new local wallet, under the backup's own wallet id or, when
+    /// local data held that id, under a new one
+    Restored { wallet: CloudRestoredWallet, labels_warning: Option<LabelRestoreWarning> },
     /// The local wallet `wallet_id`, with the backup's identity, now holds its secret as well
     SecretAdded { wallet_id: WalletId, covered_by: CoveringWallets },
     /// Local wallets already hold everything the backup can recover; `covered_by` names them
@@ -329,10 +332,10 @@ impl WalletRestoreSession {
             return Ok(WalletRestoreOutcome::SkippedDuplicate);
         }
 
-        let labels_warning = wallet.restore()?;
+        let (wallet, labels_warning) = wallet.restore()?;
         self.0.insert(duplicate_key);
 
-        Ok(WalletRestoreOutcome::Restored { labels_warning })
+        Ok(WalletRestoreOutcome::Restored { wallet, labels_warning })
     }
 
     fn should_skip_duplicate_wallet(&self, duplicate_key: &WalletIdentityKey) -> bool {
@@ -345,12 +348,32 @@ impl WalletRestoreSession {
     }
 }
 
-/// Keep a local-data conflict typed so the reader learns their data was kept unchanged
+/// What a cloud-only restore does when adding its secret to a matching local wallet failed
+///
+/// A local wallet whose data can't be compared never keeps the backup's secret in the cloud, so
+/// the backup restores as its own wallet, unless the keychain can't be read at all, when nothing
+/// can be written until it can
+fn secret_upgrade_fallback(
+    context: &str,
+    error: SecretUpgradeError,
+) -> Result<Option<CloudOnlyRestoreOutcome>, CloudBackupError> {
+    match error {
+        SecretUpgradeError::Keychain(KeychainError::Read(_)) => {
+            warn!("Cloud-only wallet not added, the keychain is unreadable: {context}");
+            Err(CloudBackupError::LocalKeychainUnavailable)
+        }
+        SecretUpgradeError::Identity(_) => {
+            info!("Cloud-only wallet not added, the local wallet can't be compared: {error}");
+            Ok(None)
+        }
+        error => Err(CloudBackupError::internal_context(context, error)),
+    }
+}
+
+/// Keep an unreadable keychain typed so the reader learns that unlocking and retrying can work
 fn cloud_restore_error(context: &str, error: CloudRestoreError) -> CloudBackupError {
     match error {
-        CloudRestoreError::LocalConflict(conflict) => {
-            CloudBackupError::LocalWalletConflict(conflict)
-        }
+        CloudRestoreError::LocalKeychainUnavailable => CloudBackupError::LocalKeychainUnavailable,
         CloudRestoreError::Backup(error) => {
             CloudBackupError::Internal(CloudBackupInternalError::context(context, error))
         }
@@ -397,8 +420,8 @@ impl DownloadedWalletBackup {
             return Err(error);
         }
 
-        let labels_warning = self.restore()?;
-        Ok(CloudOnlyRestoreOutcome::Restored { labels_warning })
+        let (wallet, labels_warning) = self.restore()?;
+        Ok(CloudOnlyRestoreOutcome::Restored { wallet, labels_warning })
     }
 
     /// How much of this backup the local wallets in `identities` already hold
@@ -488,9 +511,7 @@ impl DownloadedWalletBackup {
                 return Ok(None);
             }
 
-            Err(error) => {
-                return Err(CloudBackupError::internal_context("find wallet for secret", error));
-            }
+            Err(error) => return secret_upgrade_fallback("find wallet for secret", error),
         };
 
         let covered_by = CoveringWallets::one(upgrade.target(), BackupRecoveryMaterial::Secret);
@@ -505,18 +526,16 @@ impl DownloadedWalletBackup {
                 info!("Cloud-only wallet secret was added locally meanwhile");
                 Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by }))
             }
-            // the backup may hold the only readable copy of this secret, so the row stays
-            // restorable instead of becoming a deletable copy
+            // the backup may hold the only readable copy of this secret, so it restores as its own
+            // wallet beside the local one instead of being blocked by it
             Err(SecretUpgradeError::UnreadableSecret(local_id)) => {
                 info!(
-                    "Cloud-only wallet not added: local wallet id={local_id} holds an unreadable secret"
+                    "Cloud-only wallet not added: local wallet id={local_id} holds an unreadable secret, restoring as new"
                 );
 
-                Err(CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable))
+                Ok(None)
             }
-            Err(error) => {
-                Err(CloudBackupError::internal_context("add secret to local wallet", error))
-            }
+            Err(error) => secret_upgrade_fallback("add secret to local wallet", error),
         }
     }
 
@@ -538,8 +557,13 @@ impl DownloadedWalletBackup {
         fallback_identity_key_for_backup(&self.metadata)
     }
 
-    /// Restores the backup as a new local wallet, returning any label import warning
-    fn restore(&self) -> Result<Option<LabelRestoreWarning>, CloudBackupError> {
+    /// Restores the backup as a new local wallet, returning it with any label import warning
+    ///
+    /// The wallet lands under a new wallet id when local data holds the backup's id, so labels
+    /// and every later step use the restored wallet's id, never the backup's
+    fn restore(
+        &self,
+    ) -> Result<(CloudRestoredWallet, Option<LabelRestoreWarning>), CloudBackupError> {
         let backup_model = WalletBackup {
             metadata: self.entry.metadata.clone(),
             secret: convert_cloud_secret(&self.entry.secret),
@@ -548,28 +572,27 @@ impl DownloadedWalletBackup {
             labels_jsonl: decode_cloud_labels_jsonl(&self.entry)?,
         };
 
-        match self.signing_secret()? {
+        let wallet = match self.signing_secret()? {
             Some(KeychainWalletSecret::Mnemonic(mnemonic)) => {
                 crate::backup::import::restore_cloud_mnemonic_wallet(&self.metadata, mnemonic)
-                    .map_err(|error| cloud_restore_error("restore mnemonic wallet", error))?;
+                    .map_err(|error| cloud_restore_error("restore mnemonic wallet", error))?
             }
             Some(KeychainWalletSecret::Xpriv(xpriv)) => {
                 crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv).map_err(
                     |error| cloud_restore_error("restore extended-private-key wallet", error),
-                )?;
+                )?
             }
-            None => {
-                crate::backup::import::restore_cloud_descriptor_wallet(
-                    &self.metadata,
-                    &backup_model,
-                )
-                .map_err(|error| cloud_restore_error("restore descriptor wallet", error))?;
-            }
-        }
+            None => crate::backup::import::restore_cloud_descriptor_wallet(
+                &self.metadata,
+                &backup_model,
+            )
+            .map_err(|error| cloud_restore_error("restore descriptor wallet", error))?,
+        };
 
+        let restored = wallet.metadata();
         let labels_outcome = restore_wallet_labels(
-            &self.metadata.id,
-            &self.metadata.name,
+            &restored.id,
+            &restored.name,
             backup_model.labels_jsonl.as_deref(),
             LabelRestoreBehavior::PreserveCloudBackupClean,
         );
@@ -577,7 +600,7 @@ impl DownloadedWalletBackup {
             warn!("Failed to restore labels for restored wallet: {}", warning.error);
         }
 
-        Ok(labels_outcome.warning)
+        Ok((wallet, labels_outcome.warning))
     }
 }
 
@@ -730,7 +753,10 @@ mod tests {
 
         let first_outcome = session.restore_downloaded(&wallet).unwrap();
 
-        assert_eq!(first_outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+        assert!(matches!(
+            first_outcome,
+            WalletRestoreOutcome::Restored { labels_warning: None, .. }
+        ));
         assert!(session.0.contains(&duplicate_key));
         assert_eq!(session.0.len(), 1);
 
@@ -783,7 +809,7 @@ mod tests {
             let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
 
             let outcome = session.restore_downloaded(&wallet).unwrap();
-            assert_eq!(outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+            assert!(matches!(outcome, WalletRestoreOutcome::Restored { labels_warning: None, .. }));
 
             let stored = Keychain::global().get_wallet_secret(&metadata.id).unwrap().unwrap();
             let stored = stored.as_xprv().unwrap();
@@ -827,7 +853,7 @@ mod tests {
         let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
 
         let outcome = session.restore_downloaded(&wallet).unwrap();
-        assert_eq!(outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+        assert!(matches!(outcome, WalletRestoreOutcome::Restored { labels_warning: None, .. }));
 
         let loaded = crate::wallet::Wallet::try_load_persisted(metadata.id.clone())
             .map(|_| ())
@@ -873,7 +899,7 @@ mod tests {
         let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
 
         let outcome = session.restore_downloaded(&wallet).unwrap();
-        assert_eq!(outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+        assert!(matches!(outcome, WalletRestoreOutcome::Restored { labels_warning: None, .. }));
 
         let loaded = crate::wallet::Wallet::try_load_persisted(metadata.id.clone())
             .map(|_| ())
