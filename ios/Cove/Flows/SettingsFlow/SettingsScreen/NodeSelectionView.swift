@@ -153,8 +153,8 @@ struct NodeSelectionView: View {
         lanSearch = .searching
 
         // the search always runs to the end and records its result: the Rust search can't be
-        // cancelled from Swift, and the view also disappears under the privacy cover, after which
-        // a dropped result would leave the section searching forever
+        // cancelled from Swift, so cancelling would only drop its answer and leave the section
+        // searching
         Task {
             let search: LanSearch
             do {
@@ -225,8 +225,7 @@ struct NodeSelectionView: View {
         }
     }
 
-    /// Saves what was typed into the custom form when the screen goes away, which includes the
-    /// privacy cover when the app is backgrounded
+    /// Saves what was typed into the custom form when the screen goes away
     private func saveCustomFormOnLeaving() {
         // one selection is checked at a time: older form values must not replace a preset or a
         // found server whose check is still running
