@@ -334,3 +334,74 @@ async fn broadcasts_must_spend_known_outputs_with_valid_signatures() {
     let electrum_error = electrum.transaction_broadcast(&orphan).unwrap_err().to_string();
     assert!(electrum_error.contains("bad-txns-inputs-missingorspent"), "{electrum_error}");
 }
+
+#[tokio::test]
+async fn control_api_holds_and_fails_broadcasts_but_not_lookups() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let control = node.serve_control("127.0.0.1:0".parse().unwrap()).unwrap();
+    let key = SecretKey::from_slice(&[7; 32]).unwrap();
+    let funding = node.chain().pay(&p2wpkh_script(&key), Amount::from_sat(5_000));
+    let tx = p2wpkh_spend(&node.chain().tx(funding).unwrap().tx, &key, Amount::from_sat(4_000));
+    let txid = tx.compute_txid();
+
+    // reqwest needs a process-wide TLS provider even for plain HTTP
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let http = reqwest::Client::new();
+    let post = |path: &str, body: Value| {
+        let request = http.post(format!("{}/{path}", control.url())).json(&body).send();
+        async move { request.await.unwrap().json::<Value>().await.unwrap() }
+    };
+    let requests = || {
+        let request = http.get(format!("{}/broadcasts/requests", control.url())).send();
+        async move { request.await.unwrap().json::<Value>().await.unwrap() }
+    };
+    let esplora = esplora_client::Builder::new(&node.esplora_url()).build_async().unwrap();
+
+    // a held broadcast stays unanswered and unlogged while lookups under /tx keep answering
+    post("broadcasts/hold", serde_json::json!({})).await;
+    let held = tokio::spawn({
+        let esplora = esplora.clone();
+        let tx = tx.clone();
+        async move { esplora.broadcast(&tx).await }
+    });
+
+    // the broadcast reaches the gate on its own task, so wait until the node reports it held
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    while requests().await["held"] != 1 {
+        assert!(tokio::time::Instant::now() < deadline, "the broadcast never reached the gate");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    assert!(!held.is_finished(), "the broadcast was answered while held");
+    assert!(esplora.get_tx(&funding).await.unwrap().is_some(), "a lookup was held");
+    assert!(node.chain().broadcasts().is_empty());
+
+    // holding again keeps the request already held, so the one release below frees it
+    post("broadcasts/hold", serde_json::json!({})).await;
+    assert_eq!(requests().await, serde_json::json!({ "count": 1, "held": 1 }));
+
+    let released = post("broadcasts/release", serde_json::json!({})).await;
+    assert_eq!(released["held"], 1);
+    held.await.unwrap().unwrap();
+    assert_eq!(
+        node.chain().broadcasts().iter().map(Transaction::compute_txid).collect::<Vec<_>>(),
+        [txid]
+    );
+
+    // the chain logs a transaction once, so only the request count shows it sent again
+    esplora.broadcast(&tx).await.unwrap();
+    assert_eq!(node.chain().broadcasts().len(), 1);
+    assert_eq!(requests().await, serde_json::json!({ "count": 2, "held": 0 }));
+
+    // a failing node refuses the broadcast with the scripted message, on both protocols, and
+    // through a base URL ending in a slash, which Cove saves its nodes with
+    post("broadcasts/fail", serde_json::json!({ "message": "rejected by the test" })).await;
+    let slashed = esplora_client::Builder::new(&format!("{}/", node.esplora_url())).build_async();
+    let error = slashed.unwrap().broadcast(&tx).await.unwrap_err().to_string();
+    assert!(error.contains("rejected by the test"), "{error}");
+
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+    let error = electrum.transaction_broadcast(&tx).unwrap_err().to_string();
+    assert!(error.contains("rejected by the test"), "{error}");
+    assert_eq!(requests().await["count"], 4);
+}

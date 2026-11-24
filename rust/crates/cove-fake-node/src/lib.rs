@@ -51,7 +51,7 @@ const WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 /// State every server reads from
 pub(crate) struct Shared {
     chain: FakeChain,
-    control: Control,
+    pub(crate) control: Control,
 }
 
 impl Shared {
