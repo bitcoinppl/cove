@@ -47,7 +47,7 @@ coverage = [
 # payjoin session
 # the UI tests paste a real receiver's v2 pj URI into the send screen, against the UI test host's
 # directory, relay and receiver, and check the confirm screen waits for the receiver, reports
-# sent without "without Payjoin" once it joins, and that the node got only its proposal; while
+# sent with Payjoin and its fee once it joins, and that the node got only its proposal; while
 # the proposal's broadcast is held the waiting card is gone and nothing reports sent
 
 [[row]]
@@ -73,7 +73,8 @@ coverage = [
 ]
 # after the swipe the confirm screen shows "Waiting for the receiver" with a ten-minute countdown
 # and Send without Payjoin instead of reporting sent; the tap sends the payment as built, the
-# alert says it went out without Payjoin, and the node got exactly that one transaction; while
+# alert says it went out without Payjoin with the confirm screen's fee, and the node got exactly
+# that one transaction; while
 # that broadcast is held the waiting card is gone and nothing reports sent
 # the waiting card, Send without Payjoin and Payjoin status (#1141, #1143) landed while the send
 # flow kept Payjoin off, so no full-launch test could reach them until #1146 enabled it; their
@@ -126,6 +127,96 @@ coverage = [
 # screen after a relaunch, counting down to the same deadline rather than a new ten minutes, with
 # nothing broadcast; Send without Payjoin there shows "Sending without Payjoin…" while the
 # broadcast is held, sends it as built once, and the banner goes
+
+[[row]]
+id = "s17-payjoin-fee-help-shows-up-to-and-fee-paid"
+section = "17"
+title = "Payjoin confirm shows the most fee help can cost, and the fee paid after"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/wallet_manager/payjoin/**",
+    "rust/src/manager/send_flow_manager/finalize.rs",
+    "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
+    "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift",
+    "ios/Cove/Flows/SendFlow/Common/SendFlowDetailsView.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/SentDetailsExpandedView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmRoute.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsWidget.kt",
+]
+coverage = [
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::one_input_at_the_payment_fee_rate_by_script_type",
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::a_fractional_fee_rate_rounds_up",
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::a_small_change_stays_spendable",
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::a_payment_without_change_offers_nothing",
+    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests.rs::hot_wallet_pays_a_bip77_receiver_with_a_payjoin",
+    "rust:rust/src/database/wallet_data.rs::payjoin_fees_are_kept_per_transaction",
+    "ios-ui:ios/CoveUITests/PayjoinSendFullLaunchUITests.swift::testReceiverJoinsAPaymentToItsPjUri",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/PayjoinSendFullLaunchTest.kt::receiverJoinsAPaymentToItsPjUri",
+]
+# the payment offers the receiver up to one input's fee from its change; the confirm screen shows
+# "+ up to N with Payjoin" under the fee and the total as "up to" payment + fee + N, with no second
+# approval when the proposal arrives; once the receiver joins, the alert names the fee paid X and
+# the part Y it took, which the UI tests check against the broadcast proposal's change, and the
+# sent transaction's details show X
+
+[[row]]
+id = "s17-payjoin-switch-off-sends-normal-payment"
+section = "17"
+title = "Turning Payjoin off on the confirm screen sends a normal payment"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift",
+    "ios/Cove/Flows/SendFlow/Common/SendFlowDetailsView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmRoute.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/PayjoinSendFullLaunchUITests.swift::testPayjoinSwitchOffSendsANormalPayment",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/PayjoinSendFullLaunchTest.kt::payjoinSwitchOffSendsANormalPayment",
+]
+# the per-payment switch starts on; off removes the "+ up to" line and the "up to" total, and the
+# swipe sends the payment as built with no waiting card, the plain sent message and one broadcast
+# spending only the wallet's coin
+
+[[row]]
+id = "s17-payjoin-dont-help-offers-the-receiver-nothing"
+section = "17"
+title = "Payjoin fee help set to Don't help offers the receiver nothing"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/app.rs",
+    "rust/src/app/full_wipe.rs",
+    "rust/src/database/global_config.rs",
+    "rust/src/manager/send_flow_manager/address_input.rs",
+    "rust/src/manager/wallet_manager/payjoin/**",
+    "ios/Cove/AppManager.swift",
+    "ios/Cove/Flows/SettingsFlow/PayjoinSettingsScreen.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsSections.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/AppManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/PayjoinSettingsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/MainSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::fee_help_off_offers_nothing",
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::the_setting_round_trips_through_its_stored_form",
+    "rust:rust/src/manager/wallet_manager/payjoin/fee_contribution.rs::the_default_offers_one_input",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::the_fee_help_setting_decides_the_confirmed_offer",
+    "rust:rust/src/app.rs::dangerous_wipe_all_data_preserves_setup_and_resets_presentation_after_success",
+    "rust:rust/src/manager/wallet_manager/payjoin_e2e_tests.rs::without_fee_help_the_wallet_pays_only_the_original_fee",
+    "ios-ui:ios/CoveUITests/PayjoinSendFullLaunchUITests.swift::testDontHelpOffersTheReceiverNothing",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/PayjoinSendFullLaunchTest.kt::dontHelpOffersTheReceiverNothing",
+]
+# Settings > Payjoin > Fee help defaults to "Up to one input (recommended)"; choosing Don't help
+# shows as selected, the confirm screen keeps the switch with no "+ up to" line and an exact total,
+# and a receiver that joins pays for its own coin, so the alert names the original fee; a full
+# wipe resets the choice
 
 [[row]]
 id = "s17-sender-rejects-psbt-text-without-secret-import"

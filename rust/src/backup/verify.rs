@@ -184,6 +184,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: vec![],
                 custom_block_explorers: Default::default(),
+                payjoin_fee_help: None,
             },
         }
     }

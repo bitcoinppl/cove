@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.JoinInner
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Public
@@ -54,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -241,6 +243,13 @@ fun MainSettingsScreen(
                                         .Settings(org.bitcoinppl.cove_core.SettingsRoute.FiatCurrency),
                                 )
                             },
+                        )
+                        MaterialDivider()
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_payjoin),
+                            icon = Icons.Default.JoinInner,
+                            onClick = { app.pushRoute(Route.Settings(SettingsRoute.Payjoin)) },
+                            modifier = Modifier.testTag("settings.payjoin"),
                         )
                     }
                 }

@@ -271,7 +271,7 @@ impl Payment {
             AddressWithNetwork::try_new(&receiver.pj_uri().to_string()).expect("pj URI parses");
         let endpoint =
             uri.payjoin.as_ref().expect("the URI carries a pj endpoint").endpoint.clone();
-        let intent = PayjoinIntent::new(endpoint);
+        let intent = PayjoinIntent::new(endpoint, None);
 
         // a Max payment, so the relay tests do not depend on the change detection the
         // end-to-end tests cover

@@ -12,7 +12,7 @@ use crate::{
         effective_transaction_url,
     },
     fiat::FiatCurrency,
-    manager::auth_manager::DuplicateTrickPin,
+    manager::{auth_manager::DuplicateTrickPin, wallet_manager::payjoin::PayjoinFeeHelp},
     network::Network,
     node::Node,
     wallet::metadata::{WalletId, WalletMode},
@@ -49,6 +49,7 @@ pub enum GlobalConfigKey {
     OnboardingProgress,
     CustomBlockExplorer(Network),
     TrickPinNotice,
+    PayjoinFeeHelp,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -81,6 +82,7 @@ impl From<GlobalConfigKey> for &'static str {
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
             GlobalConfigKey::TrickPinNotice => "trick_pin_notice",
+            GlobalConfigKey::PayjoinFeeHelp => "payjoin_fee_help",
         }
     }
 }
@@ -103,6 +105,7 @@ impl std::fmt::Display for GlobalConfigKey {
             }
             Self::OnboardingProgress => write!(f, "onboarding progress"),
             Self::CustomBlockExplorer(network) => write!(f, "{network} block explorer"),
+            Self::PayjoinFeeHelp => write!(f, "Payjoin fee help"),
         }
     }
 }
@@ -162,6 +165,13 @@ impl GlobalConfigTable {
         GlobalConfigKey::SelectedFiatCurrency,
         FiatCurrency,
         Update::FiatCurrencyChanged
+    );
+
+    string_config_accessor!(
+        pub payjoin_fee_help,
+        GlobalConfigKey::PayjoinFeeHelp,
+        PayjoinFeeHelp,
+        Update::PayjoinFeeHelpChanged
     );
 
     string_config_accessor!(pub wipe_data_pin, GlobalConfigKey::WipeDataPin, String);
@@ -563,6 +573,13 @@ impl GlobalConfigTable {
     #[uniffi::method(name = "colorScheme")]
     pub fn _color_scheme(&self) -> ColorSchemeSelection {
         read_health::observe("color scheme", self.color_scheme()).unwrap_or_default()
+    }
+
+    /// What Payjoin payments offer toward the receiver's coin, falling back to the default
+    /// when none is saved
+    #[uniffi::method(name = "payjoinFeeHelp")]
+    pub fn selected_payjoin_fee_help(&self) -> PayjoinFeeHelp {
+        read_health::observe("Payjoin fee help", self.payjoin_fee_help()).unwrap_or_default()
     }
 
     pub fn hashed_pin_code(&self) -> Result<String> {

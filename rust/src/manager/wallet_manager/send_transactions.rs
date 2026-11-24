@@ -4,6 +4,8 @@ use act_zero::call;
 use tracing::debug;
 
 use crate::{
+    database::Database,
+    manager::wallet_manager::payjoin::PayjoinFeeContribution,
     transaction::{Amount, FeeRate},
     wallet::Address,
 };
@@ -56,5 +58,18 @@ impl RustWalletManager {
             .await
             .map_err(|_| Error::ActorNotFound)??;
         Ok(details)
+    }
+
+    /// What a Payjoin payment of `details` offers the receiver toward its coin's fee, under the
+    /// fee help setting, `None` when it offers nothing
+    pub async fn payjoin_fee_contribution(
+        &self,
+        details: Arc<ConfirmDetails>,
+    ) -> Result<Option<PayjoinFeeContribution>, Error> {
+        let help = Database::global().global_config.selected_payjoin_fee_help();
+
+        call!(self.actor.payjoin_fee_contribution(details, help))
+            .await
+            .map_err(|_| Error::ActorNotFound)
     }
 }

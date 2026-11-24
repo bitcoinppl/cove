@@ -103,7 +103,7 @@ class PayjoinWaitingTest {
         manager.reconcileOnUi(PayjoinStatus.Broadcasting(SESSION_ID, previewTxId(), PayjoinTransactionKind.FALLBACK))
         compose.onNodeWithTag(PAYJOIN_WAITING_CARD_TAG).assertDoesNotExist()
 
-        manager.reconcileOnUi(PayjoinStatus.Completed(SESSION_ID, previewTxId(), PayjoinTransactionKind.FALLBACK))
+        manager.reconcileOnUi(PayjoinStatus.Completed(SESSION_ID, previewTxId(), PayjoinTransactionKind.FALLBACK, feePaid = null))
         compose.onNodeWithText("Transaction sent successfully, without Payjoin.").assertIsDisplayed()
     }
 
@@ -219,7 +219,7 @@ class PayjoinWaitingTest {
         manager.reconcileOnUi(PayjoinStatus.Broadcasting(SESSION_ID, previewTxId(), PayjoinTransactionKind.FALLBACK))
         compose.onNodeWithText("Sending without Payjoin…").assertIsDisplayed()
 
-        manager.reconcileOnUi(PayjoinStatus.Completed(SESSION_ID, previewTxId(), PayjoinTransactionKind.PROPOSAL))
+        manager.reconcileOnUi(PayjoinStatus.Completed(SESSION_ID, previewTxId(), PayjoinTransactionKind.PROPOSAL, feePaid = null))
         compose.onNodeWithTag(PAYJOIN_PENDING_BANNER_TAG).assertDoesNotExist()
     }
 
@@ -236,7 +236,9 @@ class PayjoinWaitingTest {
                 details = confirmDetailsPreviewNew(),
                 input =
                     SendConfirmationInput.Unsigned(
-                        UnsignedPaymentMode.Payjoin(PayjoinIntent(sessionId, "https://payjo.in/receiver")),
+                        UnsignedPaymentMode.Payjoin(
+                            PayjoinIntent(sessionId, "https://payjo.in/receiver", feeContribution = null),
+                        ),
                     ),
                 dispatchWalletAction = dispatchWalletAction,
             )

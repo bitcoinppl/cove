@@ -150,6 +150,10 @@ pub struct AppSettings {
     /// Per-network normalized custom transaction explorer templates
     #[serde(default)]
     pub custom_block_explorers: BTreeMap<String, String>,
+    /// How much of a Payjoin receiver's extra fee to offer, in its stored form, absent from
+    /// backups made before the setting existed
+    #[serde(default)]
+    pub payjoin_fee_help: Option<String>,
 }
 
 /// Result of a successful backup export
@@ -283,6 +287,7 @@ mod tests {
                     "Bitcoin".to_string(),
                     "https://example.com/tx/{txid}".to_string(),
                 )]),
+                payjoin_fee_help: Some("dont_help".to_string()),
             },
         }
     }
@@ -302,6 +307,7 @@ mod tests {
             decoded.settings.custom_block_explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+        assert_eq!(decoded.settings.payjoin_fee_help.as_deref(), Some("dont_help"));
     }
 
     #[test]
@@ -472,6 +478,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: vec![],
                 custom_block_explorers: BTreeMap::new(),
+                payjoin_fee_help: None,
             },
         };
 
@@ -546,5 +553,6 @@ mod tests {
         let settings: AppSettings = serde_json::from_value(json).unwrap();
 
         assert!(settings.custom_block_explorers.is_empty());
+        assert_eq!(settings.payjoin_fee_help, None);
     }
 }

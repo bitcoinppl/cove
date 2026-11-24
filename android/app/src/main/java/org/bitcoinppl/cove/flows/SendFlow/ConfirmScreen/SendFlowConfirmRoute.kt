@@ -18,7 +18,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
@@ -47,12 +50,17 @@ import org.bitcoinppl.cove_core.types.ConfirmDetails
 // lets the route settle before the hot wallet lock covers it, matching the iOS confirm footer
 private const val SEND_CONFIRMATION_LOCK_DELAY_MILLIS = 50L
 
+private const val SEND_SUCCESS_MESSAGE = "Transaction sent successfully!"
+
+internal const val SEND_CONFIRM_SUCCESS_MESSAGE_TAG = "sendConfirm.successMessage"
+
 /**
  * The send confirm route: sends the payment and shows its result
  *
  * A Payjoin payment shows its waiting state while the wallet reports this route's session as
  * negotiating, and finishes like any send once that session completes. [dispatchWalletAction]
- * receives the cancel that sends it without Payjoin
+ * receives the cancel that sends it without Payjoin. Its Payjoin switch, on by default, sends it
+ * as a standard payment when turned off
  */
 // any failure while finalizing or sending must reach the user as an error instead of crashing the
 // screen, and the bindings can also throw for a Rust panic, hence the generic catches
@@ -65,10 +73,14 @@ internal fun SendFlowConfirmRoute(
     input: SendConfirmationInput,
     dispatchWalletAction: (WalletManagerAction) -> Unit,
 ) {
-    val payjoinSessionId =
-        ((input as? SendConfirmationInput.Unsigned)?.mode as? UnsignedPaymentMode.Payjoin)
-            ?.intent
-            ?.sessionId
+    val payjoinIntent =
+        ((input as? SendConfirmationInput.Unsigned)?.mode as? UnsignedPaymentMode.Payjoin)?.intent
+
+    // a per-payment choice, saved so a rotation keeps it alongside payjoinStarted
+    var isPayjoinOn by rememberSaveable { mutableStateOf(true) }
+
+    // with the switch off this payment has no session, so no payjoin status ever reaches it
+    val payjoinSessionId = payjoinIntent?.sessionId?.takeIf { isPayjoinOn }
 
     // a payjoin payment ends after its swipe, and rust may report that end while a rotation rebuilds
     // this route; a failed session no longer names itself in the status, so only this saved fact
@@ -77,7 +89,7 @@ internal fun SendFlowConfirmRoute(
     var sendState by remember {
         mutableStateOf<SendState>(if (payjoinStarted) SendState.Sending else SendState.Idle)
     }
-    var sentWithoutPayjoin by remember { mutableStateOf(false) }
+    var completedPayjoin by remember { mutableStateOf<PayjoinStatus.Completed?>(null) }
     var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
     var showSuccessAlert by remember { mutableStateOf(false) }
     var showErrorAlert by remember { mutableStateOf(false) }
@@ -111,7 +123,7 @@ internal fun SendFlowConfirmRoute(
 
                 payjoinStarted = false
                 sendState = SendState.Sent
-                sentWithoutPayjoin = status.kind == PayjoinTransactionKind.FALLBACK
+                completedPayjoin = status
                 showSuccessAlert = true
             }
 
@@ -198,6 +210,9 @@ internal fun SendFlowConfirmRoute(
             dispatchWalletAction(WalletManagerAction.CancelPayjoin(sessionId))
         },
         onBack = { app.popRoute() },
+        payjoinIntent = payjoinIntent,
+        isPayjoinOn = isPayjoinOn,
+        onPayjoinChange = { isPayjoinOn = it },
         onSwipeToSend = {
             // an error no screen handled, such as a resumed session's, belongs to an earlier payment
             walletManager.sendFlowErrorAlert = null
@@ -216,9 +231,11 @@ internal fun SendFlowConfirmRoute(
                             walletManager.broadcastTransaction(txnToBroadcast)
                         }
                         is SendConfirmationInput.Unsigned -> {
-                            walletManager.initiatePayment(details.psbt(), input.mode)
+                            val mode = if (payjoinSessionId == null) UnsignedPaymentMode.Standard else input.mode
+                            walletManager.initiatePayment(details.psbt(), mode)
+
                             // for payjoin, stay in Sending until its session completes
-                            if (input.mode is UnsignedPaymentMode.Payjoin) return@launch
+                            if (mode is UnsignedPaymentMode.Payjoin) return@launch
                         }
                     }
                     sendState = SendState.Sent
@@ -239,12 +256,7 @@ internal fun SendFlowConfirmRoute(
     // send results wait for any app lock to clear, so a send that finishes while the
     // app is away never shows its result above the lock screen
     if (showSuccessAlert && !Auth.isLocked) {
-        val successMessage =
-            if (sentWithoutPayjoin) {
-                stringResource(R.string.payjoin_sent_without)
-            } else {
-                "Transaction sent successfully!"
-            }
+        val successMessage = sendSuccessMessage(walletManager, completedPayjoin)
 
         AlertDialog(
             onDismissRequest = {
@@ -252,7 +264,16 @@ internal fun SendFlowConfirmRoute(
                 app.loadAndReset(Route.SelectedWallet(walletManager.id))
             },
             title = { Text("Success") },
-            text = { Text(successMessage) },
+            text = {
+                // the alert has its own window, outside the app shell that exposes tags to ui tests
+                Text(
+                    successMessage,
+                    modifier =
+                        Modifier
+                            .semantics { testTagsAsResourceId = true }
+                            .testTag(SEND_CONFIRM_SUCCESS_MESSAGE_TAG),
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -292,5 +313,49 @@ internal fun SendFlowConfirmRoute(
                 }
             },
         )
+    }
+}
+
+/**
+ * The success alert's message, naming the fees a completed Payjoin payment paid when the wallet
+ * knows them
+ *
+ * [completed] is null for a payment sent without a Payjoin session
+ */
+@Composable
+private fun sendSuccessMessage(
+    walletManager: WalletManager,
+    completed: PayjoinStatus.Completed?,
+): String {
+    val feePaid = completed?.feePaid
+
+    return when {
+        completed == null -> {
+            SEND_SUCCESS_MESSAGE
+        }
+
+        // the wallet could not work out the fee, so say only which transaction went out
+        feePaid == null -> {
+            when (completed.kind) {
+                PayjoinTransactionKind.FALLBACK -> stringResource(R.string.payjoin_sent_without)
+                PayjoinTransactionKind.PROPOSAL -> SEND_SUCCESS_MESSAGE
+            }
+        }
+
+        completed.kind == PayjoinTransactionKind.FALLBACK -> {
+            stringResource(R.string.payjoin_sent_without_fee, walletManager.amountFmtUnit(feePaid.total))
+        }
+
+        feePaid.feeHelp.asSats() == 0UL -> {
+            stringResource(R.string.payjoin_sent_with_fee, walletManager.amountFmtUnit(feePaid.total))
+        }
+
+        else -> {
+            stringResource(
+                R.string.payjoin_sent_with_fee_help,
+                walletManager.amountFmtUnit(feePaid.total),
+                walletManager.amountFmtUnit(feePaid.feeHelp),
+            )
+        }
     }
 }

@@ -1363,6 +1363,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode(
     ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_payjoinfeehelp(
+    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
@@ -1804,6 +1806,12 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_rustwalletmanager_transaction_lock_state(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_unlock_transaction_outputs(
+    ): Short
+    external fun uniffi_cove_checksum_method_payjoinfeecontribution_max(
+    ): Short
+    external fun uniffi_cove_checksum_method_payjoinfeecontribution_max_fee_total(
+    ): Short
+    external fun uniffi_cove_checksum_method_payjoinfeecontribution_max_spending_amount(
     ): Short
     external fun uniffi_cove_checksum_method_mnemonic_all_words(
     ): Short
@@ -2441,6 +2449,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_globalconfigtable_payjoinfeehelp(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_preview_custom_block_explorer(`ptr`: Long,`network`: RustBufferNetwork.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3042,6 +3052,16 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustwalletmanager_transaction_lock_state(`ptr`: Long,`txId`: Long,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_unlock_transaction_outputs(`ptr`: Long,`txId`: Long,
+    ): Long
+    external fun uniffi_cove_fn_clone_payjoinfeecontribution(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_payjoinfeecontribution(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_payjoinfeecontribution_max(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_payjoinfeecontribution_max_fee_total(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_payjoinfeecontribution_max_spending_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_clone_mnemonic(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4398,6 +4418,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_payjoinfeehelp() != 56369.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5059,6 +5082,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_unlock_transaction_outputs() != 45492.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_payjoinfeecontribution_max() != 8731.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_payjoinfeecontribution_max_fee_total() != 56648.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_payjoinfeecontribution_max_spending_amount() != 40365.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_mnemonic_all_words() != 24108.toShort()) {
@@ -14020,6 +14052,12 @@ public interface GlobalConfigTableInterface {
 
     fun `isInMainMode`(): kotlin.Boolean
 
+    /**
+     * What Payjoin payments offer toward the receiver's coin, falling back to the default
+     * when none is saved
+     */
+    fun `payjoinFeeHelp`(): PayjoinFeeHelp
+
     fun `previewCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
     fun `selectWallet`(`id`: WalletId)
@@ -14321,6 +14359,23 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * What Payjoin payments offer toward the receiver's coin, falling back to the default
+     * when none is saved
+     */override fun `payjoinFeeHelp`(): PayjoinFeeHelp {
+            return FfiConverterTypePayjoinFeeHelp.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_payjoinfeehelp(
         it,
         _status)
 }
@@ -18385,6 +18440,327 @@ public object FfiConverterTypeNodeSelector: FfiConverter<NodeSelector, Long> {
     override fun allocationSize(value: NodeSelector) = 8UL
 
     override fun write(value: NodeSelector, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * The most a Payjoin receiver may take from this wallet's change to pay for the coin it adds
+ *
+ * Exists only for a payment that offers something: fee help is on, the payment has a change
+ * output, and that change can give more than nothing while staying spendable. It is fixed
+ * before the user confirms, so the confirm screen's figures are exactly what the payment
+ * offers, and rust-payjoin rejects a proposal that takes more
+ */
+public interface PayjoinFeeContributionInterface {
+
+    /**
+     * The most the receiver may take from the change, never zero
+     */
+    fun `max`(): Amount
+
+    /**
+     * The payment's network fee if the receiver takes all of `max`
+     */
+    fun `maxFeeTotal`(): Amount
+
+    /**
+     * What the payment takes from the wallet, amount and fees, if the receiver takes all of
+     * `max`
+     */
+    fun `maxSpendingAmount`(): Amount
+
+    companion object
+}
+
+/**
+ * The most a Payjoin receiver may take from this wallet's change to pay for the coin it adds
+ *
+ * Exists only for a payment that offers something: fee help is on, the payment has a change
+ * output, and that change can give more than nothing while staying spendable. It is fixed
+ * before the user confirms, so the confirm screen's figures are exactly what the payment
+ * offers, and rust-payjoin rejects a proposal that takes more
+ */
+open class PayjoinFeeContribution: Disposable, AutoCloseable, PayjoinFeeContributionInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_payjoinfeecontribution(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_payjoinfeecontribution(handle, status)
+        }
+    }
+
+
+    /**
+     * The most the receiver may take from the change, never zero
+     */override fun `max`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_payjoinfeecontribution_max(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The payment's network fee if the receiver takes all of `max`
+     */override fun `maxFeeTotal`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_payjoinfeecontribution_max_fee_total(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * What the payment takes from the wallet, amount and fees, if the receiver takes all of
+     * `max`
+     */override fun `maxSpendingAmount`(): Amount {
+            return FfiConverterTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_payjoinfeecontribution_max_spending_amount(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePayjoinFeeContribution: FfiConverter<PayjoinFeeContribution, Long> {
+    override fun lower(value: PayjoinFeeContribution): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): PayjoinFeeContribution {
+        return PayjoinFeeContribution(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): PayjoinFeeContribution {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: PayjoinFeeContribution) = 8UL
+
+    override fun write(value: PayjoinFeeContribution, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -35895,6 +36271,8 @@ data class FullWipeCompletion (
     ,
     var `fiatCurrency`: FiatCurrency
     ,
+    var `payjoinFeeHelp`: PayjoinFeeHelp
+    ,
     /**
      * Always empty, included so frontends replace their wallet list instead of re-reading it
      */
@@ -35918,6 +36296,7 @@ data class FullWipeCompletion (
         this.`colorScheme`,
         this.`selectedNode`,
         this.`fiatCurrency`,
+        this.`payjoinFeeHelp`,
         this.`wallets`,
         this.`auth`
     )
@@ -35938,6 +36317,7 @@ public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWip
             FfiConverterTypeColorSchemeSelection.read(buf),
             FfiConverterTypeNode.read(buf),
             FfiConverterTypeFiatCurrency.read(buf),
+            FfiConverterTypePayjoinFeeHelp.read(buf),
             FfiConverterSequenceTypeWalletMetadata.read(buf),
             FfiConverterTypeAuthSettings.read(buf),
         )
@@ -35950,6 +36330,7 @@ public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWip
             FfiConverterTypeColorSchemeSelection.allocationSize(value.`colorScheme`) +
             FfiConverterTypeNode.allocationSize(value.`selectedNode`) +
             FfiConverterTypeFiatCurrency.allocationSize(value.`fiatCurrency`) +
+            FfiConverterTypePayjoinFeeHelp.allocationSize(value.`payjoinFeeHelp`) +
             FfiConverterSequenceTypeWalletMetadata.allocationSize(value.`wallets`) +
             FfiConverterTypeAuthSettings.allocationSize(value.`auth`)
     )
@@ -35961,6 +36342,7 @@ public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWip
             FfiConverterTypeColorSchemeSelection.write(value.`colorScheme`, buf)
             FfiConverterTypeNode.write(value.`selectedNode`, buf)
             FfiConverterTypeFiatCurrency.write(value.`fiatCurrency`, buf)
+            FfiConverterTypePayjoinFeeHelp.write(value.`payjoinFeeHelp`, buf)
             FfiConverterSequenceTypeWalletMetadata.write(value.`wallets`, buf)
             FfiConverterTypeAuthSettings.write(value.`auth`, buf)
     }
@@ -36723,7 +37105,64 @@ public object FfiConverterTypeOnboardingState: FfiConverterRustBuffer<Onboarding
 
 
 /**
- * The receiver endpoint and identity that start one Payjoin payment
+ * What a Payjoin payment cost this wallet in fees, once its transaction was broadcast
+ */
+data class PayjoinFeePaid (
+    /**
+     * Everything the wallet spent beyond the amount the receiver asked for
+     */
+    var `total`: Amount
+    ,
+    /**
+     * The part of `total` the receiver took from the change for the coin it added, zero for a
+     * payment sent without Payjoin
+     */
+    var `feeHelp`: Amount
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`total`,
+        this.`feeHelp`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePayjoinFeePaid: FfiConverterRustBuffer<PayjoinFeePaid> {
+    override fun read(buf: ByteBuffer): PayjoinFeePaid {
+        return PayjoinFeePaid(
+            FfiConverterTypeAmount.read(buf),
+            FfiConverterTypeAmount.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PayjoinFeePaid) = (
+            FfiConverterTypeAmount.allocationSize(value.`total`) +
+            FfiConverterTypeAmount.allocationSize(value.`feeHelp`)
+    )
+
+    override fun write(value: PayjoinFeePaid, buf: ByteBuffer) {
+            FfiConverterTypeAmount.write(value.`total`, buf)
+            FfiConverterTypeAmount.write(value.`feeHelp`, buf)
+    }
+}
+
+
+
+/**
+ * The receiver endpoint, identity and fee offer that start one Payjoin payment
  */
 data class PayjoinIntent (
     /**
@@ -36735,12 +37174,28 @@ data class PayjoinIntent (
      * The receiver's BIP 77 endpoint, taken from its validated pj URI
      */
     var `endpoint`: kotlin.String
+    ,
+    /**
+     * What the payment offers toward the fee of the receiver's coin, `None` when it offers
+     * nothing, see [`PayjoinFeeContribution`]
+     */
+    var `feeContribution`: PayjoinFeeContribution?
 
-){
+): Disposable{
 
 
 
 
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`sessionId`,
+        this.`endpoint`,
+        this.`feeContribution`
+    )
+    }
 
     companion object
 }
@@ -36753,17 +37208,20 @@ public object FfiConverterTypePayjoinIntent: FfiConverterRustBuffer<PayjoinInten
         return PayjoinIntent(
             FfiConverterTypePayjoinSessionId.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalTypePayjoinFeeContribution.read(buf),
         )
     }
 
     override fun allocationSize(value: PayjoinIntent) = (
             FfiConverterTypePayjoinSessionId.allocationSize(value.`sessionId`) +
-            FfiConverterString.allocationSize(value.`endpoint`)
+            FfiConverterString.allocationSize(value.`endpoint`) +
+            FfiConverterOptionalTypePayjoinFeeContribution.allocationSize(value.`feeContribution`)
     )
 
     override fun write(value: PayjoinIntent, buf: ByteBuffer) {
             FfiConverterTypePayjoinSessionId.write(value.`sessionId`, buf)
             FfiConverterString.write(value.`endpoint`, buf)
+            FfiConverterOptionalTypePayjoinFeeContribution.write(value.`feeContribution`, buf)
     }
 }
 
@@ -38583,6 +39041,15 @@ sealed class AppAction: Disposable  {
         companion object
     }
 
+    data class ChangePayjoinFeeHelp(
+        val v1: org.bitcoinppl.cove_core.PayjoinFeeHelp) : AppAction()
+
+    {
+
+
+        companion object
+    }
+
     data class SetSelectedNode(
         val v1: org.bitcoinppl.cove_core.Node) : AppAction()
 
@@ -38652,6 +39119,13 @@ sealed class AppAction: Disposable  {
     )
 
             }
+            is AppAction.ChangePayjoinFeeHelp -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is AppAction.SetSelectedNode -> {
 
     Disposable.destroy(
@@ -38702,12 +39176,15 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             8 -> AppAction.ChangeFiatCurrency(
                 FfiConverterTypeFiatCurrency.read(buf),
                 )
-            9 -> AppAction.SetSelectedNode(
+            9 -> AppAction.ChangePayjoinFeeHelp(
+                FfiConverterTypePayjoinFeeHelp.read(buf),
+                )
+            10 -> AppAction.SetSelectedNode(
                 FfiConverterTypeNode.read(buf),
                 )
-            10 -> AppAction.UpdateFiatPrices
-            11 -> AppAction.UpdateFees
-            12 -> AppAction.RefreshAfterImport
+            11 -> AppAction.UpdateFiatPrices
+            12 -> AppAction.UpdateFees
+            13 -> AppAction.RefreshAfterImport
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -38765,6 +39242,13 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
             (
                 4UL
                 + FfiConverterTypeFiatCurrency.allocationSize(value.v1)
+            )
+        }
+        is AppAction.ChangePayjoinFeeHelp -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinFeeHelp.allocationSize(value.v1)
             )
         }
         is AppAction.SetSelectedNode -> {
@@ -38834,21 +39318,26 @@ public object FfiConverterTypeAppAction : FfiConverterRustBuffer<AppAction>{
                 FfiConverterTypeFiatCurrency.write(value.v1, buf)
                 Unit
             }
-            is AppAction.SetSelectedNode -> {
+            is AppAction.ChangePayjoinFeeHelp -> {
                 buf.putInt(9)
+                FfiConverterTypePayjoinFeeHelp.write(value.v1, buf)
+                Unit
+            }
+            is AppAction.SetSelectedNode -> {
+                buf.putInt(10)
                 FfiConverterTypeNode.write(value.v1, buf)
                 Unit
             }
             is AppAction.UpdateFiatPrices -> {
-                buf.putInt(10)
-                Unit
-            }
-            is AppAction.UpdateFees -> {
                 buf.putInt(11)
                 Unit
             }
-            is AppAction.RefreshAfterImport -> {
+            is AppAction.UpdateFees -> {
                 buf.putInt(12)
+                Unit
+            }
+            is AppAction.RefreshAfterImport -> {
+                buf.putInt(13)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -40217,6 +40706,15 @@ sealed class AppStateReconcileMessage: Disposable  {
         companion object
     }
 
+    data class PayjoinFeeHelpChanged(
+        val v1: org.bitcoinppl.cove_core.PayjoinFeeHelp) : AppStateReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
     data class WalletModeChanged(
         val v1: org.bitcoinppl.cove_core.WalletMode) : AppStateReconcileMessage()
 
@@ -40317,6 +40815,13 @@ sealed class AppStateReconcileMessage: Disposable  {
     )
 
             }
+            is AppStateReconcileMessage.PayjoinFeeHelpChanged -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is AppStateReconcileMessage.WalletModeChanged -> {
 
     Disposable.destroy(
@@ -40387,18 +40892,21 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
             9 -> AppStateReconcileMessage.FiatCurrencyChanged(
                 FfiConverterTypeFiatCurrency.read(buf),
                 )
-            10 -> AppStateReconcileMessage.WalletModeChanged(
+            10 -> AppStateReconcileMessage.PayjoinFeeHelpChanged(
+                FfiConverterTypePayjoinFeeHelp.read(buf),
+                )
+            11 -> AppStateReconcileMessage.WalletModeChanged(
                 FfiConverterTypeWalletMode.read(buf),
                 )
-            11 -> AppStateReconcileMessage.PushedRoute(
+            12 -> AppStateReconcileMessage.PushedRoute(
                 FfiConverterTypeRoute.read(buf),
                 )
-            12 -> AppStateReconcileMessage.WalletsChanged
-            13 -> AppStateReconcileMessage.ClearCachedWalletManager(
+            13 -> AppStateReconcileMessage.WalletsChanged
+            14 -> AppStateReconcileMessage.ClearCachedWalletManager(
                 FfiConverterTypeWalletId.read(buf),
                 )
-            14 -> AppStateReconcileMessage.ShowLoadingPopup
-            15 -> AppStateReconcileMessage.HideLoadingPopup
+            15 -> AppStateReconcileMessage.ShowLoadingPopup
+            16 -> AppStateReconcileMessage.HideLoadingPopup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -40465,6 +40973,13 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
             (
                 4UL
                 + FfiConverterTypeFiatCurrency.allocationSize(value.v1)
+            )
+        }
+        is AppStateReconcileMessage.PayjoinFeeHelpChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinFeeHelp.allocationSize(value.v1)
             )
         }
         is AppStateReconcileMessage.WalletModeChanged -> {
@@ -40555,31 +41070,36 @@ public object FfiConverterTypeAppStateReconcileMessage : FfiConverterRustBuffer<
                 FfiConverterTypeFiatCurrency.write(value.v1, buf)
                 Unit
             }
-            is AppStateReconcileMessage.WalletModeChanged -> {
+            is AppStateReconcileMessage.PayjoinFeeHelpChanged -> {
                 buf.putInt(10)
+                FfiConverterTypePayjoinFeeHelp.write(value.v1, buf)
+                Unit
+            }
+            is AppStateReconcileMessage.WalletModeChanged -> {
+                buf.putInt(11)
                 FfiConverterTypeWalletMode.write(value.v1, buf)
                 Unit
             }
             is AppStateReconcileMessage.PushedRoute -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 FfiConverterTypeRoute.write(value.v1, buf)
                 Unit
             }
             is AppStateReconcileMessage.WalletsChanged -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 Unit
             }
             is AppStateReconcileMessage.ClearCachedWalletManager -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterTypeWalletId.write(value.v1, buf)
                 Unit
             }
             is AppStateReconcileMessage.ShowLoadingPopup -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 Unit
             }
             is AppStateReconcileMessage.HideLoadingPopup -> {
-                buf.putInt(15)
+                buf.putInt(16)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -53886,6 +54406,9 @@ sealed class GlobalConfigKey {
     object TrickPinNotice : GlobalConfigKey()
 
 
+    object PayjoinFeeHelp : GlobalConfigKey()
+
+
 
 
 
@@ -53921,6 +54444,7 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 FfiConverterTypeNetwork.read(buf),
                 )
             15 -> GlobalConfigKey.TrickPinNotice
+            16 -> GlobalConfigKey.PayjoinFeeHelp
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -54018,6 +54542,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 4UL
             )
         }
+        is GlobalConfigKey.PayjoinFeeHelp -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -54082,6 +54612,10 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             }
             is GlobalConfigKey.TrickPinNotice -> {
                 buf.putInt(15)
+                Unit
+            }
+            is GlobalConfigKey.PayjoinFeeHelp -> {
+                buf.putInt(16)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -60060,6 +60594,53 @@ public object FfiConverterTypeOtherBackupsOperation : FfiConverterRustBuffer<Oth
 
 
 /**
+ * How much of a Payjoin's extra fee this wallet offers to pay for the coin the receiver adds
+ *
+ * Chosen once in Settings and applied to every Payjoin payment
+ */
+
+enum class PayjoinFeeHelp {
+
+    /**
+     * Up to the fee of one more input like this wallet's own, at the payment's fee rate, which
+     * is what most wallets offer
+     */
+    UP_TO_ONE_INPUT,
+    /**
+     * Nothing; the payment pays exactly the fee the confirm screen shows, and a receiver that
+     * will not pay for its own coin declines, so the payment is sent normally
+     */
+    DONT_HELP;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePayjoinFeeHelp: FfiConverterRustBuffer<PayjoinFeeHelp> {
+    override fun read(buf: ByteBuffer) = try {
+        PayjoinFeeHelp.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PayjoinFeeHelp) = 4UL
+
+    override fun write(value: PayjoinFeeHelp, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * The wallet's Payjoin send, as the send screens show it
  *
  * Sent as `PayjoinStatusChanged` whenever it changes, and read once through
@@ -60150,7 +60731,11 @@ sealed class PayjoinStatus: Disposable  {
     data class Completed(
         val `sessionId`: org.bitcoinppl.cove_core.PayjoinSessionId,
         val `txid`: org.bitcoinppl.cove_core.types.TxId,
-        val `kind`: org.bitcoinppl.cove_core.PayjoinTransactionKind) : PayjoinStatus()
+        val `kind`: org.bitcoinppl.cove_core.PayjoinTransactionKind,
+        /**
+         * What the payment cost in fees, `None` when the wallet could not work it out
+         */
+        val `feePaid`: org.bitcoinppl.cove_core.PayjoinFeePaid?) : PayjoinStatus()
 
     {
 
@@ -60207,7 +60792,8 @@ sealed class PayjoinStatus: Disposable  {
     Disposable.destroy(
         this.`sessionId`,
         this.`txid`,
-        this.`kind`
+        this.`kind`,
+        this.`feePaid`
     )
 
             }
@@ -60262,6 +60848,7 @@ public object FfiConverterTypePayjoinStatus : FfiConverterRustBuffer<PayjoinStat
                 FfiConverterTypePayjoinSessionId.read(buf),
                 FfiConverterTypeTxId.read(buf),
                 FfiConverterTypePayjoinTransactionKind.read(buf),
+                FfiConverterOptionalTypePayjoinFeePaid.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -60298,6 +60885,7 @@ public object FfiConverterTypePayjoinStatus : FfiConverterRustBuffer<PayjoinStat
                 + FfiConverterTypePayjoinSessionId.allocationSize(value.`sessionId`)
                 + FfiConverterTypeTxId.allocationSize(value.`txid`)
                 + FfiConverterTypePayjoinTransactionKind.allocationSize(value.`kind`)
+                + FfiConverterOptionalTypePayjoinFeePaid.allocationSize(value.`feePaid`)
             )
         }
     }
@@ -60326,6 +60914,7 @@ public object FfiConverterTypePayjoinStatus : FfiConverterRustBuffer<PayjoinStat
                 FfiConverterTypePayjoinSessionId.write(value.`sessionId`, buf)
                 FfiConverterTypeTxId.write(value.`txid`, buf)
                 FfiConverterTypePayjoinTransactionKind.write(value.`kind`, buf)
+                FfiConverterOptionalTypePayjoinFeePaid.write(value.`feePaid`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -64914,6 +65503,9 @@ sealed class SettingsRoute {
     object CloudBackup : SettingsRoute()
 
 
+    object Payjoin : SettingsRoute()
+
+
 
 
 
@@ -64943,6 +65535,7 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             8 -> SettingsRoute.AllWallets
             9 -> SettingsRoute.About
             10 -> SettingsRoute.CloudBackup
+            11 -> SettingsRoute.Payjoin
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -65010,6 +65603,12 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
                 4UL
             )
         }
+        is SettingsRoute.Payjoin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: SettingsRoute, buf: ByteBuffer) {
@@ -65054,6 +65653,10 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             }
             is SettingsRoute.CloudBackup -> {
                 buf.putInt(10)
+                Unit
+            }
+            is SettingsRoute.Payjoin -> {
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -67842,7 +68445,7 @@ public object FfiConverterTypeUnlockPin: FfiConverterRustBuffer<UnlockPin> {
 /**
  * How an unsigned hot wallet payment is sent once the user confirms it
  */
-sealed class UnsignedPaymentMode {
+sealed class UnsignedPaymentMode: Disposable  {
 
     /**
      * Sign and broadcast the payment as built
@@ -67863,6 +68466,21 @@ sealed class UnsignedPaymentMode {
     }
 
 
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is UnsignedPaymentMode.Standard -> {// Nothing to destroy
+            }
+            is UnsignedPaymentMode.Payjoin -> {
+
+    Disposable.destroy(
+        this.`intent`
+    )
+
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
 
 
 
@@ -69109,6 +69727,9 @@ sealed class WalletDataKey {
     object PayjoinSenderSession : WalletDataKey()
 
 
+    object PayjoinFees : WalletDataKey()
+
+
 
 
 
@@ -69130,6 +69751,7 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
                 )
             2 -> WalletDataKey.ReceiveAddressCache
             3 -> WalletDataKey.PayjoinSenderSession
+            4 -> WalletDataKey.PayjoinFees
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -69154,6 +69776,12 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
                 4UL
             )
         }
+        is WalletDataKey.PayjoinFees -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: WalletDataKey, buf: ByteBuffer) {
@@ -69169,6 +69797,10 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
             }
             is WalletDataKey.PayjoinSenderSession -> {
                 buf.putInt(3)
+                Unit
+            }
+            is WalletDataKey.PayjoinFees -> {
+                buf.putInt(4)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -73942,6 +74574,38 @@ public object FfiConverterOptionalTypeMigration: FfiConverterRustBuffer<Migratio
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypePayjoinFeeContribution: FfiConverterRustBuffer<PayjoinFeeContribution?> {
+    override fun read(buf: ByteBuffer): PayjoinFeeContribution? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypePayjoinFeeContribution.read(buf)
+    }
+
+    override fun allocationSize(value: PayjoinFeeContribution?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypePayjoinFeeContribution.allocationSize(value)
+        }
+    }
+
+    override fun write(value: PayjoinFeeContribution?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypePayjoinFeeContribution.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeTapSignerOperationContinuation: FfiConverterRustBuffer<TapSignerOperationContinuation?> {
     override fun read(buf: ByteBuffer): TapSignerOperationContinuation? {
         if (buf.get().toInt() == 0) {
@@ -74636,6 +75300,38 @@ public object FfiConverterOptionalTypeFiatAmount: FfiConverterRustBuffer<FiatAmo
         } else {
             buf.put(1)
             FfiConverterTypeFiatAmount.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypePayjoinFeePaid: FfiConverterRustBuffer<PayjoinFeePaid?> {
+    override fun read(buf: ByteBuffer): PayjoinFeePaid? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypePayjoinFeePaid.read(buf)
+    }
+
+    override fun allocationSize(value: PayjoinFeePaid?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypePayjoinFeePaid.allocationSize(value)
+        }
+    }
+
+    override fun write(value: PayjoinFeePaid?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypePayjoinFeePaid.write(value, buf)
         }
     }
 }

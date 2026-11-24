@@ -38,6 +38,13 @@ struct SettingsContainer: View {
         )
     }
 
+    private var payjoinFeeHelp: Binding<PayjoinFeeHelp> {
+        Binding(
+            get: { app.payjoinFeeHelp },
+            set: { app.dispatch(action: .changePayjoinFeeHelp($0)) }
+        )
+    }
+
     var body: some View {
         SettingsContainerChrome(
             pendingNetwork: $pendingNetwork,
@@ -47,7 +54,8 @@ struct SettingsContainer: View {
                 route: route,
                 selectedNetwork: selectedNetwork,
                 colorSchemeSelection: colorSchemeSelection,
-                selectedFiatCurrency: selectedFiatCurrency
+                selectedFiatCurrency: selectedFiatCurrency,
+                payjoinFeeHelp: payjoinFeeHelp
             )
         }
     }
@@ -105,7 +113,8 @@ private struct SettingsRouteContent: View {
         route: SettingsRoute,
         selectedNetwork: Binding<Network>,
         colorSchemeSelection: Binding<ColorSchemeSelection>,
-        selectedFiatCurrency: Binding<FiatCurrency>
+        selectedFiatCurrency: Binding<FiatCurrency>,
+        payjoinFeeHelp: Binding<PayjoinFeeHelp>
     ) {
         content = switch route {
         case .main:
@@ -134,6 +143,8 @@ private struct SettingsRouteContent: View {
             AnyView(AboutScreen())
         case .cloudBackup:
             AnyView(CloudBackupDetailScreen())
+        case .payjoin:
+            AnyView(PayjoinSettingsScreen(selection: payjoinFeeHelp))
         }
     }
 

@@ -242,6 +242,7 @@ private struct SentNetworkFeeDetails: View {
 
             VStack(alignment: .trailing) {
                 Text(transactionDetails.feeFmt(unit: unit) ?? "")
+                    .accessibilityIdentifier("transactionDetails.networkFee")
                 AsyncView(
                     cachedValue: transactionDetails.feeFiatFmtCached(),
                     operation: transactionDetails.feeFiatFmt

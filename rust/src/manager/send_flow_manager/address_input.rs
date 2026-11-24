@@ -219,6 +219,7 @@ impl RustSendFlowManager {
 mod tests {
     use std::{sync::Arc, time::Duration};
 
+    use bitcoin::{FeeRate as BdkFeeRate, Weight};
     use cove_tokio::FutureTimeoutExt as _;
     use cove_types::address::AddressWithNetwork;
 
@@ -226,7 +227,9 @@ mod tests {
         app::{App, AppAction},
         manager::{
             deferred_sender::SingleOrMany,
-            wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
+            wallet_manager::{
+                payjoin::PayjoinFeeHelp, test_support::funded_preview_wallet_manager_with_metadata,
+            },
         },
         network::Network,
         router::{
@@ -489,5 +492,65 @@ mod tests {
         };
         assert_eq!(intent.endpoint, endpoint);
         assert_eq!(confirm.details.sending_amount.as_sats(), AMOUNT_SATS);
+    }
+
+    /// The Payjoin fee help setting decides what the confirm screen's payment offers the
+    /// receiver: one P2WPKH input's fee at the payment's rate by default, with the "up to"
+    /// totals the screen shows, and nothing once the user turns it off
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_fee_help_setting_decides_the_confirmed_offer() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+
+        let settings = [(PayjoinFeeHelp::UpToOneInput, true), (PayjoinFeeHelp::DontHelp, false)];
+        for (fee_help, offers) in settings {
+            App::global().handle_action(AppAction::ChangePayjoinFeeHelp(fee_help));
+            App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+
+            let manager = funded_send_flow(Network::Bitcoin);
+            let uri = format!("bitcoin:{MAINNET_ADDRESS}?amount=0.0005&pj={PJ_V2_ENDPOINT}");
+            manager.clone().dispatch(Action::NotifyEnteringAddressChanged(uri));
+
+            wait_for("the fee total", || {
+                manager.selected_fee_rate().is_some_and(|fee| fee.total_fee.is_some())
+            })
+            .await;
+
+            manager.clone().dispatch(Action::FinalizeAndGoToNextScreen);
+            wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;
+
+            let confirm = pushed_confirm_route().expect("confirm route was pushed");
+            App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+
+            let SendConfirmationInput::Unsigned { mode: UnsignedPaymentMode::Payjoin { intent } } =
+                confirm.input
+            else {
+                panic!("{fee_help:?}: the v2 request confirms as a Payjoin");
+            };
+
+            let details = &confirm.details;
+            match (intent.fee_contribution, offers) {
+                (Some(offer), true) => {
+                    let one_input = BdkFeeRate::from(details.fee_rate)
+                        .checked_mul_by_weight(Weight::from_wu(272))
+                        .expect("a small fee");
+                    let max = offer.max().as_sats();
+
+                    assert_eq!(max, one_input.to_sat(), "one 68 vB input at the payment's rate");
+                    assert_eq!(offer.max_fee_total().as_sats(), details.fee_total.as_sats() + max);
+                    assert_eq!(
+                        offer.max_spending_amount().as_sats(),
+                        details.spending_amount.as_sats() + max
+                    );
+                }
+                (None, false) => {}
+                (offer, _) => panic!("{fee_help:?} confirmed with the offer {offer:?}"),
+            }
+        }
+
+        App::global().handle_action(AppAction::ChangePayjoinFeeHelp(PayjoinFeeHelp::default()));
     }
 }

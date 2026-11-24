@@ -173,6 +173,7 @@ impl BackupExporter {
         let selected_network = self.get_config(GlobalConfigKey::SelectedNetwork);
         let selected_fiat_currency = self.get_config(GlobalConfigKey::SelectedFiatCurrency);
         let color_scheme = self.get_config(GlobalConfigKey::ColorScheme);
+        let payjoin_fee_help = self.get_config(GlobalConfigKey::PayjoinFeeHelp);
 
         let mut selected_nodes = Vec::new();
         for network in Network::iter() {
@@ -189,6 +190,7 @@ impl BackupExporter {
             color_scheme,
             selected_nodes,
             custom_block_explorers,
+            payjoin_fee_help,
         }
     }
 
@@ -280,6 +282,7 @@ async fn export_labels(id: cove_types::WalletId) -> Result<String, BackupError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::wallet_manager::payjoin::PayjoinFeeHelp;
 
     #[test]
     fn manual_backup_allows_missing_descriptor_mirrors() {
@@ -319,6 +322,26 @@ mod tests {
             explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+    }
+
+    #[test]
+    fn backup_export_carries_the_payjoin_fee_help_choice() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+
+        // delete_database keeps the open handle, so another test's choice can outlive it
+        let config = &Database::global().global_config;
+        config.delete(GlobalConfigKey::PayjoinFeeHelp).unwrap();
+
+        let unset = BackupExporter::new().gather_settings();
+        assert_eq!(unset.payjoin_fee_help, None, "a setting never chosen isn't backed up");
+
+        config.set_payjoin_fee_help(PayjoinFeeHelp::DontHelp).unwrap();
+        let chosen = BackupExporter::new().gather_settings();
+
+        assert_eq!(chosen.payjoin_fee_help.as_deref(), Some("dont_help"));
     }
 
     // regression for #988: a wallet restored before the fix can hold its key in the backup's form,

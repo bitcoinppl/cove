@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -152,6 +153,7 @@ internal fun TransactionDetailsWidget(
                 label = stringResource(R.string.label_network_fee),
                 primary = transactionDetails.feeFmt(unit = metadata.selectedUnit),
                 secondary = feeFiatFmt,
+                primaryTag = "transactionDetails.networkFee",
                 showInfoIcon = true,
                 onInfoClick = { /* TODO: show fee info */ },
             )
@@ -215,6 +217,7 @@ internal fun DetailsWidget(
     primary: String?,
     secondary: String?,
     isTotal: Boolean = false,
+    primaryTag: String? = null,
     showInfoIcon: Boolean = false,
     onInfoClick: () -> Unit = {},
 ) {
@@ -258,6 +261,7 @@ internal fun DetailsWidget(
             Column(horizontalAlignment = Alignment.End) {
                 AutoSizeText(
                     primary,
+                    modifier = primaryTag?.let { Modifier.testTag(it) } ?: Modifier,
                     color = primaryColor,
                     maxFontSize = 15.sp,
                     minimumScaleFactor = 0.90f,

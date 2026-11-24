@@ -113,6 +113,12 @@ fun SettingsContainer(
                         modifier = modifier,
                     )
                 }
+                is SettingsRoute.Payjoin -> {
+                    PayjoinSettingsScreen(
+                        app = app,
+                        modifier = modifier,
+                    )
+                }
             }
         }
     }

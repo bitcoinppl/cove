@@ -8,7 +8,10 @@ use crate::{
     color_scheme::ColorSchemeSelection,
     database::Database,
     fiat::FiatCurrency,
-    manager::auth_manager::{AUTH_MANAGER, AuthSettings},
+    manager::{
+        auth_manager::{AUTH_MANAGER, AuthSettings},
+        wallet_manager::payjoin::PayjoinFeeHelp,
+    },
     network::Network,
     node::Node,
     router::{NewWalletRoute, Route, Router},
@@ -29,6 +32,7 @@ pub struct FullWipeCompletion {
     pub color_scheme: ColorSchemeSelection,
     pub selected_node: Node,
     pub fiat_currency: FiatCurrency,
+    pub payjoin_fee_help: PayjoinFeeHelp,
     /// Always empty, included so frontends replace their wallet list instead of re-reading it
     pub wallets: Vec<WalletMetadata>,
     pub auth: AuthSettings,
@@ -51,6 +55,7 @@ impl FullWipeCompletion {
             color_scheme: config._color_scheme(),
             selected_node: config.selected_node(),
             fiat_currency: config.selected_fiat_currency(),
+            payjoin_fee_help: config.selected_payjoin_fee_help(),
             wallets: Vec::new(),
             auth: AUTH_MANAGER.settings(),
         }
@@ -64,6 +69,7 @@ impl FullWipeCompletion {
         Updater::send_update(AppMessage::SelectedNetworkChanged(self.selected_network));
         Updater::send_update(AppMessage::ColorSchemeChanged(self.color_scheme));
         Updater::send_update(AppMessage::FiatCurrencyChanged(self.fiat_currency));
+        Updater::send_update(AppMessage::PayjoinFeeHelpChanged(self.payjoin_fee_help));
         Updater::send_update(AppMessage::SelectedNodeChanged(self.selected_node.clone()));
         Updater::send_update(AppMessage::WalletsChanged);
         AUTH_MANAGER.publish(&self.auth);

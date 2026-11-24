@@ -181,6 +181,8 @@ redb stores typed table metadata for each table and validates the key and value 
 
 **Cloud Backup:** Before changing Cloud Backup ownership, the screen contract, the write lane, Turn Off or row deletes, read [docs/cloud_backup.md](docs/cloud_backup.md).
 
+**Payjoin fees:** Before changing what a Payjoin payment offers toward the receiver's fee, the fee help setting, or how the fee paid is shown, read [docs/payjoin_fees.md](docs/payjoin_fees.md).
+
 **iCloud Drive, passkey, and KeyTeleport notes:** Before changing iCloud Drive discovery, file coordination, passkey registration, passkey presence checks, Cloud Backup passkey confirmation, or KeyTeleport secret handling, read [docs/icloud_drive.md](docs/icloud_drive.md), [docs/passkeys.md](docs/passkeys.md), and [docs/keyteleport.md](docs/keyteleport.md).
 
 ### Manager Pattern (cross-platform)

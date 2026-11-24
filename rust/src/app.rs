@@ -25,6 +25,7 @@ use crate::{
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
+    manager::wallet_manager::payjoin::PayjoinFeeHelp,
     network::Network,
     node::{Node, client::NodeClient},
     router::{
@@ -93,6 +94,7 @@ pub enum AppAction {
     ChangeNetwork { network: Network },
     ChangeColorScheme(ColorSchemeSelection),
     ChangeFiatCurrency(FiatCurrency),
+    ChangePayjoinFeeHelp(PayjoinFeeHelp),
     SetSelectedNode(Node),
     UpdateFiatPrices,
     UpdateFees,
@@ -302,6 +304,13 @@ impl App {
                 }
             }
 
+            AppAction::ChangePayjoinFeeHelp(fee_help) => {
+                if let Err(error) = Database::global().global_config.set_payjoin_fee_help(fee_help)
+                {
+                    error!("unable to set Payjoin fee help: {error}");
+                }
+            }
+
             AppAction::PushRoute(route) => {
                 self.state.write().router.routes.push(route);
                 let routes = self.state.read().router.routes.clone();
@@ -341,6 +350,10 @@ impl App {
                     Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
                     Err(e) => warn!("failed to read fiat currency after import: {e}"),
                 }
+
+                Updater::send_update(AppMessage::PayjoinFeeHelpChanged(
+                    config.selected_payjoin_fee_help(),
+                ));
 
                 Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
             }
@@ -1234,6 +1247,10 @@ mod tests {
             .global_config
             .set_color_scheme(ColorSchemeSelection::Dark)
             .expect("color scheme is saved");
+        database
+            .global_config
+            .set_payjoin_fee_help(PayjoinFeeHelp::DontHelp)
+            .expect("Payjoin fee help is saved");
         FfiApp::global().reset_default_route_to(wallet_selection_loading_route(
             first.id.clone(),
             Some(Route::Settings(SettingsRoute::Main)),
@@ -1329,6 +1346,11 @@ mod tests {
             completion.color_scheme,
             ColorSchemeSelection::System,
             "the returned completion carries the reset color scheme"
+        );
+        assert_eq!(
+            completion.payjoin_fee_help,
+            PayjoinFeeHelp::UpToOneInput,
+            "the returned completion carries the reset Payjoin fee help"
         );
 
         assert_eq!(

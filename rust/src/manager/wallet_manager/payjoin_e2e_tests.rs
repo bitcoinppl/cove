@@ -7,7 +7,7 @@ use std::{sync::Arc, time::Duration};
 use act_zero::call;
 use bitcoin::{Amount, FeeRate as BdkFeeRate, Psbt, ScriptBuf, Transaction, Txid};
 use cove_fake_node::Protocol;
-use cove_types::address::AddressWithNetwork;
+use cove_types::{address::AddressWithNetwork, confirm::ConfirmDetails};
 use payjoin::receive::v2::{Receiver, UncheckedOriginalPayload};
 use url::Url;
 
@@ -15,8 +15,8 @@ use super::{
     PayjoinStatus, RustWalletManager, WalletManagerAction, WalletManagerReconcileMessage as Msg,
     fake_node_tests::{Fixture, ScreenUpdates, fresh_mnemonic, receive_script},
     payjoin::{
-        OhttpRelays, PayjoinConfig, PayjoinIntent, PayjoinSessionId, PayjoinTransactionKind,
-        unix_now_secs,
+        OhttpRelays, PayjoinConfig, PayjoinFeeContribution, PayjoinFeeHelp, PayjoinFeePaid,
+        PayjoinIntent, PayjoinSessionId, PayjoinTransactionKind, unix_now_secs,
     },
 };
 use crate::{
@@ -54,6 +54,7 @@ async fn hot_wallet_pays_a_bip77_receiver_with_a_payjoin() {
     let completed = payment.until_completed().await;
     let broadcasts = only_broadcast(&fx);
     let payjoin = &broadcasts[0];
+    let proposal = payjoin.clone();
     let proposal_txid = payjoin.compute_txid();
 
     assert_eq!(
@@ -61,11 +62,11 @@ async fn hot_wallet_pays_a_bip77_receiver_with_a_payjoin() {
         vec![
             payment.negotiating(),
             payment.broadcasting(proposal_txid, PayjoinTransactionKind::Proposal),
-            payment.completed(proposal_txid, PayjoinTransactionKind::Proposal),
+            payment.completed(&proposal, PayjoinTransactionKind::Proposal),
         ],
         "the screens follow the session from negotiation to the proposal's broadcast"
     );
-    assert_eq!(completed, payment.completed(proposal_txid, PayjoinTransactionKind::Proposal));
+    assert_eq!(completed, payment.completed(&proposal, PayjoinTransactionKind::Proposal));
     assert_eq!(payment.status().await, completed, "a fresh screen reads the completed session");
     payment.assert_session_cleared().await;
 
@@ -87,6 +88,65 @@ async fn hot_wallet_pays_a_bip77_receiver_with_a_payjoin() {
             .all(|input| !input.witness.is_empty()),
         "every sender input is signed"
     );
+
+    // the receiver's coin costs more than the Original's fee rate covers, so it takes the
+    // whole offer: one P2WPKH input at 2 sat/vB
+    let offered = payment.fee_contribution.clone().expect("a payment with change offers a fee");
+    assert_eq!(offered.max().as_sats(), 136, "one 68 vB input at 2 sat/vB");
+    assert_eq!(
+        payment.change_in(&proposal),
+        payment.change_in(&payment.original()) - offered.max().0,
+        "the receiver took exactly the offer from the change, and nothing else"
+    );
+
+    let original_fee = payment.details.fee_total.as_sats();
+    let PayjoinStatus::Completed { fee_paid: Some(fee_paid), .. } = &completed else {
+        panic!("the completed status carries the fee paid: {completed:?}");
+    };
+    assert_eq!(fee_paid.total.as_sats(), original_fee + 136, "the Original's fee plus the offer");
+    assert_eq!(fee_paid.fee_help.as_sats(), 136);
+
+    // the proposal's own fee also includes the receiver's share, which details must not show
+    let (fee, sent) = payment.shown_fee_and_sent(proposal_txid).await;
+    assert_eq!(fee, Some(original_fee + 136), "details show the fee this wallet paid");
+    assert_eq!(sent, Some(40_000), "details show the amount the receiver asked for");
+}
+
+/// With fee help off, the payment offers the receiver nothing: the receiver pays for its own
+/// coin from its own output, and the wallet pays exactly the fee the confirm screen showed
+#[tokio::test(flavor = "current_thread")]
+async fn without_fee_help_the_wallet_pays_only_the_original_fee() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let services = PayjoinServices::start(2).await;
+    let config = services.sender_config(SESSION_TIMEOUT);
+    let mut payment =
+        PayjoinPayment::start_offering(&mut fx, &services, config, PayjoinFeeHelp::DontHelp).await;
+    assert!(payment.fee_contribution.is_none(), "fee help off offers nothing");
+
+    let original = payment.receiver_gets_the_original().await;
+    payment.receiver.respond(original).await;
+    let completed = payment.until_completed().await;
+
+    let proposal = only_broadcast(&fx)[0].clone();
+    assert_ne!(proposal.compute_txid(), payment.original_txid(), "the receiver joined");
+    assert_eq!(
+        payment.change_in(&proposal),
+        payment.change_in(&payment.original()),
+        "the receiver took nothing from the change"
+    );
+
+    let original_fee = payment.details.fee_total.as_sats();
+    assert_eq!(completed, payment.completed(&proposal, PayjoinTransactionKind::Proposal));
+    let PayjoinStatus::Completed { fee_paid: Some(fee_paid), .. } = &completed else {
+        panic!("the completed status carries the fee paid: {completed:?}");
+    };
+    assert_eq!(fee_paid.total.as_sats(), original_fee, "exactly the confirm screen's fee");
+    assert_eq!(fee_paid.fee_help.as_sats(), 0);
+
+    let (fee, sent) = payment.shown_fee_and_sent(proposal.compute_txid()).await;
+    assert_eq!(fee, Some(original_fee));
+    assert_eq!(sent, Some(40_000));
 }
 
 /// The user cancels while the receiver holds the Original: the wallet broadcasts the Original
@@ -122,11 +182,11 @@ async fn cancelling_a_negotiation_broadcasts_the_original_once() {
         vec![
             payment.negotiating(),
             fallback,
-            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(&payment.original(), PayjoinTransactionKind::Fallback),
         ],
         "the cancel ends negotiation with the Original's broadcast"
     );
-    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+    assert_eq!(completed, payment.completed(&payment.original(), PayjoinTransactionKind::Fallback));
 
     let broadcasts = only_broadcast(&fx);
     assert_eq!(broadcasts[0].compute_txid(), original_txid, "the node got the Original");
@@ -160,14 +220,15 @@ async fn a_resumed_session_reports_its_status_and_completes() {
     payment.receiver.respond(original).await;
     payment.until_completed().await;
 
-    let proposal_txid = only_broadcast(&fx)[0].compute_txid();
+    let proposal = only_broadcast(&fx)[0].clone();
+    let proposal_txid = proposal.compute_txid();
     assert_ne!(proposal_txid, payment.original_txid(), "the resumed session sent the proposal");
     assert_eq!(
         payment.screen.payjoin_statuses(),
         vec![
             negotiating,
             payment.broadcasting(proposal_txid, PayjoinTransactionKind::Proposal),
-            payment.completed(proposal_txid, PayjoinTransactionKind::Proposal),
+            payment.completed(&proposal, PayjoinTransactionKind::Proposal),
         ],
         "the resumed session reports the same states a fresh one does"
     );
@@ -248,11 +309,11 @@ async fn cancelling_after_the_broadcast_starts_changes_nothing() {
     assert_eq!(payment.status().await, completed, "the cancel left the completed session alone");
 
     let broadcasts = only_broadcast(&fx);
-    let proposal_txid = broadcasts[0].compute_txid();
-    assert_ne!(proposal_txid, payment.original_txid(), "the node got the proposal");
+    let proposal = broadcasts[0].clone();
+    assert_ne!(proposal.compute_txid(), payment.original_txid(), "the node got the proposal");
     assert_eq!(
         completed,
-        payment.completed(proposal_txid, PayjoinTransactionKind::Proposal),
+        payment.completed(&proposal, PayjoinTransactionKind::Proposal),
         "the session completed with the proposal it was broadcasting"
     );
     assert_eq!(
@@ -282,11 +343,11 @@ async fn a_rejecting_receiver_gets_the_original_once() {
         vec![
             payment.negotiating(),
             payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback),
-            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(&payment.original(), PayjoinTransactionKind::Fallback),
         ],
         "the rejection ends negotiation with the Original's broadcast"
     );
-    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+    assert_eq!(completed, payment.completed(&payment.original(), PayjoinTransactionKind::Fallback));
 
     let broadcasts = only_broadcast(&fx);
     assert_eq!(broadcasts[0].compute_txid(), original_txid, "the node got the Original");
@@ -327,11 +388,11 @@ async fn every_relay_refusing_the_post_sends_the_original_at_once() {
         vec![
             payment.negotiating(),
             payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback),
-            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(&payment.original(), PayjoinTransactionKind::Fallback),
         ],
         "the failed POST ends negotiation with the Original's broadcast"
     );
-    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+    assert_eq!(completed, payment.completed(&payment.original(), PayjoinTransactionKind::Fallback));
 
     assert_eq!(down.requests(), 1, "the relay that answered 502 was tried once");
     assert_eq!(redirecting.requests(), 1, "the redirecting relay was tried once");
@@ -383,11 +444,11 @@ async fn every_relay_going_down_while_polling_sends_the_original_at_the_deadline
         vec![
             payment.negotiating(),
             payment.broadcasting(original_txid, PayjoinTransactionKind::Fallback),
-            payment.completed(original_txid, PayjoinTransactionKind::Fallback),
+            payment.completed(&payment.original(), PayjoinTransactionKind::Fallback),
         ],
         "the outage ends negotiation with the Original's broadcast at the deadline"
     );
-    assert_eq!(completed, payment.completed(original_txid, PayjoinTransactionKind::Fallback));
+    assert_eq!(completed, payment.completed(&payment.original(), PayjoinTransactionKind::Fallback));
 
     assert!(
         adopted.requests() > before_outage,
@@ -410,6 +471,12 @@ struct PayjoinPayment {
     change_script: ScriptBuf,
     session_id: PayjoinSessionId,
     expires_at_secs: u64,
+
+    /// The payment as the confirm screen showed it, before any Payjoin
+    details: ConfirmDetails,
+
+    /// What the payment offered the receiver toward its coin's fee
+    fee_contribution: Option<Arc<PayjoinFeeContribution>>,
 }
 
 impl PayjoinPayment {
@@ -424,6 +491,16 @@ impl PayjoinPayment {
         fx: &mut Fixture,
         services: &PayjoinServices,
         config: PayjoinConfig,
+    ) -> Self {
+        Self::start_offering(fx, services, config, PayjoinFeeHelp::UpToOneInput).await
+    }
+
+    /// Starts the payment as `start_with` does, offering the receiver what `fee_help` allows
+    async fn start_offering(
+        fx: &mut Fixture,
+        services: &PayjoinServices,
+        config: PayjoinConfig,
+        fee_help: PayjoinFeeHelp,
     ) -> Self {
         let wallet =
             import_mnemonic_with_target(fresh_mnemonic(), fx.network, WalletMode::Main).unwrap();
@@ -471,7 +548,18 @@ impl PayjoinPayment {
             .await
             .expect("the wallet actor answers");
 
-        let intent = PayjoinIntent::new(endpoint);
+        // the offer is fixed with the confirm screen's details, as the send flow does
+        let details = call!(manager.actor.get_confirm_details(psbt.clone(), fee_rate))
+            .await
+            .expect("the wallet actor answers")
+            .expect("the confirm details build");
+        let fee_contribution =
+            call!(manager.actor.payjoin_fee_contribution(Arc::new(details.clone()), fee_help))
+                .await
+                .expect("the wallet actor answers");
+
+        let intent = PayjoinIntent::new(endpoint, fee_contribution);
+        let fee_contribution = intent.fee_contribution.clone();
         let session_id = intent.session_id.clone();
         let started_secs = unix_now_secs();
         let mode = UnsignedPaymentMode::Payjoin { intent };
@@ -498,7 +586,31 @@ impl PayjoinPayment {
             "the deadline is the session timeout after the session started"
         );
 
-        Self { manager, screen, receiver, psbt, change_script, session_id, expires_at_secs }
+        Self {
+            manager,
+            screen,
+            receiver,
+            psbt,
+            change_script,
+            session_id,
+            expires_at_secs,
+            details,
+            fee_contribution,
+        }
+    }
+
+    /// The Original as built, which has the same txid and outputs as the signed one
+    fn original(&self) -> Transaction {
+        self.psbt.unsigned_tx.clone()
+    }
+
+    /// The change `tx` pays back to the wallet
+    fn change_in(&self, tx: &Transaction) -> Amount {
+        tx.output
+            .iter()
+            .find(|output| output.script_pubkey == self.change_script)
+            .expect("the transaction pays the wallet's change")
+            .value
     }
 
     /// The txid of the payment as built, which signing does not change for segwit inputs
@@ -582,12 +694,31 @@ impl PayjoinPayment {
         }
     }
 
-    fn completed(&self, txid: Txid, kind: PayjoinTransactionKind) -> PayjoinStatus {
+    /// The completed status for broadcasting `tx`, whose fee is the Original's plus whatever
+    /// the receiver took from the change, worked out from the outputs alone
+    fn completed(&self, tx: &Transaction, kind: PayjoinTransactionKind) -> PayjoinStatus {
+        let fee_help = self.change_in(&self.original()) - self.change_in(tx);
+        let total = self.details.fee_total.0 + fee_help;
+
         PayjoinStatus::Completed {
             session_id: self.session_id.clone(),
-            txid: Arc::new(txid.into()),
+            txid: Arc::new(tx.compute_txid().into()),
             kind,
+            fee_paid: Some(PayjoinFeePaid {
+                total: Arc::new(total.into()),
+                fee_help: Arc::new(fee_help.into()),
+            }),
         }
+    }
+
+    /// The fee the wallet's transaction details show for `txid`, and the amount they show sent
+    async fn shown_fee_and_sent(&self, txid: Txid) -> (Option<u64>, Option<u64>) {
+        let presentation = call!(self.manager.actor.transaction_details(txid.into()))
+            .await
+            .expect("the wallet actor answers");
+        let details = presentation.details();
+
+        (details.fee.map(|fee| fee.as_sats()), details.sent_sans_fee().map(|sent| sent.as_sats()))
     }
 }
 

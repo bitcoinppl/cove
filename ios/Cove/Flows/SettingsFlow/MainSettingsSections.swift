@@ -23,6 +23,11 @@ struct MainSettingsGeneralSection: View {
                 symbol: "safari"
             )
             SettingsRow(title: "Currency", route: .fiatCurrency, symbol: "dollarsign.circle")
+            SettingsRow(title: "Payjoin", route: .payjoin, symbol: "arrow.triangle.merge")
+                // the row's title and icon are separate elements, so the test target is the whole row
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("settings.payjoin")
         }
     }
 }

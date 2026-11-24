@@ -12,7 +12,7 @@ use bdk_wallet::{
 };
 use bitcoin::{
     Amount, FeeRate as BdkFeeRate, OutPoint, Script, Transaction as BdkTransaction, TxIn, Txid,
-    params::Params,
+    consensus, params::Params,
 };
 use cove_bdk::coin_selection::CoveDefaultCoinSelection;
 use cove_device::keychain::Keychain;
@@ -32,12 +32,13 @@ use crate::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
         actor::{
-            PayjoinBroadcast, PayjoinNegotiation, PayjoinPhase, SpendPolicy, WalletActor,
-            current_wallet_unspent_outpoints_for_txid,
+            PayjoinBroadcast, PayjoinCompletion, PayjoinNegotiation, PayjoinPhase, SpendPolicy,
+            WalletActor, current_wallet_unspent_outpoints_for_txid,
         },
         payjoin::{
-            PayjoinActor, PayjoinDeadline, PayjoinIntent, PayjoinSessionId,
-            PayjoinSessionPersister, PayjoinTransactionKind, build_sender, unix_now_secs,
+            PayjoinActor, PayjoinDeadline, PayjoinFeeContribution, PayjoinFeeHelp, PayjoinFeePaid,
+            PayjoinIntent, PayjoinSessionId, PayjoinSessionPersister, PayjoinTransactionKind,
+            build_sender, unix_now_secs,
         },
     },
     node::{Node, client::NodeClient},
@@ -694,7 +695,7 @@ impl WalletActor {
             return Err(payjoin_in_progress_error());
         }
 
-        let PayjoinIntent { session_id, endpoint } = intent;
+        let PayjoinIntent { session_id, endpoint, fee_contribution } = intent;
         let (signed_psbt, fallback_tx) = self.do_sign_original_psbt(psbt).await?;
 
         // persist the session before the first network request so it survives app restarts
@@ -709,7 +710,13 @@ impl WalletActor {
         }
 
         let Ok(sender) = self
-            .build_payjoin_sender(signed_psbt, &fallback_tx, endpoint, &persister)
+            .build_payjoin_sender(
+                signed_psbt,
+                &fallback_tx,
+                endpoint,
+                fee_contribution.as_deref(),
+                &persister,
+            )
             .inspect_err(|error| warn!("payjoin setup failed, broadcasting fallback tx: {error}"))
         else {
             // commits the BroadcastFallback marker before posting, so the stored record and
@@ -741,6 +748,7 @@ impl WalletActor {
         signed_psbt: Psbt,
         fallback_tx: &BdkTransaction,
         endpoint: String,
+        fee_contribution: Option<&PayjoinFeeContribution>,
         persister: &PayjoinSessionPersister,
     ) -> eyre::Result<V2Sender<WithReplyKey>> {
         let network: bitcoin::Network = self.wallet.network.into();
@@ -749,7 +757,61 @@ impl WalletActor {
         let wallet = &self.wallet.bdk;
         let is_mine = |script: &Script| wallet.is_mine(script.to_owned());
 
-        build_sender(signed_psbt, fallback_tx, endpoint, network, persister, is_mine)
+        build_sender(
+            signed_psbt,
+            fallback_tx,
+            endpoint,
+            fee_contribution,
+            network,
+            persister,
+            is_mine,
+        )
+    }
+
+    /// What a Payjoin payment of `details` offers the receiver under `help`, `None` when it
+    /// offers nothing
+    pub async fn payjoin_fee_contribution(
+        &mut self,
+        details: Arc<ConfirmDetails>,
+        help: PayjoinFeeHelp,
+    ) -> ActorResult<Option<PayjoinFeeContribution>> {
+        let wallet = &self.wallet.bdk;
+        let address_type = self.wallet.metadata.address_type;
+        let is_mine = |script: &Script| wallet.is_mine(script.to_owned());
+
+        Produces::ok(PayjoinFeeContribution::offer(help, &details, address_type, is_mine))
+    }
+
+    /// What `tx`, the stored session's terminal transaction, cost this wallet in fees
+    ///
+    /// A proposal spends a coin of the receiver's too, so its own fee mixes both sides'
+    /// shares. The wallet's share is what it spent minus the amount the original paid the
+    /// receiver, and the part above the original's fee is what the receiver took
+    fn payjoin_fee_paid(&self, tx: &BdkTransaction) -> Option<PayjoinFeePaid> {
+        let record = self
+            .payjoin_store
+            .session()
+            .inspect_err(|error| warn!("payjoin fee paid: session record unreadable: {error}"))
+            .ok()
+            .flatten()?;
+
+        let fallback_tx: BdkTransaction = consensus::deserialize(record.fallback_tx.as_ref())
+            .inspect_err(|error| warn!("payjoin fee paid: original unreadable: {error}"))
+            .ok()?;
+
+        let wallet = &self.wallet.bdk;
+        let payment = fallback_tx
+            .output
+            .iter()
+            .find(|output| !wallet.is_mine(output.script_pubkey.clone()))?
+            .value;
+
+        let original_fee = wallet.calculate_fee(&fallback_tx).ok()?;
+        let (sent, received) = wallet.sent_and_received(tx);
+        let total = sent.checked_sub(received)?.checked_sub(payment)?;
+        let fee_help = total.checked_sub(original_fee).unwrap_or(Amount::ZERO);
+
+        Some(PayjoinFeePaid { total: Arc::new(total.into()), fee_help: Arc::new(fee_help.into()) })
     }
 
     async fn do_sign_original_psbt(
@@ -1066,8 +1128,12 @@ impl WalletActor {
             });
 
         let txid = tx.compute_txid();
+        let kind = match &self.payjoin_phase {
+            PayjoinPhase::Broadcasting(broadcast) if broadcast.txid == txid => Some(broadcast.kind),
+            _ => None,
+        };
 
-        self.wallet.bdk.apply_unconfirmed_txs([(tx, now)]);
+        self.wallet.bdk.apply_unconfirmed_txs([(tx.clone(), now)]);
 
         // keep the session record until wallet state is durable so startup can recover
         if let Err(error) = self.wallet.persist() {
@@ -1078,6 +1144,14 @@ impl WalletActor {
                 "transaction was broadcast but wallet state could not be saved; please restart the app"
                     .to_string(),
             )));
+        }
+
+        // the session record holds the original this works from, so read it before clearing
+        let fee_paid = self.payjoin_fee_paid(&tx);
+        if let (Some(PayjoinTransactionKind::Proposal), Some(fee_paid)) = (kind, &fee_paid)
+            && let Err(error) = self.db.save_payjoin_fee(txid, fee_paid.total.0)
+        {
+            warn!("failed to save the fee paid for payjoin proposal {txid}: {error}");
         }
 
         let session_cleared = match self.payjoin_store.delete_session() {
@@ -1097,7 +1171,7 @@ impl WalletActor {
         send!(self.addr.start_transaction_watcher(txid));
 
         if session_cleared {
-            self.complete_payjoin_broadcast(txid);
+            self.complete_payjoin_broadcast(txid, fee_paid);
         } else {
             // tx is broadcast and wallet-persisted, but the session record remains
             // initiate_payment will reject new sends until the record is gone
@@ -1136,7 +1210,7 @@ impl WalletActor {
 
         match &self.payjoin_phase {
             // a successful broadcast completed the session when it cleared the record
-            PayjoinPhase::Completed(completed) if completed.txid == txid => {}
+            PayjoinPhase::Completed(completed) if completed.broadcast.txid == txid => {}
 
             PayjoinPhase::Broadcasting(current) if current.txid == txid => {
                 self.set_payjoin_phase(PayjoinPhase::Idle);
@@ -1149,10 +1223,11 @@ impl WalletActor {
     }
 
     /// Mark the session complete once its broadcast is saved and its record cleared
-    fn complete_payjoin_broadcast(&mut self, txid: Txid) {
+    fn complete_payjoin_broadcast(&mut self, txid: Txid, fee_paid: Option<PayjoinFeePaid>) {
         match &self.payjoin_phase {
             PayjoinPhase::Broadcasting(current) if current.txid == txid => {
-                let completed = current.clone();
+                let broadcast = current.clone();
+                let completed = PayjoinCompletion { broadcast, fee_paid };
                 self.set_payjoin_phase(PayjoinPhase::Completed(completed));
             }
 
@@ -1393,7 +1468,14 @@ impl WalletActor {
             .labels
             .all_labels_for_txn(tx.tx_node.txid)
             .map_err_str(Error::TransactionDetailsError)?;
-        TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into())
+        let payjoin_fee = self
+            .db
+            .payjoin_fee(tx.tx_node.txid)
+            .inspect_err(|error| warn!("failed to read the payjoin fee for a transaction: {error}"))
+            .ok()
+            .flatten();
+
+        TransactionDetails::try_new(&self.wallet.bdk, tx, labels.into(), payjoin_fee)
             .map_err_str(Error::TransactionDetailsError)
     }
 
@@ -1633,8 +1715,14 @@ pub(crate) mod test_support {
                 .create_session(PayjoinSessionId::generate(), &fallback_tx, unix_now_secs())
                 .map_err(|error| error.to_string())?;
 
-            self.build_payjoin_sender(signed_psbt.clone(), &fallback_tx, endpoint, &persister)
-                .map_err(|error| error.to_string())?;
+            self.build_payjoin_sender(
+                signed_psbt.clone(),
+                &fallback_tx,
+                endpoint,
+                None,
+                &persister,
+            )
+            .map_err(|error| error.to_string())?;
 
             Ok(signed_psbt)
         }
