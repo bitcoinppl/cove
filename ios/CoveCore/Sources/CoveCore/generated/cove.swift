@@ -4809,6 +4809,12 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func isInMainMode()  -> Bool
 
+    /**
+     * What Payjoin payments offer toward the receiver's coin, falling back to the default
+     * when none is saved
+     */
+    func payjoinFeeHelp()  -> PayjoinFeeHelp
+
     func previewCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func selectWallet(id: WalletId) throws
@@ -5009,6 +5015,19 @@ open func isInMainMode() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_is_in_main_mode(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * What Payjoin payments offer toward the receiver's coin, falling back to the default
+     * when none is saved
+     */
+open func payjoinFeeHelp() -> PayjoinFeeHelp  {
+    return try!  FfiConverterTypePayjoinFeeHelp_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_payjoinfeehelp(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -7105,6 +7124,181 @@ public func FfiConverterTypeNodeSelector_lift(_ handle: UInt64) throws -> NodeSe
 #endif
 public func FfiConverterTypeNodeSelector_lower(_ value: NodeSelector) -> UInt64 {
     return FfiConverterTypeNodeSelector.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The most a Payjoin receiver may take from this wallet's change to pay for the coin it adds
+ *
+ * Exists only for a payment that offers something: fee help is on, the payment has a change
+ * output, and that change can give more than nothing while staying spendable. It is fixed
+ * before the user confirms, so the confirm screen's figures are exactly what the payment
+ * offers, and rust-payjoin rejects a proposal that takes more
+ */
+public protocol PayjoinFeeContributionProtocol: AnyObject, Sendable {
+
+    /**
+     * The most the receiver may take from the change, never zero
+     */
+    func max()  -> Amount
+
+    /**
+     * The payment's network fee if the receiver takes all of `max`
+     */
+    func maxFeeTotal()  -> Amount
+
+    /**
+     * What the payment takes from the wallet, amount and fees, if the receiver takes all of
+     * `max`
+     */
+    func maxSpendingAmount()  -> Amount
+
+}
+/**
+ * The most a Payjoin receiver may take from this wallet's change to pay for the coin it adds
+ *
+ * Exists only for a payment that offers something: fee help is on, the payment has a change
+ * output, and that change can give more than nothing while staying spendable. It is fixed
+ * before the user confirms, so the confirm screen's figures are exactly what the payment
+ * offers, and rust-payjoin rejects a proposal that takes more
+ */
+open class PayjoinFeeContribution: PayjoinFeeContributionProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_payjoinfeecontribution(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_payjoinfeecontribution(handle, $0) }
+    }
+
+
+
+
+    /**
+     * The most the receiver may take from the change, never zero
+     */
+open func max() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_payjoinfeecontribution_max(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The payment's network fee if the receiver takes all of `max`
+     */
+open func maxFeeTotal() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_payjoinfeecontribution_max_fee_total(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * What the payment takes from the wallet, amount and fees, if the receiver takes all of
+     * `max`
+     */
+open func maxSpendingAmount() -> Amount  {
+    return try!  FfiConverterTypeAmount_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_payjoinfeecontribution_max_spending_amount(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinFeeContribution: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = PayjoinFeeContribution
+
+    public static func lift(_ handle: UInt64) throws -> PayjoinFeeContribution {
+        return PayjoinFeeContribution(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: PayjoinFeeContribution) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinFeeContribution {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: PayjoinFeeContribution, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinFeeContribution_lift(_ handle: UInt64) throws -> PayjoinFeeContribution {
+    return try FfiConverterTypePayjoinFeeContribution.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinFeeContribution_lower(_ value: PayjoinFeeContribution) -> UInt64 {
+    return FfiConverterTypePayjoinFeeContribution.lower(value)
 }
 
 
@@ -20846,9 +21040,80 @@ public func FfiConverterTypeOnboardingState_lower(_ value: OnboardingState) -> R
 
 
 /**
- * The receiver endpoint and identity that start one Payjoin payment
+ * What a Payjoin payment cost this wallet in fees, once its transaction was broadcast
  */
-public struct PayjoinIntent: Equatable, Hashable {
+public struct PayjoinFeePaid {
+    /**
+     * Everything the wallet spent beyond the amount the receiver asked for
+     */
+    public var total: Amount
+    /**
+     * The part of `total` the receiver took from the change for the coin it added, zero for a
+     * payment sent without Payjoin
+     */
+    public var feeHelp: Amount
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Everything the wallet spent beyond the amount the receiver asked for
+         */total: Amount,
+        /**
+         * The part of `total` the receiver took from the change for the coin it added, zero for a
+         * payment sent without Payjoin
+         */feeHelp: Amount) {
+        self.total = total
+        self.feeHelp = feeHelp
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PayjoinFeePaid: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinFeePaid: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinFeePaid {
+        return
+            try PayjoinFeePaid(
+                total: FfiConverterTypeAmount.read(from: &buf),
+                feeHelp: FfiConverterTypeAmount.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PayjoinFeePaid, into buf: inout [UInt8]) {
+        FfiConverterTypeAmount.write(value.total, into: &buf)
+        FfiConverterTypeAmount.write(value.feeHelp, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinFeePaid_lift(_ buf: RustBuffer) throws -> PayjoinFeePaid {
+    return try FfiConverterTypePayjoinFeePaid.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinFeePaid_lower(_ value: PayjoinFeePaid) -> RustBuffer {
+    return FfiConverterTypePayjoinFeePaid.lower(value)
+}
+
+
+/**
+ * The receiver endpoint, identity and fee offer that start one Payjoin payment
+ */
+public struct PayjoinIntent {
     /**
      * Identifies this payment in every status the wallet reports for it
      */
@@ -20857,6 +21122,11 @@ public struct PayjoinIntent: Equatable, Hashable {
      * The receiver's BIP 77 endpoint, taken from its validated pj URI
      */
     public var endpoint: String
+    /**
+     * What the payment offers toward the fee of the receiver's coin, `None` when it offers
+     * nothing, see [`PayjoinFeeContribution`]
+     */
+    public var feeContribution: PayjoinFeeContribution?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -20866,9 +21136,14 @@ public struct PayjoinIntent: Equatable, Hashable {
          */sessionId: PayjoinSessionId,
         /**
          * The receiver's BIP 77 endpoint, taken from its validated pj URI
-         */endpoint: String) {
+         */endpoint: String,
+        /**
+         * What the payment offers toward the fee of the receiver's coin, `None` when it offers
+         * nothing, see [`PayjoinFeeContribution`]
+         */feeContribution: PayjoinFeeContribution?) {
         self.sessionId = sessionId
         self.endpoint = endpoint
+        self.feeContribution = feeContribution
     }
 
 
@@ -20888,13 +21163,15 @@ public struct FfiConverterTypePayjoinIntent: FfiConverterRustBuffer {
         return
             try PayjoinIntent(
                 sessionId: FfiConverterTypePayjoinSessionId.read(from: &buf),
-                endpoint: FfiConverterString.read(from: &buf)
+                endpoint: FfiConverterString.read(from: &buf),
+                feeContribution: FfiConverterOptionTypePayjoinFeeContribution.read(from: &buf)
         )
     }
 
     public static func write(_ value: PayjoinIntent, into buf: inout [UInt8]) {
         FfiConverterTypePayjoinSessionId.write(value.sessionId, into: &buf)
         FfiConverterString.write(value.endpoint, into: &buf)
+        FfiConverterOptionTypePayjoinFeeContribution.write(value.feeContribution, into: &buf)
     }
 }
 
@@ -23041,6 +23318,8 @@ public enum AppAction {
     )
     case changeFiatCurrency(FiatCurrency
     )
+    case changePayjoinFeeHelp(PayjoinFeeHelp
+    )
     case setSelectedNode(Node
     )
     case updateFiatPrices
@@ -23089,14 +23368,17 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 8: return .changeFiatCurrency(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
 
-        case 9: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        case 9: return .changePayjoinFeeHelp(try FfiConverterTypePayjoinFeeHelp.read(from: &buf)
         )
 
-        case 10: return .updateFiatPrices
+        case 10: return .setSelectedNode(try FfiConverterTypeNode.read(from: &buf)
+        )
 
-        case 11: return .updateFees
+        case 11: return .updateFiatPrices
 
-        case 12: return .refreshAfterImport
+        case 12: return .updateFees
+
+        case 13: return .refreshAfterImport
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23144,21 +23426,26 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
 
 
-        case let .setSelectedNode(v1):
+        case let .changePayjoinFeeHelp(v1):
             writeInt(&buf, Int32(9))
+            FfiConverterTypePayjoinFeeHelp.write(v1, into: &buf)
+
+
+        case let .setSelectedNode(v1):
+            writeInt(&buf, Int32(10))
             FfiConverterTypeNode.write(v1, into: &buf)
 
 
         case .updateFiatPrices:
-            writeInt(&buf, Int32(10))
-
-
-        case .updateFees:
             writeInt(&buf, Int32(11))
 
 
-        case .refreshAfterImport:
+        case .updateFees:
             writeInt(&buf, Int32(12))
+
+
+        case .refreshAfterImport:
+            writeInt(&buf, Int32(13))
 
         }
     }
@@ -23950,6 +24237,8 @@ public enum AppStateReconcileMessage {
     )
     case fiatCurrencyChanged(FiatCurrency
     )
+    case payjoinFeeHelpChanged(PayjoinFeeHelp
+    )
     case walletModeChanged(WalletMode
     )
     case pushedRoute(Route
@@ -24006,20 +24295,23 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
         case 9: return .fiatCurrencyChanged(try FfiConverterTypeFiatCurrency.read(from: &buf)
         )
 
-        case 10: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
+        case 10: return .payjoinFeeHelpChanged(try FfiConverterTypePayjoinFeeHelp.read(from: &buf)
         )
 
-        case 11: return .pushedRoute(try FfiConverterTypeRoute.read(from: &buf)
+        case 11: return .walletModeChanged(try FfiConverterTypeWalletMode.read(from: &buf)
         )
 
-        case 12: return .walletsChanged
-
-        case 13: return .clearCachedWalletManager(try FfiConverterTypeWalletId.read(from: &buf)
+        case 12: return .pushedRoute(try FfiConverterTypeRoute.read(from: &buf)
         )
 
-        case 14: return .showLoadingPopup
+        case 13: return .walletsChanged
 
-        case 15: return .hideLoadingPopup
+        case 14: return .clearCachedWalletManager(try FfiConverterTypeWalletId.read(from: &buf)
+        )
+
+        case 15: return .showLoadingPopup
+
+        case 16: return .hideLoadingPopup
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -24074,31 +24366,36 @@ public struct FfiConverterTypeAppStateReconcileMessage: FfiConverterRustBuffer {
             FfiConverterTypeFiatCurrency.write(v1, into: &buf)
 
 
-        case let .walletModeChanged(v1):
+        case let .payjoinFeeHelpChanged(v1):
             writeInt(&buf, Int32(10))
+            FfiConverterTypePayjoinFeeHelp.write(v1, into: &buf)
+
+
+        case let .walletModeChanged(v1):
+            writeInt(&buf, Int32(11))
             FfiConverterTypeWalletMode.write(v1, into: &buf)
 
 
         case let .pushedRoute(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeRoute.write(v1, into: &buf)
 
 
         case .walletsChanged:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
 
 
         case let .clearCachedWalletManager(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeWalletId.write(v1, into: &buf)
 
 
         case .showLoadingPopup:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
 
 
         case .hideLoadingPopup:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(16))
 
         }
     }
@@ -35882,6 +36179,7 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case customBlockExplorer(Network
     )
     case trickPinNotice
+    case payjoinFeeHelp
 
 
 
@@ -35934,6 +36232,8 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
         )
 
         case 15: return .trickPinNotice
+
+        case 16: return .payjoinFeeHelp
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -36003,6 +36303,10 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case .trickPinNotice:
             writeInt(&buf, Int32(15))
+
+
+        case .payjoinFeeHelp:
+            writeInt(&buf, Int32(16))
 
         }
     }
@@ -40874,6 +41178,85 @@ public func FfiConverterTypeOtherBackupsOperation_lower(_ value: OtherBackupsOpe
 
 
 /**
+ * How much of a Payjoin's extra fee this wallet offers to pay for the coin the receiver adds
+ *
+ * Chosen once in Settings and applied to every Payjoin payment
+ */
+
+public enum PayjoinFeeHelp: Equatable, Hashable {
+
+    /**
+     * Up to the fee of one more input like this wallet's own, at the payment's fee rate, which
+     * is what most wallets offer
+     */
+    case upToOneInput
+    /**
+     * Nothing; the payment pays exactly the fee the confirm screen shows, and a receiver that
+     * will not pay for its own coin declines, so the payment is sent normally
+     */
+    case dontHelp
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension PayjoinFeeHelp: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinFeeHelp: FfiConverterRustBuffer {
+    typealias SwiftType = PayjoinFeeHelp
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinFeeHelp {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .upToOneInput
+
+        case 2: return .dontHelp
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PayjoinFeeHelp, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .upToOneInput:
+            writeInt(&buf, Int32(1))
+
+
+        case .dontHelp:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinFeeHelp_lift(_ buf: RustBuffer) throws -> PayjoinFeeHelp {
+    return try FfiConverterTypePayjoinFeeHelp.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinFeeHelp_lower(_ value: PayjoinFeeHelp) -> RustBuffer {
+    return FfiConverterTypePayjoinFeeHelp.lower(value)
+}
+
+
+
+/**
  * The wallet's Payjoin send, as the send screens show it
  *
  * Sent as `PayjoinStatusChanged` whenever it changes, and read once through
@@ -40903,7 +41286,10 @@ public enum PayjoinStatus: Equatable, Hashable {
     /**
      * The session's final transaction was broadcast and saved to the wallet
      */
-    case completed(sessionId: PayjoinSessionId, txid: TxId, kind: PayjoinTransactionKind
+    case completed(sessionId: PayjoinSessionId, txid: TxId, kind: PayjoinTransactionKind,
+        /**
+         * What the payment cost in fees, `None` when the wallet could not work it out
+         */feePaid: PayjoinFeePaid?
     )
 
 
@@ -40958,7 +41344,7 @@ public struct FfiConverterTypePayjoinStatus: FfiConverterRustBuffer {
         case 3: return .broadcasting(sessionId: try FfiConverterTypePayjoinSessionId.read(from: &buf), txid: try FfiConverterTypeTxId.read(from: &buf), kind: try FfiConverterTypePayjoinTransactionKind.read(from: &buf)
         )
 
-        case 4: return .completed(sessionId: try FfiConverterTypePayjoinSessionId.read(from: &buf), txid: try FfiConverterTypeTxId.read(from: &buf), kind: try FfiConverterTypePayjoinTransactionKind.read(from: &buf)
+        case 4: return .completed(sessionId: try FfiConverterTypePayjoinSessionId.read(from: &buf), txid: try FfiConverterTypeTxId.read(from: &buf), kind: try FfiConverterTypePayjoinTransactionKind.read(from: &buf), feePaid: try FfiConverterOptionTypePayjoinFeePaid.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -40986,11 +41372,12 @@ public struct FfiConverterTypePayjoinStatus: FfiConverterRustBuffer {
             FfiConverterTypePayjoinTransactionKind.write(kind, into: &buf)
 
 
-        case let .completed(sessionId,txid,kind):
+        case let .completed(sessionId,txid,kind,feePaid):
             writeInt(&buf, Int32(4))
             FfiConverterTypePayjoinSessionId.write(sessionId, into: &buf)
             FfiConverterTypeTxId.write(txid, into: &buf)
             FfiConverterTypePayjoinTransactionKind.write(kind, into: &buf)
+            FfiConverterOptionTypePayjoinFeePaid.write(feePaid, into: &buf)
 
         }
     }
@@ -44437,6 +44824,7 @@ public enum SettingsRoute: Equatable, Hashable {
     case allWallets
     case about
     case cloudBackup
+    case payjoin
 
 
 
@@ -44478,6 +44866,8 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
         case 9: return .about
 
         case 10: return .cloudBackup
+
+        case 11: return .payjoin
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -44527,6 +44917,10 @@ public struct FfiConverterTypeSettingsRoute: FfiConverterRustBuffer {
 
         case .cloudBackup:
             writeInt(&buf, Int32(10))
+
+
+        case .payjoin:
+            writeInt(&buf, Int32(11))
 
         }
     }
@@ -46796,7 +47190,7 @@ public func FfiConverterTypeUnlockPin_lower(_ value: UnlockPin) -> RustBuffer {
  * How an unsigned hot wallet payment is sent once the user confirms it
  */
 
-public enum UnsignedPaymentMode: Equatable, Hashable {
+public enum UnsignedPaymentMode {
 
     /**
      * Sign and broadcast the payment as built
@@ -47834,6 +48228,7 @@ public enum WalletDataKey: Equatable, Hashable {
     )
     case receiveAddressCache
     case payjoinSenderSession
+    case payjoinFees
 
 
 
@@ -47862,6 +48257,8 @@ public struct FfiConverterTypeWalletDataKey: FfiConverterRustBuffer {
 
         case 3: return .payjoinSenderSession
 
+        case 4: return .payjoinFees
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -47881,6 +48278,10 @@ public struct FfiConverterTypeWalletDataKey: FfiConverterRustBuffer {
 
         case .payjoinSenderSession:
             writeInt(&buf, Int32(3))
+
+
+        case .payjoinFees:
+            writeInt(&buf, Int32(4))
 
         }
     }
@@ -52254,6 +52655,30 @@ fileprivate struct FfiConverterOptionTypeMigration: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePayjoinFeeContribution: FfiConverterRustBuffer {
+    typealias SwiftType = PayjoinFeeContribution?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePayjoinFeeContribution.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePayjoinFeeContribution.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTapSignerOperationContinuation: FfiConverterRustBuffer {
     typealias SwiftType = TapSignerOperationContinuation?
 
@@ -52774,6 +53199,30 @@ fileprivate struct FfiConverterOptionTypeFiatAmount: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeFiatAmount.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypePayjoinFeePaid: FfiConverterRustBuffer {
+    typealias SwiftType = PayjoinFeePaid?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePayjoinFeePaid.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePayjoinFeePaid.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -55938,6 +56387,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_is_in_main_mode() != 25736) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_globalconfigtable_payjoinfeehelp() != 56369) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_globalconfigtable_preview_custom_block_explorer() != 36136) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56599,6 +57051,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_unlock_transaction_outputs() != 45492) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_payjoinfeecontribution_max() != 8731) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_payjoinfeecontribution_max_fee_total() != 56648) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_payjoinfeecontribution_max_spending_amount() != 40365) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_mnemonic_all_words() != 24108) {
