@@ -22,6 +22,10 @@ Frontends read it with `Database().globalConfig().payjoinFeeHelp()`, change it
 with `AppAction::ChangePayjoinFeeHelp`, and follow
 `AppStateReconcileMessage::PayjoinFeeHelpChanged`.
 
+A manual backup carries the choice as `payjoin_fee_help` in its settings, and
+restoring one sets it. A backup made before the setting existed, or one naming
+a choice this version doesn't know, leaves the current choice alone.
+
 ## The Offer
 
 `PayjoinFeeContribution` exists only for a payment that offers something: fee
@@ -73,4 +77,6 @@ the wallet's coins. The fee is saved as the wallet records the broadcast, while
 the session record still holds the original it is worked out from. If that
 write fails, or a later send has to clean up a session whose broadcast the
 wallet never recorded because it couldn't save its state, the proposal has no
-stored fee and its details show none.
+stored fee and its details show none. Backups don't carry these fees, and a
+wallet restored from its words couldn't recover them either, so a restored
+wallet's proposals show whatever BDK can work out.

@@ -19,6 +19,7 @@ use crate::database::global_config::{GlobalConfigKey, GlobalConfigTable, GlobalC
 use crate::database::{Database, Error as DatabaseError};
 use crate::keys::Descriptors;
 use crate::label_manager::LabelManager;
+use crate::manager::wallet_manager::payjoin::PayjoinFeeHelp;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 use crate::wallet_identity::{
     ExistingWalletIdentitySet, WalletIdentityKey, collect_existing_wallet_identities,
@@ -918,12 +919,27 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
     }
 
     errors.extend(restore_custom_block_explorers(config, &settings.custom_block_explorers));
+    errors.extend(restore_payjoin_fee_help(config, settings.payjoin_fee_help.as_deref()));
 
     if errors.is_empty() {
         Ok(())
     } else {
         Err(BackupError::Database(format!("failed to restore settings: {}", errors.join("; "))))
     }
+}
+
+/// Restores the Payjoin fee help choice, keeping the current one when the backup has none or one
+/// this version doesn't know
+///
+/// Saved through the typed setter so the frontends hear about the change
+fn restore_payjoin_fee_help(config: &GlobalConfigTable, stored: Option<&str>) -> Option<String> {
+    let stored = stored?;
+    let Ok(fee_help) = stored.parse::<PayjoinFeeHelp>() else {
+        warn!("skipping unknown Payjoin fee help in backup, {} chars", stored.len());
+        return None;
+    };
+
+    config.set_payjoin_fee_help(fee_help).err().map(|error| format!("Payjoin fee help: {error}"))
 }
 
 fn restore_custom_block_explorers(
@@ -1048,6 +1064,39 @@ mod tests {
             Some("https://existing.example/tx/{txid}")
         );
         assert_eq!(config.custom_block_explorer(Network::Signet), None);
+    }
+
+    #[test]
+    fn backup_import_restores_the_payjoin_fee_help_choice() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        let settings = crate::backup::model::AppSettings {
+            selected_network: None,
+            selected_fiat_currency: None,
+            color_scheme: None,
+            selected_nodes: Vec::new(),
+            custom_block_explorers: BTreeMap::new(),
+            payjoin_fee_help: Some("dont_help".to_string()),
+        };
+
+        restore_settings(&settings).expect("the settings restore");
+
+        assert_eq!(
+            Database::global().global_config.selected_payjoin_fee_help(),
+            PayjoinFeeHelp::DontHelp
+        );
+    }
+
+    #[test]
+    fn backup_import_keeps_the_payjoin_fee_help_for_an_unknown_or_missing_choice() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        config.set_payjoin_fee_help(PayjoinFeeHelp::DontHelp).unwrap();
+
+        assert_eq!(restore_payjoin_fee_help(&config, Some("up_to_two_inputs")), None);
+        assert_eq!(restore_payjoin_fee_help(&config, None), None);
+        assert_eq!(config.selected_payjoin_fee_help(), PayjoinFeeHelp::DontHelp);
     }
 
     #[test]
@@ -1210,6 +1259,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: Vec::new(),
                 custom_block_explorers: BTreeMap::new(),
+                payjoin_fee_help: None,
             },
         };
         let preparation = ImportPreparationState {
@@ -1335,6 +1385,7 @@ mod tests {
                     color_scheme: None,
                     selected_nodes: Vec::new(),
                     custom_block_explorers: BTreeMap::new(),
+                    payjoin_fee_help: None,
                 },
             };
             let wallets = preflight_wallets(&payload).unwrap();
@@ -1413,6 +1464,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: Vec::new(),
                 custom_block_explorers: BTreeMap::new(),
+                payjoin_fee_help: None,
             },
         };
         let wallets = preflight_wallets(&payload).unwrap();

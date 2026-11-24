@@ -303,6 +303,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: Vec::new(),
                 custom_block_explorers: BTreeMap::new(),
+                payjoin_fee_help: None,
             },
         }
     }
