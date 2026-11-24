@@ -213,7 +213,9 @@ A flaky or hanging test can absorb hours. Debug it under these rules:
 - **Receiver.** The test drives a v2 receiver step by step and signs its proposal with a BDK wallet. The receiver's coin is on the fake node, as is the sender's.
 - **Sender.** A hot wallet builds a payment with change to the receiver's pj URI and sends it through `initiate_payment` with `UnsignedPaymentMode::Payjoin`, the same call the confirm screen's Send button makes.
 
-The payment test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone. Every test also checks the `PayjoinStatus` sequence the screens receive and what `payjoin_status()` returns. The other tests cover:
+The payment test passes when the node received exactly one broadcast, that broadcast is the receiver's proposal spending the receiver's coin, every sender input is signed, the sender's change output is kept, the fake node's script verification accepts it, and the wallet's Payjoin session record is gone. The payment offers the receiver one P2WPKH input's fee, 136 sats at 2 sat/vB, and the receiver must take exactly that from the change. The completed status must report the Original's fee plus those 136 sats, and the proposal's transaction details must show that fee and the 40,000 sats the receiver asked for. Every test also checks the `PayjoinStatus` sequence the screens receive, including the fee paid, which the test works out from the change outputs alone, and what `payjoin_status()` returns. The other tests cover:
+
+- Fee help turned off, which offers nothing: the receiver pays for its own coin, the change is untouched, and the wallet pays exactly the Original's fee.
 
 - Cancelling a negotiation, which broadcasts the Original exactly once while the wallet keeps answering.
 - Resuming a session after a relaunch, which reports the same id and deadline.
@@ -222,6 +224,8 @@ The payment test passes when the node received exactly one broadcast, that broad
 - A receiver that rejects the Original with a well-known error, after which the sender broadcasts the Original once and a new payment can start.
 - Every relay refusing the Original's POST: one answers 502, one redirects to a relay the wallet was never given, and one isn't listening. Each is tried once, the redirect isn't followed, and the Original goes out at once rather than at the deadline.
 - Every relay going down while the session polls. The session keeps polling the relay that carried its POST, never moves to another, and sends the Original once at its deadline.
+
+The fee offer itself has unit tests in `payjoin/fee_contribution.rs`: one input's fee at 10 sat/vB is 680 sats for native SegWit, 910 for wrapped SegWit and 1,480 for legacy, a fractional rate rounds up, fee help off or a payment without change offers nothing, and a small change keeps at least its dust limit. `send_flow_manager/address_input.rs` checks that the Settings choice decides what the confirm route's payment offers.
 
 `payjoin_e2e_tests/send_flow.rs` starts one step earlier, in the send screen. It types a payment request into the address field, presses Next and reads the mode the pushed confirm route carries. For the receiver's v2 pj URI, the mode must be `Payjoin` for the URI's endpoint, and sending it must end with the receiver's proposal as the only broadcast. For the same address and amount behind a BIP 78 v1 endpoint, the mode must be `Standard`, and the node must get the confirmed transaction as built with no Payjoin session started.
 
