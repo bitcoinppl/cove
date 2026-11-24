@@ -247,4 +247,17 @@
     <string name="payjoin_sending_without">Sending without Payjoin…</string>
     <string name="payjoin_sending">Sending payment…</string>
     <string name="payjoin_sent_without">Transaction sent successfully, without Payjoin.</string>
+    <string name="payjoin_confirm_toggle_title">Payjoin</string>
+    <string name="payjoin_confirm_toggle_subtitle">Combines a coin from the receiver for better privacy.</string>
+    <string name="payjoin_confirm_fee_help">+ up to %1$s with Payjoin</string>
+    <string name="payjoin_confirm_up_to">up to %1$s</string>
+    <string name="payjoin_sent_with_fee_help">Sent with Payjoin. You paid %1$s in fees, including %2$s toward the receiver\'s coin.</string>
+    <string name="payjoin_sent_with_fee">Sent with Payjoin. You paid %1$s in fees.</string>
+    <string name="payjoin_sent_without_fee">Sent without Payjoin. You paid %1$s in fees.</string>
+    <string name="title_settings_payjoin">Payjoin</string>
+    <string name="payjoin_settings_fee_help">Fee help</string>
+    <string name="payjoin_settings_up_to_one_input">Up to one input (recommended)</string>
+    <string name="payjoin_settings_up_to_one_input_description">Lets the receiver use some of your change to pay for the coin they add, so the payment keeps your fee rate. Most wallets do this. The most it can cost is shown before you send.</string>
+    <string name="payjoin_settings_dont_help">Don\'t help</string>
+    <string name="payjoin_settings_dont_help_description">You pay exactly the fee shown. Some receivers will decline, and the payment is sent as a normal transaction.</string>
 </resources>

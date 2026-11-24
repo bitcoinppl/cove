@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -42,6 +43,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +65,7 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove.views.FlexibleSpacer
+import org.bitcoinppl.cove_core.PayjoinIntent
 import org.bitcoinppl.cove_core.PayjoinSessionId
 import org.bitcoinppl.cove_core.PayjoinStatus
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -82,6 +85,10 @@ private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 
+internal const val SEND_CONFIRM_PAYJOIN_TOGGLE_TAG = "sendConfirm.payjoinToggle"
+internal const val SEND_CONFIRM_PAYJOIN_FEE_HELP_TAG = "sendConfirm.payjoinFeeHelp"
+internal const val SEND_CONFIRM_TOTAL_SPENDING_TAG = "sendConfirm.totalSpending"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendFlowConfirmScreen(
@@ -93,6 +100,9 @@ fun SendFlowConfirmScreen(
     onSendWithoutPayjoin: (PayjoinSessionId) -> Unit,
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
+    payjoinIntent: PayjoinIntent? = null,
+    isPayjoinOn: Boolean = false,
+    onPayjoinChange: (Boolean) -> Unit = {},
 ) {
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
@@ -118,7 +128,17 @@ fun SendFlowConfirmScreen(
     val dollarEquivalentText = fiatAmount
     val networkFee = walletManager.amountFmtUnit(details.feeTotal())
     val willReceive = walletManager.amountFmtUnit(details.sendingAmount())
-    val willPay = walletManager.amountFmtUnit(details.spendingAmount())
+
+    // the receiver may take up to this offer from the change, so the fee and total show their most
+    val feeContribution = payjoinIntent?.feeContribution?.takeIf { isPayjoinOn }
+    val payjoinFeeHelp =
+        feeContribution?.let {
+            stringResource(R.string.payjoin_confirm_fee_help, walletManager.amountFmtUnit(it.max()))
+        }
+    val willPay =
+        feeContribution?.let {
+            stringResource(R.string.payjoin_confirm_up_to, walletManager.amountFmtUnit(it.maxSpendingAmount()))
+        } ?: walletManager.amountFmtUnit(details.spendingAmount())
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -193,9 +213,23 @@ fun SendFlowConfirmScreen(
                             SummaryWidget(
                                 address = address,
                                 networkFee = networkFee,
+                                payjoinFeeHelp = payjoinFeeHelp,
                                 willReceive = willReceive,
                                 willPay = willPay,
                                 onAddressClick = { sheetState = SheetState.AdvancedDetails },
+                                payjoinToggle =
+                                    if (payjoinIntent != null) {
+                                        {
+                                            PayjoinToggleRow(
+                                                isOn = isPayjoinOn,
+                                                // the payment's mode is fixed once its swipe starts it
+                                                enabled = sendState is SendState.Idle,
+                                                onChange = onPayjoinChange,
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
                             )
                         }
 
@@ -397,48 +431,34 @@ private fun AmountWidget(
 }
 
 @Composable
+@Suppress("LongParameterList")
 private fun SummaryWidget(
     address: String,
     networkFee: String,
+    payjoinFeeHelp: String?,
     willReceive: String,
     willPay: String,
     onAddressClick: () -> Unit,
+    payjoinToggle: (@Composable () -> Unit)?,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Spacer(Modifier.height(28.dp))
-        KeyValueRow(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onAddressClick),
-            valueWeight = 2f,
-            labelContent = {
-                Text(
-                    text = stringResource(R.string.label_address),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = TextStyle(fontSize = 13.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            valueContent = {
-                AddressText(
-                    address = address,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Right,
-                    maxLines = 4,
-                )
-            },
-        )
+        SummaryAddressRow(address = address, onClick = onAddressClick)
         Spacer(Modifier.height(20.dp))
+        payjoinToggle?.let { toggle ->
+            toggle()
+            Spacer(Modifier.height(20.dp))
+        }
+
         SummaryKeyValueRow(
             label = stringResource(R.string.label_network_fee),
             value = networkFee,
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            valueNote = payjoinFeeHelp,
+            valueNoteTag = SEND_CONFIRM_PAYJOIN_FEE_HELP_TAG,
         )
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(
@@ -457,11 +477,45 @@ private fun SummaryWidget(
             valueColor = MaterialTheme.colorScheme.onSurface,
             labelFontWeight = FontWeight.SemiBold,
             valueFontWeight = FontWeight.SemiBold,
+            valueTag = SEND_CONFIRM_TOTAL_SPENDING_TAG,
         )
         Spacer(Modifier.height(20.dp))
     }
 }
 
+@Composable
+private fun SummaryAddressRow(
+    address: String,
+    onClick: () -> Unit,
+) {
+    KeyValueRow(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
+        valueWeight = 2f,
+        labelContent = {
+            Text(
+                text = stringResource(R.string.label_address),
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        valueContent = {
+            AddressText(
+                address = address,
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Right,
+                maxLines = 4,
+            )
+        },
+    )
+}
+
+/** A summary row, with an optional smaller [valueNote] line under its value */
 @Composable
 @Suppress("FunctionNaming", "LongParameterList")
 private fun SummaryKeyValueRow(
@@ -472,20 +526,88 @@ private fun SummaryKeyValueRow(
     modifier: Modifier = Modifier.fillMaxWidth(),
     labelFontWeight: FontWeight = FontWeight.Normal,
     valueFontWeight: FontWeight = FontWeight.Normal,
+    valueTag: String? = null,
+    valueNote: String? = null,
+    valueNoteTag: String? = null,
 ) {
+    // a note makes the value two lines, so the label lines up with the first one
     KeyValueRow(
-        label = label,
-        value = value,
         modifier = modifier,
         labelWeight = 1f,
         valueWeight = 2f,
-        labelStyle = TextStyle(fontSize = 13.sp, fontWeight = labelFontWeight),
-        valueStyle = TextStyle(fontSize = 13.sp, fontWeight = valueFontWeight),
-        labelColor = labelColor,
-        valueColor = valueColor,
-        valueTextAlign = TextAlign.Right,
-        valueMaxLines = 4,
+        verticalAlignment = if (valueNote == null) Alignment.CenterVertically else Alignment.Top,
+        labelContent = {
+            Text(
+                text = label,
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(fontSize = 13.sp, fontWeight = labelFontWeight),
+                color = labelColor,
+            )
+        },
+        valueContent = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = value,
+                    modifier = Modifier.fillMaxWidth().optionalTestTag(valueTag),
+                    style = TextStyle(fontSize = 13.sp, fontWeight = valueFontWeight),
+                    color = valueColor,
+                    textAlign = TextAlign.Right,
+                    maxLines = 4,
+                )
+
+                valueNote?.let { note ->
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = note,
+                        modifier = Modifier.fillMaxWidth().optionalTestTag(valueNoteTag),
+                        style = TextStyle(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Right,
+                    )
+                }
+            }
+        },
     )
+}
+
+private fun Modifier.optionalTestTag(tag: String?): Modifier = tag?.let { testTag(it) } ?: this
+
+/** The per-payment Payjoin switch, shown only for a payment the receiver can join */
+@Composable
+private fun PayjoinToggleRow(
+    isOn: Boolean,
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    // the whole row toggles and carries the checked state, so ui tests read it from the tag
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .toggleable(value = isOn, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+                .testTag(SEND_CONFIRM_PAYJOIN_TOGGLE_TAG),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.payjoin_confirm_toggle_title),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = stringResource(R.string.payjoin_confirm_toggle_subtitle),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+        }
+
+        Switch(checked = isOn, onCheckedChange = null, enabled = enabled)
+    }
 }
 
 @Composable

@@ -140,6 +140,9 @@ class AppManager private constructor() : FfiReconcile {
     var selectedFiatCurrency by mutableStateOf(Database().globalConfig().selectedFiatCurrency())
         private set
 
+    var payjoinFeeHelp by mutableStateOf(Database().globalConfig().payjoinFeeHelp())
+        private set
+
     // prices and fees
     var prices: PriceResponse? by mutableStateOf(runCatching { rust.prices() }.getOrNull())
         private set
@@ -419,6 +422,7 @@ class AppManager private constructor() : FfiReconcile {
         colorSchemeSelection = completion.colorScheme
         selectedNode = completion.selectedNode
         selectedFiatCurrency = completion.fiatCurrency
+        payjoinFeeHelp = completion.payjoinFeeHelp
         wallets = completion.wallets
         router.reset(completion.router)
 
@@ -929,6 +933,10 @@ class AppManager private constructor() : FfiReconcile {
                 is AppStateReconcileMessage.FiatCurrencyChanged -> {
                     selectedFiatCurrency = message.v1
                     managerCache.refreshFiatValuesForCachedWallet(this)
+                }
+
+                is AppStateReconcileMessage.PayjoinFeeHelpChanged -> {
+                    payjoinFeeHelp = message.v1
                 }
 
                 is AppStateReconcileMessage.WalletModeChanged -> {
