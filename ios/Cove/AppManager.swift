@@ -435,42 +435,6 @@ struct CorruptedWalletDeletionRetry: Equatable {
         }
     }
 
-    func pushRoute(_ route: Route) {
-        if route.keyTeleportFlowDirection != nil, restoreExistingRouteIfPresent(route) {
-            return
-        }
-
-        navigationCoordinator.pushRoute(
-            route,
-            router: &router,
-            isSidebarVisible: &isSidebarVisible
-        ) { router in
-            self.managerCache.reconcileRouteOwnedManagers(router: router)
-        }
-    }
-
-    func pushRoutes(_ routes: [Route]) {
-        navigationCoordinator.pushRoutes(
-            routes,
-            router: &router,
-            isSidebarVisible: &isSidebarVisible
-        ) { router in
-            self.managerCache.reconcileRouteOwnedManagers(router: router)
-        }
-    }
-
-    func popRoute() {
-        navigationCoordinator.popRoute(router: &router) { router in
-            self.managerCache.reconcileRouteOwnedManagers(router: router)
-        }
-    }
-
-    func setRoute(_ routes: [Route]) {
-        navigationCoordinator.setRoute(routes, router: &router) { router in
-            self.managerCache.reconcileRouteOwnedManagers(router: router)
-        }
-    }
-
     func reconcileRouteOwnedManagers() {
         managerCache.reconcileRouteOwnedManagers(router: router)
     }
@@ -538,14 +502,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
     func closeSidebarAndOpenNewWallet() {
         closeSidebarThenNavigate {
             if self.hasWallets {
-                self.navigationCoordinator.pushRoute(
-                    RouteFactory().newWalletSelect(),
-                    router: &self.router,
-                    isSidebarVisible: &self.isSidebarVisible,
-                    advancesGeneration: false
-                ) { router in
-                    self.managerCache.reconcileRouteOwnedManagers(router: router)
-                }
+                self.pushRouteWithoutNavigationGeneration(RouteFactory().newWalletSelect())
             } else {
                 self.navigationCoordinator.resetRoute(
                     to: [RouteFactory().newWalletSelect()],
@@ -557,14 +514,20 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
     func closeSidebarAndOpenSettings() {
         closeSidebarThenNavigate {
-            self.navigationCoordinator.pushRoute(
-                .settings(.main),
-                router: &self.router,
-                isSidebarVisible: &self.isSidebarVisible,
-                advancesGeneration: false
-            ) { router in
-                self.managerCache.reconcileRouteOwnedManagers(router: router)
-            }
+            self.pushRouteWithoutNavigationGeneration(.settings(.main))
+        }
+    }
+
+    /// The sidebar already advanced the generation when it started closing
+    private func pushRouteWithoutNavigationGeneration(_ route: Route) {
+        changeNavigation { router, isSidebarVisible in
+            navigationCoordinator.pushRoute(
+                route,
+                router: &router,
+                isSidebarVisible: &isSidebarVisible,
+                advancesGeneration: false,
+                reconcileRouteOwnership: reconcileRouteOwnedManagers(router:)
+            )
         }
     }
 
@@ -736,31 +699,37 @@ struct CorruptedWalletDeletionRetry: Equatable {
     private func applyNavigationMessage(_ message: AppStateReconcileMessage) {
         switch message {
         case let .routeUpdated(routes):
-            navigationCoordinator.applyRouteUpdated(
-                routes: routes,
-                router: &router
-            ) { router in
-                self.managerCache.reconcileRouteOwnedManagers(router: router)
+            changeNavigation { router, _ in
+                navigationCoordinator.applyRouteUpdated(
+                    routes: routes,
+                    router: &router,
+                    reconcileRouteOwnership: reconcileRouteOwnedManagers(router:)
+                )
             }
 
         case let .pushedRoute(route):
-            navigationCoordinator.applyPushedRoute(
-                route,
-                router: &router,
-                isSidebarVisible: &isSidebarVisible
-            ) { router in
-                self.managerCache.reconcileRouteOwnedManagers(router: router)
+            changeNavigation { router, isSidebarVisible in
+                navigationCoordinator.applyPushedRoute(
+                    route,
+                    router: &router,
+                    isSidebarVisible: &isSidebarVisible,
+                    reconcileRouteOwnership: reconcileRouteOwnedManagers(router:)
+                )
             }
 
         case let .defaultRouteChanged(route, nestedRoutes):
-            navigationCoordinator.applyDefaultRouteChanged(
-                route: route,
-                nestedRoutes: nestedRoutes,
-                router: &router,
-                routeId: &routeId
-            ) { router in
-                self.managerCache.reconcileRouteOwnedManagers(router: router)
+            var routeId = routeId
+            changeNavigation { router, _ in
+                navigationCoordinator.applyDefaultRouteChanged(
+                    route: route,
+                    nestedRoutes: nestedRoutes,
+                    router: &router,
+                    routeId: &routeId,
+                    reconcileRouteOwnership: reconcileRouteOwnedManagers(router:)
+                )
             }
+
+            self.routeId = routeId
 
         default:
             preconditionFailure("Expected an app navigation reconcile message")
@@ -777,6 +746,70 @@ struct CorruptedWalletDeletionRetry: Equatable {
         } catch {
             logger.error("Unable to dispatch app action \(actionKind), error: \(error)")
         }
+    }
+}
+
+// MARK: navigation
+
+extension AppManager {
+    func pushRoute(_ route: Route) {
+        if route.keyTeleportFlowDirection != nil, restoreExistingRouteIfPresent(route) {
+            return
+        }
+
+        changeNavigation { router, isSidebarVisible in
+            navigationCoordinator.pushRoute(
+                route,
+                router: &router,
+                isSidebarVisible: &isSidebarVisible,
+                reconcileRouteOwnership: reconcileRouteOwnedManagers(router:)
+            )
+        }
+    }
+
+    func pushRoutes(_ routes: [Route]) {
+        changeNavigation { router, isSidebarVisible in
+            navigationCoordinator.pushRoutes(
+                routes,
+                router: &router,
+                isSidebarVisible: &isSidebarVisible,
+                reconcileRouteOwnership: reconcileRouteOwnedManagers(router:)
+            )
+        }
+    }
+
+    func popRoute() {
+        changeNavigation { router, _ in
+            navigationCoordinator.popRoute(router: &router, reconcileRouteOwnership: reconcileRouteOwnedManagers(router:))
+        }
+    }
+
+    func setRoute(_ routes: [Route]) {
+        changeNavigation { router, _ in
+            navigationCoordinator.setRoute(routes, router: &router, reconcileRouteOwnership: reconcileRouteOwnedManagers(router:))
+        }
+    }
+
+    /// Runs a navigation change on copies of the router and sidebar state, then stores them
+    ///
+    /// An inout argument keeps exclusive access to an observed property for the whole call, and
+    /// any observed write meanwhile, such as a second inout argument's willSet or the route owned
+    /// manager reconcile, can make SwiftUI redraw synchronously when the change runs outside a
+    /// view update, as it does after an async broadcast. A view that reads `router` in that
+    /// redraw would crash on the exclusivity conflict
+    private func changeNavigation(_ change: (inout Router, inout Bool) -> Void) {
+        var router = router
+        var isSidebarVisible = isSidebarVisible
+        change(&router, &isSidebarVisible)
+
+        self.router = router
+        if self.isSidebarVisible != isSidebarVisible {
+            self.isSidebarVisible = isSidebarVisible
+        }
+    }
+
+    private func reconcileRouteOwnedManagers(router: Router) {
+        managerCache.reconcileRouteOwnedManagers(router: router)
     }
 }
 
