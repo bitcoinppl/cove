@@ -9378,6 +9378,9 @@ public object FfiConverterTypeBlockSizeLast: FfiConverterRustBuffer<BlockSizeLas
 
 
 
+/**
+ * A payment request's BIP 77 v2 Payjoin endpoint
+ */
 data class PayJoinParams (
     var `endpoint`: kotlin.String
 

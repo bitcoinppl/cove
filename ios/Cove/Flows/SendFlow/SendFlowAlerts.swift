@@ -2,6 +2,8 @@ import SwiftUI
 
 enum SendFlowConfirmAlertState: Equatable {
     case sent(WalletId)
+    /// A Payjoin payment that went out as the normal transaction, a normal send and not an error
+    case sentWithoutPayjoin(WalletId)
     case broadcastError(String)
 }
 
@@ -44,7 +46,7 @@ extension SendFlowAlertState: TaggedAlertPresentable {
 extension SendFlowErrorAlert: TaggedAlertPresentable {
     func alert(context: SendFlowErrorAlertContext) -> AnyAlertBuilder {
         AlertBuilder(
-            title: "Error!",
+            title: title,
             message: message,
             actions: {
                 Button("OK") {
@@ -62,6 +64,18 @@ extension SendFlowConfirmAlertState: TaggedAlertPresentable {
             AlertBuilder(
                 title: "Sent!",
                 message: "Transaction was successfully sent!",
+                actions: {
+                    Button("OK") {
+                        context.dismissAlert()
+                        context.presenter.loadAndReset(to: Route.selectedWallet(walletId))
+                    }
+                }
+            ).eraseToAny()
+
+        case let .sentWithoutPayjoin(walletId):
+            AlertBuilder(
+                title: "Sent!",
+                message: "Transaction was successfully sent, without Payjoin.",
                 actions: {
                     Button("OK") {
                         context.dismissAlert()
@@ -178,6 +192,13 @@ private extension SendFlowAlertState {
 }
 
 private extension SendFlowErrorAlert {
+    var title: String {
+        switch self {
+        case .confirmDetails: "Error!"
+        case .signAndBroadcast: "Error Broadcasting!"
+        }
+    }
+
     var message: String {
         switch self {
         case let .confirmDetails(error):

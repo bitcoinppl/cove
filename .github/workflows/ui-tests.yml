@@ -62,6 +62,7 @@ env:
     CoveUITests/ReceiveFailureFullLaunchUITests,
     CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
+    CoveUITests/PayjoinSendFullLaunchUITests,
     CoveUITests/NfcScanPrivacyCoverFullLaunchUITests,
     CoveUITests/PrivacyCoverFullLaunchUITests,
     CoveUITests/QrScanCameraPermissionFullLaunchUITests,
@@ -244,8 +245,8 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.3
 
       # the recipe starts cove-fake-node and the hardware signer host on the first host port
-      # block, 39100-39111, and forwards them to 39000-39002 and 39010-39011 in the emulator, for
-      # the tests that fund a wallet or sign with a hardware wallet
+      # block, 39100-39112, and forwards them to 39000-39002 and 39010-39012 in the emulator, for
+      # the tests that fund a wallet, sign with a hardware wallet or pay a Payjoin receiver
       - name: Run instrumented tests
         if: steps.shard.outputs.run == 'true'
         uses: reactivecircus/android-emulator-runner@v2
@@ -387,7 +388,7 @@ jobs:
       # it starts at first launch; each CoveCloudBackupUITests class shares one clone and one
       # xcodebuild call, since its host app wipes its data at every launch. It keeps
       # cove-fake-node up on the first port block, 39100-39102, for the tests that fund a wallet
-      # from it and the hardware signer host on 39110-39111 for the hardware signing tests. Tests
+      # from it and the hardware signer host on 39110-39112 for the hardware signing and Payjoin tests. Tests
       # in ios/test-quarantine.toml are left out of the classes listed, and the log names each
       - name: Run iOS UI tests
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'

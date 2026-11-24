@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Launching, onboarding, querying and waiting helpers the full-launch UI tests share
@@ -151,14 +152,48 @@ extension XCUIApplication {
 
     /// Opens Send from the wallet screen and enters the address
     func startSend(to address: String) {
-        let send = buttons.matching(NSPredicate(format: "label == 'Send' OR label ENDSWITH ', Send'")).firstMatch
-        XCTAssertTrue(send.waitForExistence(timeout: 10))
-        send.tap()
-
+        openSend()
         enterAddress(address)
     }
 
+    /// Opens Send from the wallet screen and pastes `paymentRequest`, such as a BIP21 URI, into the
+    /// address field from its edit menu
+    ///
+    /// Typing a URI doesn't work: the app parses the address field on every change, so once the
+    /// address is complete it keeps only the address and moves to the amount before the rest of
+    /// the URI arrives. The toolbar's Paste, which reads the pasteboard in code, left the field
+    /// empty for text the test runner wrote, so this pastes with the text view's own Paste
+    func startSend(pasting paymentRequest: String) {
+        openSend()
+        let field = focusAddress()
+
+        // the host reads the pasteboard back, since a read here shows the paste prompt
+        UIPasteboard.general.string = paymentRequest
+        let onPasteboard = try? HardwareSignerControl().simulatorPasteboard(awaiting: paymentRequest)
+        XCTAssertEqual(onPasteboard, paymentRequest, "the simulator pasteboard doesn't hold the text to paste")
+
+        let paste = menuItems["Paste"]
+        field.press(forDuration: 1.2)
+        if !paste.waitForExistence(timeout: 5) {
+            field.tap()
+        }
+
+        XCTAssertTrue(paste.waitForExistence(timeout: 5), "the address field's edit menu offers no Paste")
+        paste.tap()
+    }
+
     func enterAddress(_ address: String) {
+        focusAddress().typeText(address)
+    }
+
+    private func openSend() {
+        let send = buttons.matching(NSPredicate(format: "label == 'Send' OR label ENDSWITH ', Send'")).firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.tap()
+    }
+
+    @discardableResult
+    private func focusAddress() -> XCUIElement {
         let field = textViews["sendFlow.address"]
         XCTAssertTrue(field.waitForExistence(timeout: 15))
 
@@ -170,7 +205,7 @@ extension XCUIApplication {
 
         waitUntil(field, matches: NSPredicate(format: "hittable == true"), timeout: 5, "the address field is covered")
         field.tap()
-        field.typeText(address)
+        return field
     }
 
     func tapMax() {
@@ -198,6 +233,17 @@ extension XCUIApplication {
 
     /// Swipes the confirm screen's handle across, accepts the Sent alert and returns to the wallet
     func swipeToSend() {
+        swipeToConfirm()
+
+        let sent = alerts["Sent!"]
+        XCTAssertTrue(sent.waitForExistence(timeout: 30), "the send was not broadcast")
+        sent.buttons["OK"].tap()
+
+        XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 15))
+    }
+
+    /// Swipes the confirm screen's handle across, leaving whatever the send shows next on screen
+    func swipeToConfirm() {
         let swipe = element("sendFlowConfirm.swipeToSend")
         XCTAssertTrue(swipe.waitForExistence(timeout: 30), "the send didn't reach the confirm screen")
 
@@ -225,12 +271,6 @@ extension XCUIApplication {
         let start = swipe.coordinate(withNormalizedOffset: CGVector(dx: frame.height / 2 / frame.width, dy: 0.5))
         let end = swipe.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.5))
         start.press(forDuration: 0.2, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
-
-        let sent = alerts["Sent!"]
-        XCTAssertTrue(sent.waitForExistence(timeout: 30), "the send was not broadcast")
-        sent.buttons["OK"].tap()
-
-        XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 15))
     }
 
     // MARK: - Amounts

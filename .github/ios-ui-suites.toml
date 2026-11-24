@@ -66,6 +66,10 @@ suites = ["CoveUITests/QrScanCameraPermissionFullLaunchUITests"]
 paths = ["ios/CoveUITests/HotWalletImportScanFullLaunchUITests.swift"]
 suites = ["CoveUITests/HotWalletImportScanFullLaunchUITests"]
 
+[[rule]]
+paths = ["ios/CoveUITests/PayjoinSendFullLaunchUITests.swift"]
+suites = ["CoveUITests/PayjoinSendFullLaunchUITests"]
+
 # also compiled into CoveCloudBackupUITests, which runs none of its tests, so its shortest suite
 # checks that target still builds
 [[rule]]

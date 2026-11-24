@@ -21,6 +21,7 @@
 9	org.bitcoinppl.cove.flows.SelectedWalletFlow.TransactionsScanUiTest
 21	org.bitcoinppl.cove.flows.SelectedWalletFlow.WalletMoreOptionsSheetTest
 410	org.bitcoinppl.cove.flows.SendFlow.HardwareSigningFullLaunchTest
+460	org.bitcoinppl.cove.flows.SendFlow.PayjoinSendFullLaunchTest
 10	org.bitcoinppl.cove.flows.SendFlow.SendFlowAccountSectionTest
 19	org.bitcoinppl.cove.flows.SettingsFlow.NetworkSettingsScreenTest
 8	org.bitcoinppl.cove.flows.SettingsFlow.NodeSettingsCustomEsploraErrorTest

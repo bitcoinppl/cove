@@ -105,6 +105,14 @@ Transactions the app sent through Esplora `POST /tx` or Electrum `blockchain.tra
 
 `address` is `null` for an output script with no address form.
 
+### `POST /broadcasts/hold`, `/broadcasts/release` and `/broadcasts/fail`
+
+`/broadcasts/hold` holds every later broadcast, Esplora `POST /tx` and Electrum `blockchain.transaction.broadcast`, received but unanswered and not yet in the chain or the broadcast log, so a test can see what the app shows while its broadcast is in flight. Transaction lookups under `/tx/<txid>` keep answering. `/broadcasts/release` lets the held ones through, accepts later ones as usual, and returns `{"ok":true,"held":<count>}`. `{"message":"…"}` to `/broadcasts/fail` refuses every later broadcast with that message, a 400 on Esplora and a JSON-RPC error on Electrum, until a release or a `/reset`, which also releases held broadcasts. Holding again while broadcasts are held keeps them held, and one release frees them all.
+
+### `GET /broadcasts/requests`
+
+Returns `{"count":<n>,"held":<n>}`: how many broadcasts reached the node since the last `/reset`, held, refused, scripted and repeated ones included, and how many are held now. The broadcast log keeps a transaction once, so a test checks this count to tell that the app broadcast only once.
+
 ### `GET /outspend/<txid>/<vout>`
 
 ```json

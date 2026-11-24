@@ -18,6 +18,7 @@ use super::{
 use crate::{
     manager::import_wallet_manager::import_mnemonic_with_target,
     mnemonic::MnemonicExt as _,
+    router::UnsignedPaymentMode,
     test_support::{
         fake_node::wait_until,
         payjoin::{PayjoinReceiver, PayjoinServices, TestRelay, TestRelayBehavior},
@@ -288,14 +289,11 @@ impl Payment {
         call!(self.manager.actor.set_payjoin_config_for_test(config))
             .await
             .expect("the wallet actor answers");
-        call!(
-            self.manager
-                .actor
-                .start_payjoin_payment_for_test(self.psbt.clone(), self.intent.clone())
-        )
-        .await
-        .expect("the wallet actor answers")
-        .expect("the Payjoin session starts");
+        let mode = UnsignedPaymentMode::Payjoin { intent: self.intent.clone() };
+        call!(self.manager.actor.initiate_payment(self.psbt.clone(), mode))
+            .await
+            .expect("the wallet actor answers")
+            .expect("the Payjoin session starts");
     }
 
     async fn wait_for_original(&mut self) -> Receiver<UncheckedOriginalPayload> {

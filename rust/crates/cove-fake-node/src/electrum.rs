@@ -81,10 +81,20 @@ async fn serve_connection(stream: TcpStream, shared: Arc<Shared>) {
         let method = request["method"].as_str().unwrap_or_default().to_string();
         let params = request["params"].as_array().cloned().unwrap_or_default();
 
-        let verdict = shared
+        let is_broadcast = method == "blockchain.transaction.broadcast";
+        if is_broadcast {
+            shared.control.count_broadcast();
+        }
+
+        let mut verdict = shared
             .control
             .intercept(Protocol::Electrum, &method, &Value::Array(params.clone()).to_string())
             .await;
+
+        if matches!(verdict, Verdict::Serve) && is_broadcast {
+            verdict = shared.control.broadcast_verdict().await;
+        }
+
         let outcome = match verdict {
             Verdict::Fail { status, message } => Err(RpcError::new(i64::from(status), message)),
             Verdict::Serve => handle(&shared.chain, &method, &params),

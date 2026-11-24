@@ -24,6 +24,12 @@ enum UITestHostPorts {
     static var tapSignerBridge: String {
         "127.0.0.1:\(base + 11)"
     }
+
+    /// the OHTTP relay in front of the host's BIP 77 directory, see
+    /// rust/xtask/src/ui_test_host/payjoin.rs
+    static var payjoinRelay: String {
+        "http://127.0.0.1:\(base + 12)"
+    }
 }
 
 /// Synchronous client for the cove-fake-node control API, see rust/crates/cove-fake-node/README.md
@@ -47,6 +53,11 @@ struct FakeNodeControl {
         let txid: String
         let inputs: [String]
         let outputs: [Output]
+    }
+
+    struct BroadcastRequests: Decodable {
+        let count: Int
+        let held: Int
     }
 
     struct Outspend: Decodable {
@@ -95,8 +106,42 @@ struct FakeNodeControl {
         _ = try request("POST", "mine", body: ["blocks": 1])
     }
 
+    /// Holds every later broadcast unanswered until `releaseBroadcasts`, so a test can see what
+    /// the app shows while one is in flight
+    func holdBroadcasts() throws {
+        _ = try request("POST", "broadcasts/hold")
+    }
+
+    /// Lets held broadcasts through and accepts later ones as usual
+    func releaseBroadcasts() throws {
+        _ = try request("POST", "broadcasts/release")
+    }
+
+    /// Refuses every later broadcast with `message` until a release or reset
+    func failBroadcasts(message: String) throws {
+        _ = try request("POST", "broadcasts/fail", body: ["message": message])
+    }
+
     func broadcasts() throws -> [Broadcast] {
         try decode([Broadcast].self, request("GET", "broadcasts"))
+    }
+
+    /// How many broadcasts reached the node since the last reset, repeats of one transaction
+    /// included, which `broadcasts()` lists once, and how many it holds now
+    func broadcastRequests() throws -> BroadcastRequests {
+        try decode(BroadcastRequests.self, request("GET", "broadcasts/requests"))
+    }
+
+    /// Polls until the node holds a broadcast, so a test checks the app while one is in flight
+    func waitForHeldBroadcast() throws {
+        let deadline = Date().addingTimeInterval(60)
+        var requests = try broadcastRequests()
+        while requests.held == 0, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.25)
+            requests = try broadcastRequests()
+        }
+
+        XCTAssertGreaterThan(requests.held, 0, "the node never held a broadcast")
     }
 
     /// Polls until the app has broadcast `count` transactions

@@ -47,7 +47,18 @@ async fn serve_connection(stream: TcpStream, shared: Arc<Shared>) {
 
     // keep-alive: reqwest reuses the connection for many requests
     while let Some(Request { method, path, body }) = read_request(&mut reader).await {
-        let verdict = shared.control.intercept(Protocol::Esplora, &path, "").await;
+        // matched the way `route` matches it, since a base URL ending in a slash, as Cove saves
+        // one, posts to `//tx`
+        let is_broadcast = method == "POST" && path.trim_matches('/') == "tx";
+        if is_broadcast {
+            shared.control.count_broadcast();
+        }
+
+        let mut verdict = shared.control.intercept(Protocol::Esplora, &path, "").await;
+        if matches!(verdict, Verdict::Serve) && is_broadcast {
+            verdict = shared.control.broadcast_verdict().await;
+        }
+
         let response = match verdict {
             Verdict::Fail { status, message } => Response::error(status, &message),
             Verdict::Serve => route(&shared.chain, &method, &path, &body),

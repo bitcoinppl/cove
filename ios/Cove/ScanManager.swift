@@ -267,8 +267,7 @@ import SwiftUI
             return
         }
 
-        let amount = addressWithNetwork.amount()
-        app.alertState = TaggedItem(.foundAddress(address: address, amount: amount))
+        app.alertState = TaggedItem(.foundAddress(request: addressWithNetwork))
     }
 
     @MainActor

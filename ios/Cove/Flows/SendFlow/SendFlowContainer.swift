@@ -28,6 +28,7 @@ public struct SendFlowContainer: View {
 
 private struct SendFlowLoadedView: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
 
     let sendRoute: SendRoute
     let manager: WalletManager
@@ -67,18 +68,26 @@ private struct SendFlowLoadedView: View {
         }
     }
 
+    /// The one presenter of the wallet's send flow errors, which the confirm screen follows for
+    /// its send state; a second alert for the same error raced this one, and the user saw neither
+    ///
+    /// The error waits for any app lock to clear, as the confirm screen's result does, since a
+    /// Payjoin payment's broadcast can fail minutes after the user left the app
     private var sendFlowErrorAlert: Binding<TaggedItem<SendFlowErrorAlert>?> {
         Binding(
-            get: { manager.sendFlowErrorAlert },
-            set: { manager.sendFlowErrorAlert = $0 }
+            get: { auth.lockState == .unlocked ? manager.sendFlowErrorAlert : nil },
+            set: { newValue in
+                // a write while locked is the lock hiding the alert, which must keep the error
+                guard auth.lockState == .unlocked else { return }
+                manager.sendFlowErrorAlert = newValue
+            }
         )
     }
 
     private func applyRouteArguments(to sendFlowManager: SendFlowManager) async {
         switch sendRoute {
-        case let .setAmount(id: _, address: address, amount: amount):
-            if let address { sendFlowManager.setAddress(address) }
-            if let amount { sendFlowManager.setAmount(amount) }
+        case let .setAmount(id: _, request: request):
+            if let request { sendFlowManager.setPaymentRequest(request) }
         case let .coinControlSetAmount(id: _, utxos: utxos):
             await sendFlowManager.prepareCoinControl(utxos: utxos)
         default:
@@ -199,8 +208,8 @@ private struct SendFlowRouteView: View {
 
     var body: some View {
         switch sendRoute {
-        case let .setAmount(id: id, address: _, amount: amount):
-            SendFlowSetAmountScreen(id: id, amount: amount)
+        case let .setAmount(id: id, request: request):
+            SendFlowSetAmountScreen(id: id, amount: request?.amount())
         case let .coinControlSetAmount(id: id, utxos: utxos):
             SendFlowCoinControlSetAmountScreen(id: id, utxos: utxos)
         case let .confirm(confirm):

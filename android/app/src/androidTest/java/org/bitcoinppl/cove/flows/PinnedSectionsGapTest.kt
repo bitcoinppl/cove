@@ -398,9 +398,10 @@ enum class PinnedSectionsScreen(
                 SendFlowConfirmScreen(
                     app = send.app,
                     walletManager = send.walletManager,
-                    sendFlowManager = send.sendFlowManager,
                     details = details,
                     sendState = SendState.Idle,
+                    payjoinWaiting = null,
+                    onSendWithoutPayjoin = {},
                     onBack = {},
                     onSwipeToSend = {},
                 )

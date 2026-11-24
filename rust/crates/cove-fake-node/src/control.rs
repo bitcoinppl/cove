@@ -139,11 +139,32 @@ pub(crate) enum Verdict {
     },
 }
 
+/// What every broadcast meets, as the control API set it for a UI test in another process
+///
+/// Rules match request names, and an Esplora broadcast's path, `/tx`, is also the start of every
+/// transaction lookup, so the control API scripts broadcasts here instead
+#[derive(Debug, Clone, Default)]
+pub(crate) enum BroadcastRule {
+    /// Accepted as usual
+    #[default]
+    Serve,
+
+    /// Held, received and logged but unanswered, until the gate opens
+    Hold(Gate),
+
+    /// Refused with this message, as a node that rejects the transaction would
+    Fail(String),
+}
+
 /// Request log and scripted behaviour shared by the fake Esplora and Electrum servers
 #[derive(Debug, Default)]
 pub(crate) struct Control {
     requests: Mutex<Vec<LoggedRequest>>,
     rules: Mutex<Vec<Rule>>,
+    broadcasts: Mutex<BroadcastRule>,
+
+    // the chain keeps a transaction once, so a repeated broadcast of it shows only here
+    broadcast_requests: AtomicUsize,
 }
 
 impl Control {
@@ -153,10 +174,69 @@ impl Control {
 
     pub(crate) fn clear_requests(&self) {
         self.requests.lock().clear();
+        self.broadcast_requests.store(0, Ordering::SeqCst);
     }
 
+    /// Counts a broadcast the node received, before any scripted rule or broadcast rule meets it
+    pub(crate) fn count_broadcast(&self) {
+        self.broadcast_requests.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// How many broadcasts reached the node since the last reset, held, refused, scripted and
+    /// repeated ones included, and how many of them are held now
+    pub(crate) fn broadcast_requests(&self) -> (usize, usize) {
+        let held = match &*self.broadcasts.lock() {
+            BroadcastRule::Hold(gate) => gate.waiting(),
+            BroadcastRule::Serve | BroadcastRule::Fail(_) => 0,
+        };
+
+        (self.broadcast_requests.load(Ordering::SeqCst), held)
+    }
+
+    /// Removes every scripted rule, and lets held broadcasts through
     pub(crate) fn clear_rules(&self) {
         self.rules.lock().clear();
+        self.release_broadcasts();
+    }
+
+    /// Holds every later broadcast until [`Self::release_broadcasts`]
+    pub(crate) fn hold_broadcasts(&self) {
+        let mut rule = self.broadcasts.lock();
+
+        // holding again keeps the gate already holding requests, so one release frees them all
+        if !matches!(*rule, BroadcastRule::Hold(_)) {
+            *rule = BroadcastRule::Hold(Gate::new());
+        }
+    }
+
+    /// Refuses every later broadcast with `message`
+    pub(crate) fn fail_broadcasts(&self, message: String) {
+        self.release_broadcasts();
+        *self.broadcasts.lock() = BroadcastRule::Fail(message);
+    }
+
+    /// Lets held broadcasts through and accepts later ones as usual; returns how many were held
+    pub(crate) fn release_broadcasts(&self) -> usize {
+        let rule = std::mem::take(&mut *self.broadcasts.lock());
+        let BroadcastRule::Hold(gate) = rule else { return 0 };
+
+        let held = gate.waiting();
+        gate.open();
+        held
+    }
+
+    /// What a broadcast that no scripted rule caught gets, waiting while broadcasts are held
+    pub(crate) async fn broadcast_verdict(&self) -> Verdict {
+        let rule = self.broadcasts.lock().clone();
+
+        match rule {
+            BroadcastRule::Serve => Verdict::Serve,
+            BroadcastRule::Fail(message) => Verdict::Fail { status: 400, message },
+            BroadcastRule::Hold(gate) => {
+                gate.pass().await;
+                Verdict::Serve
+            }
+        }
     }
 
     fn add_rule(&self, pattern: &str, behavior: Behavior) -> RuleHandle {

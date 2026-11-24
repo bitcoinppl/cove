@@ -113,6 +113,21 @@ class FakeNodeControl(
     /** Mines blocks, the first confirming every mempool transaction, and returns the new tip */
     fun mine(blocks: Int = 1): Int = JSONObject(request("POST", "/mine", JSONObject().put("blocks", blocks))).getInt("tip")
 
+    /** Holds every later broadcast unanswered until [releaseBroadcasts], so a test can see the app mid-broadcast */
+    fun holdBroadcasts() {
+        request("POST", "/broadcasts/hold", JSONObject())
+    }
+
+    /** Lets held broadcasts through and accepts later ones as usual */
+    fun releaseBroadcasts() {
+        request("POST", "/broadcasts/release", JSONObject())
+    }
+
+    /** Refuses every later broadcast with [message] until a release or reset */
+    fun failBroadcasts(message: String) {
+        request("POST", "/broadcasts/fail", JSONObject().put("message", message))
+    }
+
     fun broadcasts(): List<FakeNodeBroadcast> =
         JSONArray(request("GET", "/broadcasts")).objects().map { broadcast ->
             FakeNodeBroadcast(
@@ -130,6 +145,20 @@ class FakeNodeControl(
 
     fun isSpent(outpoint: FakeNodeOutPoint): Boolean =
         JSONObject(request("GET", "/outspend/${outpoint.txid}/${outpoint.vout}")).getBoolean("spent")
+
+    /** How many broadcasts reached the node since the last reset, repeats of one transaction included, which [broadcasts] lists once */
+    fun broadcastRequestCount(): Int = broadcastRequests().getInt("count")
+
+    /** Polls until the node holds a broadcast, so a test checks the app while one is in flight */
+    fun waitForHeldBroadcast() {
+        val deadline = System.currentTimeMillis() + 60_000L
+        while (broadcastRequests().getInt("held") == 0) {
+            check(System.currentTimeMillis() < deadline) { "the node never held a broadcast" }
+            Thread.sleep(250)
+        }
+    }
+
+    private fun broadcastRequests(): JSONObject = JSONObject(request("GET", "/broadcasts/requests"))
 
     private fun request(
         method: String,

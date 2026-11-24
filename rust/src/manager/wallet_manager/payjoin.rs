@@ -33,6 +33,8 @@ use super::actor::WalletActor;
 
 mod config;
 mod status;
+#[cfg(debug_assertions)]
+mod ui_test_relay;
 
 pub(crate) use config::PayjoinConfig;
 pub(crate) use status::{PayjoinDeadline, unix_now_secs};

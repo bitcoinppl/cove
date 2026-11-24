@@ -12,12 +12,11 @@ use crate::{
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
-    transaction::{Amount, TxId, ffi::BitcoinTransaction},
-    wallet::Address,
+    transaction::{TxId, ffi::BitcoinTransaction},
 };
 
 use cove_macros::impl_default_for;
-use cove_types::{ConfirmDetails, WalletId, utxo::Utxo};
+use cove_types::{ConfirmDetails, WalletId, address::AddressWithNetwork, utxo::Utxo};
 use derive_more::From;
 use tracing::warn;
 
@@ -94,9 +93,19 @@ pub enum WalletSettingsRoute {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendRoute {
-    SetAmount { id: WalletId, address: Option<Arc<Address>>, amount: Option<Arc<Amount>> },
-    CoinControlSetAmount { id: WalletId, utxos: Vec<Utxo> },
-    HardwareExport { id: WalletId, details: Arc<ConfirmDetails> },
+    /// Enter a payment, starting from a scanned address or BIP 21 payment request if there is one
+    SetAmount {
+        id: WalletId,
+        request: Option<Arc<AddressWithNetwork>>,
+    },
+    CoinControlSetAmount {
+        id: WalletId,
+        utxos: Vec<Utxo>,
+    },
+    HardwareExport {
+        id: WalletId,
+        details: Arc<ConfirmDetails>,
+    },
     Confirm(SendRouteConfirmArgs),
 }
 
@@ -379,14 +388,13 @@ impl RouteFactory {
         Route::KeyTeleport(KeyTeleportRoute::Send)
     }
 
-    #[uniffi::method(default(address = None, amount = None))]
+    #[uniffi::method(default(request = None))]
     pub const fn send_set_amount(
         &self,
         id: WalletId,
-        address: Option<Arc<Address>>,
-        amount: Option<Arc<Amount>>,
+        request: Option<Arc<AddressWithNetwork>>,
     ) -> Route {
-        let send = SendRoute::SetAmount { id, address, amount };
+        let send = SendRoute::SetAmount { id, request };
 
         Route::Send(send)
     }

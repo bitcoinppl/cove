@@ -117,6 +117,13 @@ const fn one_block() -> u32 {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct FailBroadcastsRequest {
+    /// The error every later broadcast gets
+    message: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ResetRequest {
     /// Starts the new chain on this network instead of the one the node started on
     network: Option<Network>,
@@ -252,6 +259,27 @@ fn route(shared: &Shared, urls: &NodeUrls, request: &Request) -> Result<Value, A
         ("POST", ["mine"]) => mine(chain, body(&request.body)?),
         ("GET", ["broadcasts"]) => Ok(broadcasts(chain)),
         ("GET", ["outspend", txid, vout]) => outspend(chain, txid, vout),
+
+        ("GET", ["broadcasts", "requests"]) => {
+            let (count, held) = shared.control.broadcast_requests();
+            Ok(json!({ "count": count, "held": held }))
+        }
+
+        ("POST", ["broadcasts", "hold"]) => {
+            shared.control.hold_broadcasts();
+            Ok(json!({ "ok": true }))
+        }
+
+        ("POST", ["broadcasts", "release"]) => {
+            let held = shared.control.release_broadcasts();
+            Ok(json!({ "ok": true, "held": held }))
+        }
+
+        ("POST", ["broadcasts", "fail"]) => {
+            let request: FailBroadcastsRequest = body(&request.body)?;
+            shared.control.fail_broadcasts(request.message);
+            Ok(json!({ "ok": true }))
+        }
 
         (method, _) => Err(ApiError::not_found(format!("no route for {method} {}", request.path))),
     }
