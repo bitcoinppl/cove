@@ -3,14 +3,16 @@
 //!
 //! The frontend opens it from a transaction's details. It loads the rates a replacement can pay
 //! as the same fast, medium and slow options the send flow shows, each with its total fee, and
-//! on continue builds the replacement and pushes the send flow's confirm screen for a hot wallet
-//! or its hardware export screen for one whose keys live elsewhere
+//! on continue builds the replacement and hands the frontend the send flow's confirm route for a
+//! hot wallet, or its hardware export route for one whose keys live elsewhere
 
 use std::sync::Arc;
 
+use act_zero::call;
 use cove_types::{
     TxId,
     amount::Amount,
+    confirm::ConfirmDetails,
     fees::{
         FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
         FeeSpeed,
@@ -20,17 +22,18 @@ use parking_lot::Mutex;
 use tracing::{debug, warn};
 
 use crate::{
-    app::AppAction,
     fee_client::FEE_CLIENT,
     manager::{
-        deferred_dispatch::DeferredDispatch,
         send_flow_manager::alert_state::{FeeShare, FeeWarningLevel},
         wallet_manager::RustWalletManager,
     },
-    router::RouteFactory,
+    router::{Route, RouteFactory},
     transaction::{
         FeeRate,
-        fee_bump::{FeeBumpBlocker, FeeBumpError, INSUFFICIENT_FUNDS_MESSAGE},
+        fee_bump::{
+            FeeBumpBlocker, FeeBumpConfirmContext, FeeBumpError, INSUFFICIENT_FUNDS_MESSAGE,
+            ReplacementFunding,
+        },
     },
     wallet::metadata::WalletType,
 };
@@ -65,6 +68,13 @@ pub enum FeeBumpManagerReconcileMessage {
     /// The replacement's fee is high for the amount it sends, continuing needs
     /// [`FeeBumpManagerAction::AcknowledgeFeeWarning`] with this warning
     FeeWarning(FeeBumpFeeWarning),
+
+    /// The replacement is built, and the route confirms or exports it
+    ///
+    /// The screen pushes it itself once it has closed: a sheet still sliding away while a push
+    /// animates can leave the navigation stack out of step with the router, after which it shows
+    /// no later push
+    ReadyToConfirm(Route),
 }
 
 #[derive(Debug, Clone, uniffi::Enum)]
@@ -151,6 +161,87 @@ pub struct FeeBumpOptions {
     /// fee at each the wallet can pay. When it can pay none of them, the custom row holds the
     /// minimum rate instead
     pub fee_options: Arc<FeeRateOptionsWithTotalFee>,
+
+    /// Where the higher fee comes from, which the screens explain
+    pub payment: FeeBumpPayment,
+}
+
+/// Where a replacement's higher fee comes from
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum FeeBumpPayment {
+    /// The change pays it, so the recipient receives the same amount
+    FromChange,
+
+    /// The amount sent pays it, as a send with no change, such as a Max send, has nothing else
+    /// to take it from, so the recipient receives less by the extra fee
+    FromAmount {
+        /// What the pending transaction pays the recipient
+        original_amount: Arc<Amount>,
+
+        /// What the pending transaction pays in fees, which the replacement's total exceeds
+        original_fee: Arc<Amount>,
+    },
+}
+
+impl FeeBumpPayment {
+    fn new(funding: ReplacementFunding, original_fee: bitcoin::Amount) -> Self {
+        match funding {
+            ReplacementFunding::Change => Self::FromChange,
+            ReplacementFunding::Amount { sent } => Self::FromAmount {
+                original_amount: Arc::new(sent.into()),
+                original_fee: Arc::new(original_fee.into()),
+            },
+        }
+    }
+
+    /// How much less the recipient receives at `option`
+    ///
+    /// `None` when the change pays, or when the wallet can't pay `option`
+    pub fn amount_taken(&self, option: &FeeRateOptionWithTotalFee) -> Option<Amount> {
+        let Self::FromAmount { original_fee, .. } = self else { return None };
+        let total = option.total_fee?;
+
+        total.0.checked_sub(original_fee.0).map(Amount::from)
+    }
+
+    /// What the recipient receives at `option`
+    ///
+    /// `None` when the change pays, as the recipient then receives what the pending transaction
+    /// pays them, or when the wallet can't pay `option`
+    pub fn recipient_amount(&self, option: &FeeRateOptionWithTotalFee) -> Option<Amount> {
+        let Self::FromAmount { original_amount, .. } = self else { return None };
+        let taken = self.amount_taken(option)?;
+
+        original_amount.0.checked_sub(taken.0).map(Amount::from)
+    }
+}
+
+#[uniffi::export]
+impl FeeBumpPayment {
+    #[uniffi::method(name = "amountTaken")]
+    fn ffi_amount_taken(&self, option: Arc<FeeRateOptionWithTotalFee>) -> Option<Arc<Amount>> {
+        self.amount_taken(&option).map(Arc::new)
+    }
+
+    #[uniffi::method(name = "recipientAmount")]
+    fn ffi_recipient_amount(&self, option: Arc<FeeRateOptionWithTotalFee>) -> Option<Arc<Amount>> {
+        self.recipient_amount(&option).map(Arc::new)
+    }
+}
+
+/// Why a custom rate can't pay for the replacement
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
+#[uniffi::export(Display)]
+pub enum FeeBumpRateError {
+    /// With a message safe to show the user, which `Display` gives too
+    #[error("{0}")]
+    Unavailable(String),
+}
+
+impl From<FeeBumpError> for FeeBumpRateError {
+    fn from(error: FeeBumpError) -> Self {
+        Self::Unavailable(error.user_message())
+    }
 }
 
 /// Why the transaction can't be sped up
@@ -209,14 +300,47 @@ impl FeeBumpUnavailable {
     }
 }
 
+/// A fee bump's replacement once it was broadcast, which the Sped Up screen shows
+///
+/// The confirm screen shows it in place rather than pushing another route: a push made as the
+/// broadcast's wallet updates redraw the screens below can be dropped by the navigation stack,
+/// leaving the user on a confirm screen that already sent
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct FeeBumpBroadcast {
+    pub tx_id: Arc<TxId>,
+    pub fee: Arc<Amount>,
+    pub fee_rate: Arc<FeeRate>,
+}
+
+#[uniffi::export]
+impl FeeBumpBroadcast {
+    /// When the replacement should confirm, as "Estimated to confirm within 30 minutes", from
+    /// the current network rates, `None` while none are cached
+    #[uniffi::method]
+    pub fn confirmation_estimate(&self) -> Option<String> {
+        FEE_CLIENT.confirmation_estimate(*self.fee_rate)
+    }
+}
+
+/// The replacement `tx_id` the wallet broadcast, built from the confirm screen's `details`
+#[uniffi::export]
+pub fn fee_bump_broadcast(tx_id: Arc<TxId>, details: Arc<ConfirmDetails>) -> FeeBumpBroadcast {
+    FeeBumpBroadcast {
+        tx_id,
+        fee: Arc::new(details.fee_total),
+        fee_rate: Arc::new(details.fee_rate),
+    }
+}
+
 /// Where continue is, so a second tap can't build or push a second replacement
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ContinueState {
     Idle,
     Building,
 
-    /// The confirm screen was pushed, and stays the only one until this screen shows again
-    Pushed,
+    /// The confirm route went to the screen, and stays the only one until this screen shows
+    /// again
+    Ready,
 }
 
 #[derive(Debug)]
@@ -248,7 +372,7 @@ impl State {
 
 /// Where continue ended up once the replacement was built
 enum ContinueOutcome {
-    Pushed,
+    Ready(Route),
     NeedsAcknowledgement(FeeBumpFeeWarning),
 }
 
@@ -260,7 +384,7 @@ pub struct RustFeeBumpManager {
     reconciler: ReconcileChannel<Message>,
 }
 
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl RustWalletManager {
     /// A manager that speeds up the pending transaction `tx_id`, loading its options right away
     #[uniffi::method]
@@ -271,6 +395,27 @@ impl RustWalletManager {
         cove_tokio::task::spawn(async move { loader.load().await });
 
         manager
+    }
+
+    /// The pending payment the transaction in `details` replaces when it is a fee bump, with
+    /// the fee that one paid, for the confirm screen to show it as a replacement
+    ///
+    /// Works for every way a transaction reaches the confirm screen: one built here, signed on
+    /// a hardware wallet, or scanned back in. Ask before broadcasting and keep the answer,
+    /// since once the replacement is broadcast nothing is left for it to replace
+    #[uniffi::method]
+    pub async fn fee_bump_context(
+        &self,
+        details: Arc<ConfirmDetails>,
+    ) -> Option<FeeBumpConfirmContext> {
+        let tx = details.psbt.0.unsigned_tx.clone();
+        let fee = details.fee_total.0;
+
+        call!(self.actor.fee_bump_context(tx, fee))
+            .await
+            .inspect_err(|error| warn!("unable to check whether a send is a fee bump: {error}"))
+            .ok()
+            .flatten()
     }
 }
 
@@ -304,18 +449,22 @@ impl RustFeeBumpManager {
 
     /// A custom rate with the replacement's total fee at it
     ///
-    /// Fails with [`FeeBumpError::FeeRateTooLow`] below the rate a node would accept
+    /// Fails below the rate a node would accept, and above the rate the wallet can pay
     #[uniffi::method]
     pub async fn custom_fee_option(
         &self,
         fee_rate: Arc<FeeRate>,
-    ) -> Result<Arc<FeeRateOptionWithTotalFee>, FeeBumpError> {
+    ) -> Result<Arc<FeeRateOptionWithTotalFee>, FeeBumpRateError> {
         let fee_rate = *fee_rate;
         let Some(fee_options) = self.fee_options() else {
-            return Err(FeeBumpError::Build("the fee options are still loading".to_string()));
+            return Err(FeeBumpError::Build("the fee options are still loading".to_string()).into());
         };
 
-        let total_fee = self.wallet_manager.fee_bump_total_fee(self.txid, fee_rate).await?;
+        let total_fee =
+            self.wallet_manager.fee_bump_total_fee(self.txid, fee_rate).await.inspect_err(
+                |error| debug!("unable to price a fee bump at {fee_rate:?}: {error:?}"),
+            )?;
+
         let fee_speed = fee_options.calculate_custom_fee_speed(fee_rate.sat_per_vb());
         let option = FeeRateOptionWithTotalFee { fee_speed, fee_rate, total_fee: Some(total_fee) };
 
@@ -405,6 +554,7 @@ impl RustFeeBumpManager {
             original_fee_rate: Arc::new(target.original.fee_rate().into()),
             minimum_fee_rate: Arc::new(minimum),
             fee_options: Arc::new(fee_options),
+            payment: FeeBumpPayment::new(target.original.funding, target.original.fee),
         })
     }
 
@@ -447,7 +597,7 @@ impl RustFeeBumpManager {
 
     fn screen_appeared(&self) {
         let mut state = self.state.lock();
-        if state.continue_state == ContinueState::Pushed {
+        if state.continue_state == ContinueState::Ready {
             state.continue_state = ContinueState::Idle;
         }
     }
@@ -473,16 +623,18 @@ impl RustFeeBumpManager {
         };
 
         cove_tokio::task::spawn(async move {
-            let result = self.push_confirm_route(selected.fee_rate, acknowledged).await;
+            let result = self.confirm_route(selected.fee_rate, acknowledged).await;
 
             let continue_state = match &result {
-                Ok(ContinueOutcome::Pushed) => ContinueState::Pushed,
+                Ok(ContinueOutcome::Ready(_)) => ContinueState::Ready,
                 Ok(ContinueOutcome::NeedsAcknowledgement(_)) | Err(_) => ContinueState::Idle,
             };
             self.state.lock().continue_state = continue_state;
 
             let error = match result {
-                Ok(ContinueOutcome::Pushed) => return,
+                Ok(ContinueOutcome::Ready(route)) => {
+                    return self.reconciler.send_async(Message::ReadyToConfirm(route)).await;
+                }
                 // the user picked another rate while this one was building, so the warning is moot
                 Ok(ContinueOutcome::NeedsAcknowledgement(warning))
                     if !self.state.lock().is_selected(*warning.fee_rate) =>
@@ -510,10 +662,10 @@ impl RustFeeBumpManager {
         });
     }
 
-    /// Builds the replacement and sends the frontend to sign it, the way a new send would
+    /// Builds the replacement and picks the route that signs it, the way a new send would
     ///
     /// Stops short of signing when the replacement's fee needs a warning the user hasn't accepted
-    async fn push_confirm_route(
+    async fn confirm_route(
         &self,
         fee_rate: FeeRate,
         acknowledged: Option<FeeWarningLevel>,
@@ -546,10 +698,7 @@ impl RustFeeBumpManager {
             WalletType::WatchOnly => return Err(FeeBumpBlocker::WatchOnly.into()),
         };
 
-        let mut deferred = DeferredDispatch::<AppAction>::new();
-        deferred.queue(AppAction::PushRoute(route));
-
-        Ok(ContinueOutcome::Pushed)
+        Ok(ContinueOutcome::Ready(route))
     }
 }
 

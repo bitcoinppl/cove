@@ -1461,8 +1461,10 @@ mod tests {
             txid: TxId::preview_new(),
             sent_and_received: SentAndReceived::preview_new(),
             last_seen: 0,
+            first_seen: 0,
             fiat: None,
             labels: Default::default(),
+            pending_send: None,
         }))
     }
 

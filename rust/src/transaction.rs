@@ -1,10 +1,11 @@
 pub mod fee_bump;
 pub mod ffi;
 mod local_time;
+pub mod pending_send;
 pub mod transaction_details;
 pub mod unsigned_transaction;
 
-use std::{cmp::Ordering, sync::Arc};
+use std::{cmp::Ordering, collections::HashSet, sync::Arc};
 
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bdk_wallet::chain::{
@@ -16,6 +17,7 @@ use tracing::warn;
 use crate::{
     database::{Database, wallet_data::label::LabelsTable},
     fiat::FiatAmount,
+    transaction::pending_send::{PendingSendContext, PendingSendStatus},
 };
 
 pub type Amount = cove_types::amount::Amount;
@@ -56,8 +58,14 @@ pub struct UnconfirmedTransaction {
     pub txid: TxId,
     pub sent_and_received: SentAndReceived,
     pub last_seen: u64,
+
+    /// When the wallet first saw it, in unix seconds, which a replacement starts afresh
+    pub first_seen: u64,
     pub fiat: Option<FiatAmount>,
     pub labels: Labels,
+
+    /// How it is doing when this wallet sent it, `None` for a payment it received
+    pub pending_send: Option<PendingSendStatus>,
 }
 
 impl Transaction {
@@ -74,21 +82,31 @@ impl Transaction {
     pub(crate) fn all_from_wallet(
         bdk: &bdk_wallet::Wallet,
         labels: Option<&LabelsTable>,
+        pending_send: &PendingSendContext,
     ) -> Vec<Self> {
         let zero = Amount::ZERO;
 
-        let transaction_data = bdk
-            .transactions()
+        let canonical = bdk.transactions().collect::<Vec<_>>();
+        let canonical_txids = canonical.iter().map(|tx| tx.tx_node.txid).collect::<HashSet<_>>();
+
+        let transaction_data = canonical
+            .into_iter()
             .map(|tx| {
-                let sent_and_received = bdk.sent_and_received(&tx.tx_node.tx).into();
-                (tx, sent_and_received)
+                let sent_and_received: SentAndReceived =
+                    bdk.sent_and_received(&tx.tx_node.tx).into();
+
+                let status = pending_send.status(bdk, &tx, sent_and_received.direction, |txid| {
+                    canonical_txids.contains(&txid)
+                });
+
+                (tx, sent_and_received, status)
             })
             .collect::<Vec<_>>();
 
         let mut labels_by_txid = labels
             .map(|labels| {
                 labels
-                    .all_labels_for_txns(transaction_data.iter().map(|(tx, _)| tx.tx_node.txid))
+                    .all_labels_for_txns(transaction_data.iter().map(|(tx, ..)| tx.tx_node.txid))
                     .unwrap_or_else(|error| {
                         warn!("failed to batch load transaction labels: {error}");
                         Default::default()
@@ -98,9 +116,9 @@ impl Transaction {
 
         let mut transactions = transaction_data
             .into_iter()
-            .map(|(tx, sent_and_received)| {
+            .map(|(tx, sent_and_received, status)| {
                 let labels = labels_by_txid.remove(&tx.tx_node.txid).unwrap_or_default().into();
-                Self::new_with_labels(sent_and_received, tx, labels)
+                Self::new_with_labels(sent_and_received, tx, labels, pending_send, status)
             })
             .filter(|tx| tx.sent_and_received().amount() > zero)
             .collect::<Vec<Self>>();
@@ -109,23 +127,19 @@ impl Transaction {
         transactions
     }
 
+    /// Builds the row for `tx`, whose `pending_send` status comes from the same `context`
     pub(crate) fn new_with_labels(
         sent_and_received: SentAndReceived,
         tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
         labels: Labels,
-    ) -> Self {
-        Self::new_with_label_values(sent_and_received, tx, labels)
-    }
-
-    fn new_with_label_values(
-        sent_and_received: SentAndReceived,
-        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
-        labels: Labels,
+        context: &PendingSendContext,
+        pending_send: Option<PendingSendStatus>,
     ) -> Self {
         let txid = tx.tx_node.txid.into();
         let fiat_currency = Database::global().global_config.selected_fiat_currency();
 
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
+        let first_seen = context.since(&tx.chain_position);
 
         match tx.chain_position {
             BdkChainPosition::Unconfirmed { last_seen, .. } => {
@@ -133,8 +147,10 @@ impl Transaction {
                     txid,
                     sent_and_received,
                     last_seen: last_seen.unwrap_or_default(),
+                    first_seen,
                     fiat,
                     labels,
+                    pending_send,
                 };
 
                 Self::Unconfirmed(Arc::new(unconfirmed))

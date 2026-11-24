@@ -16,13 +16,16 @@ use crate::{
     manager::wallet_manager::actor::WalletActor,
     transaction::{
         TxId,
-        fee_bump::{FeeBumpBlocker, FeeBumpError, ReplaceableTransaction},
+        fee_bump::{
+            self, FeeBumpBlocker, FeeBumpConfirmContext, FeeBumpError, FeeBumpWallet,
+            ReplaceableTransaction, ReplacementFunding,
+        },
     },
-    wallet::metadata::WalletType,
 };
 
 /// A replacement's weight can change with the rate, when coin selection adds an input or drops
-/// the change output, so the minimum rate is searched for a few times before giving up
+/// the change output, or a shrunk output drops below dust, so the minimum rate is searched for
+/// a few times before giving up
 const MINIMUM_FEE_RATE_ATTEMPTS: usize = 4;
 
 /// A pending transaction that can be fee bumped, with the lowest rate a replacement can pay
@@ -79,83 +82,29 @@ impl WalletActor {
         Ok(psbt)
     }
 
-    /// The pending transaction `txid` if this wallet can replace it
-    fn replaceable_transaction(&self, txid: Txid) -> Result<ReplaceableTransaction, FeeBumpError> {
-        if !self.completed_initial_scan() {
-            return Err(FeeBumpError::InitialScanIncomplete);
-        }
-
-        let bdk = &self.wallet.bdk;
-        let graph = bdk.tx_graph();
-
-        // a transaction the graph holds but the canonical view drops lost to a double spend
-        let Some(canonical) = bdk.get_tx(txid) else {
-            return match graph.get_tx(txid) {
-                Some(_) => Err(FeeBumpBlocker::Replaced.into()),
-                None => Err(FeeBumpError::NotFound),
-            };
-        };
-
-        if canonical.chain_position.is_confirmed() {
-            return Err(FeeBumpBlocker::Confirmed.into());
-        }
-
-        let tx = canonical.tx_node.tx.as_ref();
-        let input_is_ours = |input: &bitcoin::TxIn| {
-            graph
-                .get_txout(input.previous_output)
-                .is_some_and(|prevout| bdk.is_mine(prevout.script_pubkey.clone()))
-        };
-
-        if !tx.input.iter().any(input_is_ours) {
-            return Err(FeeBumpBlocker::NotSentByWallet.into());
-        }
-
-        if self.metadata.read().wallet_type == WalletType::WatchOnly {
-            return Err(FeeBumpBlocker::WatchOnly.into());
-        }
-
-        if !tx.input.iter().all(input_is_ours) {
-            return Err(FeeBumpBlocker::ForeignInputs.into());
-        }
-
-        if !tx.is_explicitly_rbf() {
-            return Err(FeeBumpBlocker::NotReplaceable.into());
-        }
-
-        let external_outputs =
-            tx.output.iter().filter(|output| !bdk.is_mine(output.script_pubkey.clone())).count();
-
-        if external_outputs > 1 {
-            return Err(FeeBumpBlocker::MultipleRecipients.into());
-        }
-
-        if let Some(spender) = self.pending_spender_of_outputs(txid, tx) {
-            debug!("{txid} can't be fee bumped, pending {spender} spends from it");
-            return Err(FeeBumpBlocker::PendingDescendant.into());
-        }
-
-        let fee = bdk.calculate_fee(tx).map_err(|_| FeeBumpBlocker::UnknownFee)?;
-
-        Ok(ReplaceableTransaction { txid, fee, weight: tx.weight() })
+    /// The pending payment `tx` takes the place of when it is a fee bump of one
+    ///
+    /// Asked by the confirm screen for any transaction it signs or broadcasts, so a replacement
+    /// built here, signed on a hardware wallet or scanned back in shows as one alike
+    #[into_actor_result]
+    pub async fn fee_bump_context(
+        &mut self,
+        tx: BdkTransaction,
+        fee: bitcoin::Amount,
+    ) -> Option<FeeBumpConfirmContext> {
+        fee_bump::replaced_payment(&self.wallet.bdk, &tx, fee)
     }
 
-    /// A pending transaction in the wallet that spends one of `tx`'s outputs
-    ///
-    /// Replacing `tx` would drop it too, and BIP 125 would make the replacement pay its fee,
-    /// so the descendant is the one to speed up instead
-    fn pending_spender_of_outputs(&self, txid: Txid, tx: &BdkTransaction) -> Option<Txid> {
-        let graph = self.wallet.bdk.tx_graph();
+    /// The pending transaction `txid` if this wallet can replace it
+    fn replaceable_transaction(&self, txid: Txid) -> Result<ReplaceableTransaction, FeeBumpError> {
+        fee_bump::replaceable_transaction(&self.wallet.bdk, self.fee_bump_wallet(), txid)
+    }
 
-        (0..tx.output.len()).find_map(|vout| {
-            let outpoint = OutPoint { txid, vout: u32::try_from(vout).ok()? };
-
-            graph
-                .outspends(outpoint)
-                .iter()
-                .copied()
-                .find(|spender| self.wallet.bdk.get_tx(*spender).is_some())
-        })
+    pub(crate) fn fee_bump_wallet(&self) -> FeeBumpWallet {
+        FeeBumpWallet {
+            wallet_type: self.metadata.read().wallet_type,
+            completed_initial_scan: self.completed_initial_scan(),
+        }
     }
 
     /// The lowest rate a replacement can pay and still relay, see [`ReplaceableTransaction`]
@@ -215,24 +164,23 @@ impl WalletActor {
         Ok(psbt)
     }
 
-    /// Build a replacement that keeps the original's recipients and spends all of its inputs,
-    /// adding confirmed coins when its change can't cover the higher fee
+    /// Build a replacement that spends all of the original's inputs and pays the higher fee as
+    /// [`ReplacementFunding`] says
+    ///
+    /// From change, it keeps the original's recipients and adds confirmed coins when the change
+    /// can't cover the fee. From the amount, it spends only the original's inputs and drains them
+    /// to its one output's script, so that output pays the fee, and a shrink below dust fails as
+    /// [`FeeBumpError::InsufficientFunds`]
     fn build_replacement(
         &mut self,
         original: &ReplaceableTransaction,
         fee_rate: BdkFeeRate,
     ) -> Result<Psbt, FeeBumpError> {
-        let original_inputs = self
-            .wallet
-            .bdk
-            .get_tx(original.txid)
-            .ok_or(FeeBumpError::NotFound)?
-            .tx_node
-            .tx
-            .input
-            .iter()
-            .map(|input| input.previous_output)
-            .collect::<Vec<_>>();
+        let original_tx =
+            self.wallet.bdk.get_tx(original.txid).ok_or(FeeBumpError::NotFound)?.tx_node.tx;
+
+        let original_inputs =
+            original_tx.input.iter().map(|input| input.previous_output).collect::<Vec<_>>();
 
         // the original's inputs are spent already, so a lock on one only guards new spends
         let spend_policy = self.automatic_spend_policy()?.allowing(&original_inputs);
@@ -244,6 +192,17 @@ impl WalletActor {
         spend_policy.apply(&mut tx_builder);
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.fee_rate(fee_rate);
+
+        // BDK's shrink pattern: with the recipient removed, the original's inputs, which BDK
+        // already must spend, drain to its script after the fee
+        if let ReplacementFunding::Amount { .. } = original.funding
+            && let [recipient] = original_tx.output.as_slice()
+        {
+            tx_builder
+                .set_recipients(Vec::new())
+                .drain_to(recipient.script_pubkey.clone())
+                .manually_selected_only();
+        }
 
         Ok(tx_builder.finish()?)
     }
@@ -425,10 +384,13 @@ impl WalletActor {
 
         // only a fee bump of the same payment takes its label: a double spend from another
         // device can pay someone else entirely
-        let recipients = self.outside_scripts(replacement);
-        let graph = self.wallet.bdk.tx_graph();
+        let bdk = &self.wallet.bdk;
+        let recipients = fee_bump::outside_scripts(bdk, replacement);
+        let graph = bdk.tx_graph();
         let same_payment = replaced.iter().filter(|replaced| {
-            graph.get_tx(replaced.txid).is_some_and(|tx| self.outside_scripts(&tx) == recipients)
+            graph
+                .get_tx(replaced.txid)
+                .is_some_and(|tx| fee_bump::outside_scripts(bdk, &tx) == recipients)
         });
 
         // a payment sped up more than once leaves several originals, the latest one holds the
@@ -455,14 +417,5 @@ impl WalletActor {
                 label.origin,
             )
             .map_err(|error| error.to_string())
-    }
-
-    /// The scripts `tx` pays outside this wallet, which identify the payment it makes
-    fn outside_scripts(&self, tx: &BdkTransaction) -> BTreeSet<ScriptBuf> {
-        tx.output
-            .iter()
-            .map(|output| output.script_pubkey.clone())
-            .filter(|script| !self.wallet.bdk.is_mine(script.clone()))
-            .collect()
     }
 }

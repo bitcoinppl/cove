@@ -184,6 +184,18 @@ impl UnconfirmedTransaction {
         self.last_seen
     }
 
+    /// When the wallet first saw it, in unix seconds
+    #[uniffi::method]
+    pub const fn first_seen(&self) -> u64 {
+        self.first_seen
+    }
+
+    /// How it is doing when this wallet sent it, `None` for a payment it received
+    #[uniffi::method]
+    pub fn pending_send(&self) -> Option<PendingSendStatus> {
+        self.pending_send.clone()
+    }
+
     #[uniffi::method]
     pub const fn sent_and_received(&self) -> SentAndReceived {
         self.sent_and_received
@@ -264,8 +276,10 @@ fn transaction_preview_unconfirmed_new() -> Transaction {
         txid: TxId::preview_new(),
         sent_and_received: SentAndReceived::preview_new(),
         last_seen,
+        first_seen: last_seen,
         fiat: None,
         labels: Default::default(),
+        pending_send: None,
     }))
 }
 
