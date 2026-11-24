@@ -48,7 +48,7 @@ private val PayjoinFeeHelp.testTag: String
         }
 
 @get:StringRes
-private val PayjoinFeeHelp.title: Int
+private val PayjoinFeeHelp.titleRes: Int
     get() =
         when (this) {
             PayjoinFeeHelp.UP_TO_ONE_INPUT -> R.string.payjoin_settings_up_to_one_input
@@ -56,7 +56,7 @@ private val PayjoinFeeHelp.title: Int
         }
 
 @get:StringRes
-private val PayjoinFeeHelp.description: Int
+private val PayjoinFeeHelp.descriptionRes: Int
     get() =
         when (this) {
             PayjoinFeeHelp.UP_TO_ONE_INPUT -> R.string.payjoin_settings_up_to_one_input_description
@@ -138,11 +138,11 @@ private fun FeeHelpRow(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
-                text = stringResource(feeHelp.title),
+                text = stringResource(feeHelp.titleRes),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                text = stringResource(feeHelp.description),
+                text = stringResource(feeHelp.descriptionRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
