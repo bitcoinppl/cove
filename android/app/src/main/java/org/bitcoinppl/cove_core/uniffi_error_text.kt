@@ -26,6 +26,7 @@ fun Throwable.uniffiErrorText(): String? =
         is org.bitcoinppl.cove_core.DiagnosticsException -> message
         is org.bitcoinppl.cove_core.DiagnosticsReportsTableException -> toString()
         is org.bitcoinppl.cove_core.FeeBumpException -> message
+        is org.bitcoinppl.cove_core.FeeBumpRateException -> toString()
         is org.bitcoinppl.cove_core.FiatAmountException -> toString()
         is org.bitcoinppl.cove_core.FileHandlerException -> toString()
         is org.bitcoinppl.cove_core.FingerprintException -> toString()
