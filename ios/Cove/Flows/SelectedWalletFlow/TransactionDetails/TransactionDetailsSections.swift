@@ -57,6 +57,7 @@ struct TransactionSentDetailsSection: View {
     let manager: WalletManager
     let metadata: WalletMetadata
     let numberOfConfirmations: Int?
+    let pendingSend: PendingSendStatus?
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
     let showLockStateUpdatingIndicator: Bool
@@ -78,7 +79,15 @@ struct TransactionSentDetailsSection: View {
 
         SentTransactionStatus(transactionDetails: transactionDetails)
         TransactionDetailsAmount(transactionDetails: transactionDetails, metadata: metadata)
-        SentTransactionCapsule(isConfirmed: transactionDetails.isConfirmed())
+        SentTransactionCapsule(
+            isConfirmed: transactionDetails.isConfirmed(),
+            isDelayed: pendingSend?.isDelayed() ?? false
+        )
+
+        if let pendingSend {
+            FeeBumpDetailsEntry(transactionDetails: transactionDetails, pendingSend: pendingSend)
+        }
+
         TransactionConfirmationProgress(numberOfConfirmations: numberOfConfirmations)
 
         if metadata.detailsExpanded {
@@ -121,6 +130,7 @@ private struct TransactionDetailsHeader: View {
     let direction: TransactionDetailsDirection
 
     private var title: String {
+        if transactionDetails.isPendingFeeBump { return "Sped Up" }
         guard transactionDetails.isConfirmed() else { return "Transaction Pending" }
 
         return direction == .received ? "Transaction Received" : "Transaction Sent"
@@ -188,6 +198,15 @@ private struct SentTransactionStatus: View {
                 Text(transactionDetails.confirmationDateTime() ?? "Unknown")
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
+            } else if transactionDetails.isPendingFeeBump {
+                Text("Rebroadcast with a higher fee.")
+                    .foregroundColor(.secondary)
+
+                if let estimate = transactionDetails.confirmationEstimate() {
+                    Text(estimate)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                }
             } else {
                 Text("Your transaction is pending. ")
                     .foregroundColor(.secondary)
@@ -244,6 +263,7 @@ private struct ReceivedTransactionCapsule: View {
 
 private struct SentTransactionCapsule: View {
     let isConfirmed: Bool
+    let isDelayed: Bool
 
     var body: some View {
         Group {
@@ -252,6 +272,13 @@ private struct SentTransactionCapsule: View {
                     text: "Sent",
                     icon: "arrow.up.right",
                     color: .black,
+                    textColor: .white
+                )
+            } else if isDelayed {
+                TransactionCapsule(
+                    text: "Sending",
+                    icon: "clock",
+                    color: .orange,
                     textColor: .white
                 )
             } else {

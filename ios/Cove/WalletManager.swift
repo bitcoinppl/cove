@@ -402,6 +402,20 @@ enum WalletManagerPreview {
         try await withRustAsync { try await $0.newCoinControlManager() }
     }
 
+    /// A manager that speeds up the pending send `txId`, for the screen that opens it to own
+    func newFeeBumpManager(txId: TxId) throws -> FeeBumpManager {
+        let rust = try withRust { $0.newFeeBumpManager(txId: txId) }
+        return FeeBumpManager(rust, txId: txId)
+    }
+
+    /// The pending send the transaction in `details` replaces when it is a fee bump
+    ///
+    /// Ask before broadcasting, since afterwards nothing is left for it to replace
+    func feeBumpContext(details: ConfirmDetails) async -> FeeBumpConfirmContext? {
+        guard let rust else { return nil }
+        return await rust.feeBumpContext(details: details)
+    }
+
     func newSendFlowManager() throws -> RustSendFlowManager {
         try withRust { try $0.newSendFlowManager(balance: balance) }
     }

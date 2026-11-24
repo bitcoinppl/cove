@@ -24,6 +24,7 @@ struct SwipeToSendView: View {
 
     // args
     @Binding var sendState: SendState
+    var prompt: String = "Swipe to Send"
     let onConfirm: () -> Void
 
     // private
@@ -72,6 +73,7 @@ struct SwipeToSendView: View {
             )
 
             SwipeToSendPrompt(
+                prompt: prompt,
                 circleSize: circleSize,
                 fontColor: colorScheme == .dark ? .white : .midnightBtn,
                 fontOpacity: fontOpacity
@@ -126,6 +128,7 @@ private struct SwipeToSendBackground: View {
 }
 
 private struct SwipeToSendPrompt: View {
+    let prompt: String
     let circleSize: CGFloat
     let fontColor: Color
     let fontOpacity: Double
@@ -160,7 +163,7 @@ private struct SwipeToSendPrompt: View {
     }
 
     private var label: some View {
-        Text("Swipe to Send")
+        Text(prompt)
             .foregroundColor(fontColor)
             .fontWeight(.medium)
             .opacity(fontOpacity)
