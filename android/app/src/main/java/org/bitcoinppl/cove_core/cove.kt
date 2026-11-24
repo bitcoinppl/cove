@@ -36271,6 +36271,8 @@ data class FullWipeCompletion (
     ,
     var `fiatCurrency`: FiatCurrency
     ,
+    var `payjoinFeeHelp`: PayjoinFeeHelp
+    ,
     /**
      * Always empty, included so frontends replace their wallet list instead of re-reading it
      */
@@ -36294,6 +36296,7 @@ data class FullWipeCompletion (
         this.`colorScheme`,
         this.`selectedNode`,
         this.`fiatCurrency`,
+        this.`payjoinFeeHelp`,
         this.`wallets`,
         this.`auth`
     )
@@ -36314,6 +36317,7 @@ public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWip
             FfiConverterTypeColorSchemeSelection.read(buf),
             FfiConverterTypeNode.read(buf),
             FfiConverterTypeFiatCurrency.read(buf),
+            FfiConverterTypePayjoinFeeHelp.read(buf),
             FfiConverterSequenceTypeWalletMetadata.read(buf),
             FfiConverterTypeAuthSettings.read(buf),
         )
@@ -36326,6 +36330,7 @@ public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWip
             FfiConverterTypeColorSchemeSelection.allocationSize(value.`colorScheme`) +
             FfiConverterTypeNode.allocationSize(value.`selectedNode`) +
             FfiConverterTypeFiatCurrency.allocationSize(value.`fiatCurrency`) +
+            FfiConverterTypePayjoinFeeHelp.allocationSize(value.`payjoinFeeHelp`) +
             FfiConverterSequenceTypeWalletMetadata.allocationSize(value.`wallets`) +
             FfiConverterTypeAuthSettings.allocationSize(value.`auth`)
     )
@@ -36337,6 +36342,7 @@ public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWip
             FfiConverterTypeColorSchemeSelection.write(value.`colorScheme`, buf)
             FfiConverterTypeNode.write(value.`selectedNode`, buf)
             FfiConverterTypeFiatCurrency.write(value.`fiatCurrency`, buf)
+            FfiConverterTypePayjoinFeeHelp.write(value.`payjoinFeeHelp`, buf)
             FfiConverterSequenceTypeWalletMetadata.write(value.`wallets`, buf)
             FfiConverterTypeAuthSettings.write(value.`auth`, buf)
     }

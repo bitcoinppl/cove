@@ -19995,6 +19995,7 @@ public struct FullWipeCompletion {
     public var colorScheme: ColorSchemeSelection
     public var selectedNode: Node
     public var fiatCurrency: FiatCurrency
+    public var payjoinFeeHelp: PayjoinFeeHelp
     /**
      * Always empty, included so frontends replace their wallet list instead of re-reading it
      */
@@ -20009,7 +20010,7 @@ public struct FullWipeCompletion {
          */router: Router,
         /**
          * Whether the app must show onboarding, carried over from before the wipe
-         */needsOnboarding: Bool, selectedNetwork: Network, colorScheme: ColorSchemeSelection, selectedNode: Node, fiatCurrency: FiatCurrency,
+         */needsOnboarding: Bool, selectedNetwork: Network, colorScheme: ColorSchemeSelection, selectedNode: Node, fiatCurrency: FiatCurrency, payjoinFeeHelp: PayjoinFeeHelp,
         /**
          * Always empty, included so frontends replace their wallet list instead of re-reading it
          */wallets: [WalletMetadata], auth: AuthSettings) {
@@ -20019,6 +20020,7 @@ public struct FullWipeCompletion {
         self.colorScheme = colorScheme
         self.selectedNode = selectedNode
         self.fiatCurrency = fiatCurrency
+        self.payjoinFeeHelp = payjoinFeeHelp
         self.wallets = wallets
         self.auth = auth
     }
@@ -20045,6 +20047,7 @@ public struct FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer {
                 colorScheme: FfiConverterTypeColorSchemeSelection.read(from: &buf),
                 selectedNode: FfiConverterTypeNode.read(from: &buf),
                 fiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf),
+                payjoinFeeHelp: FfiConverterTypePayjoinFeeHelp.read(from: &buf),
                 wallets: FfiConverterSequenceTypeWalletMetadata.read(from: &buf),
                 auth: FfiConverterTypeAuthSettings.read(from: &buf)
         )
@@ -20057,6 +20060,7 @@ public struct FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer {
         FfiConverterTypeColorSchemeSelection.write(value.colorScheme, into: &buf)
         FfiConverterTypeNode.write(value.selectedNode, into: &buf)
         FfiConverterTypeFiatCurrency.write(value.fiatCurrency, into: &buf)
+        FfiConverterTypePayjoinFeeHelp.write(value.payjoinFeeHelp, into: &buf)
         FfiConverterSequenceTypeWalletMetadata.write(value.wallets, into: &buf)
         FfiConverterTypeAuthSettings.write(value.auth, into: &buf)
     }

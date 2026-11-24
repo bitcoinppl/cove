@@ -1247,6 +1247,10 @@ mod tests {
             .global_config
             .set_color_scheme(ColorSchemeSelection::Dark)
             .expect("color scheme is saved");
+        database
+            .global_config
+            .set_payjoin_fee_help(PayjoinFeeHelp::DontHelp)
+            .expect("Payjoin fee help is saved");
         FfiApp::global().reset_default_route_to(wallet_selection_loading_route(
             first.id.clone(),
             Some(Route::Settings(SettingsRoute::Main)),
@@ -1342,6 +1346,11 @@ mod tests {
             completion.color_scheme,
             ColorSchemeSelection::System,
             "the returned completion carries the reset color scheme"
+        );
+        assert_eq!(
+            completion.payjoin_fee_help,
+            PayjoinFeeHelp::UpToOneInput,
+            "the returned completion carries the reset Payjoin fee help"
         );
 
         assert_eq!(
