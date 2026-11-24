@@ -1,11 +1,11 @@
 //! Host ports for the UI test services, and the locks that keep two runs off one port block,
 //! device or build
 //!
-//! Each run takes a block of five ports on this machine: the fake node's control API, Esplora and
-//! Electrum at the block's base and the two ports after it, and the hardware signer's control API
-//! and TAPSIGNER bridge at base + 10 and base + 11. A run reserves the first free block from
-//! 39100 in steps of 100 with a lock it holds until its services stop, so iOS and Android runs on
-//! one machine each get their own node and signer. Runs from revisions before port blocks use
+//! Each run takes a block of six ports on this machine: the fake node's control API, Esplora and
+//! Electrum at the block's base and the two ports after it, and the hardware signer host's control
+//! API, TAPSIGNER bridge and Payjoin OHTTP relay at base + 10, base + 11 and base + 12. A run
+//! reserves the first free block from 39100 in steps of 100 with a lock it holds until its
+//! services stop, so iOS and Android runs on one machine each get their own node and signer. Runs from revisions before port blocks use
 //! 39000-39011 under `/tmp/cove-ui-tests.lock`, so no run here takes that block
 //!
 //! Android devices always see the 39000 block, which `adb reverse` maps to the run's block, so the
@@ -44,7 +44,7 @@ impl UiTestPorts {
     /// The block Android devices see, and the fixed ports of revisions before port blocks
     pub const DEVICE: Self = Self(39000);
 
-    // a block spans 12 ports, so blocks 100 apart never overlap
+    // a block spans 13 ports, so blocks 100 apart never overlap
     const STRIDE: u16 = 100;
     const BLOCKS: u16 = 20;
 
@@ -77,20 +77,24 @@ impl UiTestPorts {
         self.0 + 11
     }
 
+    pub const fn payjoin_relay(self) -> u16 {
+        self.0 + 12
+    }
+
     /// The fake node's ports: control, Esplora, Electrum
     pub const fn node(self) -> [u16; 3] {
         [self.control(), self.esplora(), self.electrum()]
     }
 
-    /// The hardware signer's ports: control, TAPSIGNER bridge
-    pub const fn signer(self) -> [u16; 2] {
-        [self.signer_control(), self.tapsigner_bridge()]
+    /// The hardware signer host's ports: control, TAPSIGNER bridge, Payjoin OHTTP relay
+    pub const fn signer(self) -> [u16; 3] {
+        [self.signer_control(), self.tapsigner_bridge(), self.payjoin_relay()]
     }
 
-    const fn all(self) -> [u16; 5] {
+    const fn all(self) -> [u16; 6] {
         let [control, esplora, electrum] = self.node();
-        let [signer_control, bridge] = self.signer();
-        [control, esplora, electrum, signer_control, bridge]
+        let [signer_control, bridge, payjoin_relay] = self.signer();
+        [control, esplora, electrum, signer_control, bridge, payjoin_relay]
     }
 
     fn lock_path(self) -> PathBuf {
@@ -128,7 +132,7 @@ impl PortReservation {
         Err(eyre!(
             "Every UI test port block from {} to {} is reserved or in use; are {} UI test runs already going?",
             first.base(),
-            last.base() + 11,
+            last.base() + 12,
             UiTestPorts::BLOCKS
         ))
     }

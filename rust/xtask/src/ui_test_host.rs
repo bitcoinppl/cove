@@ -21,11 +21,15 @@
 //!   one, changes it while the app runs. The `/tapsigner/...` routes start
 //!   the card emulator, set up or factory fresh, and inject dropped
 //!   sessions. The `/keyteleport/...` routes play the other phone in a
-//!   KeyTeleport transfer ([`key_teleport`])
+//!   KeyTeleport transfer ([`key_teleport`]), and the `/payjoin/...` routes
+//!   play the receiver of a Payjoin payment ([`payjoin`])
 //! - [`UiTestPorts::tapsigner_bridge`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
 //!   4-byte big-endian length, goes to Coinkite's `ecard.py` emulator, and the
 //!   card's response goes back the same way. Closing the connection is how a
 //!   dropped NFC session looks to the app
+//! - [`UiTestPorts::payjoin_relay`]: the OHTTP relay in front of a BIP 77
+//!   directory on this machine, which the app's debug-only
+//!   `COVE_UI_TEST_PAYJOIN_RELAY` seam sends Payjoin requests through
 
 use std::{
     io::{self, BufRead, BufReader, Read, Write},
@@ -59,6 +63,7 @@ use serde_json::{json, Value};
 mod card_emulator;
 mod export_frames;
 mod key_teleport;
+mod payjoin;
 
 use self::card_emulator::{CardKind, Cards};
 use crate::{
@@ -161,7 +166,9 @@ impl HardwareSignerGuard {
         let bridge = listen(ports.tapsigner_bridge())?;
 
         // logs named for the port block, so concurrent runs from one worktree keep their own
-        let state = Arc::new(SignerState::new(Cards::prepare(ports.base())?));
+        let cards = Cards::prepare(ports.base())?;
+        let payjoin = payjoin::PayjoinHost::start(ports)?;
+        let state = Arc::new(SignerState::new(cards).with_payjoin(payjoin));
 
         let signer =
             Arc::new(HardwareSigner { state: state.clone(), reversed: ReversedPorts::default() });
@@ -209,6 +216,8 @@ struct SignerState {
     // the next bridge session closes after this many exchanges
     drop_after: Mutex<Option<u32>>,
     key_teleport_receivers: key_teleport::Receivers,
+    // none in the card emulator's own tests, which serve no Payjoin routes
+    payjoin: Option<payjoin::PayjoinHost>,
 }
 
 impl SignerState {
@@ -217,7 +226,16 @@ impl SignerState {
             cards,
             drop_after: Mutex::new(None),
             key_teleport_receivers: key_teleport::Receivers::default(),
+            payjoin: None,
         }
+    }
+
+    fn with_payjoin(self, payjoin: payjoin::PayjoinHost) -> Self {
+        Self { payjoin: Some(payjoin), ..self }
+    }
+
+    fn payjoin(&self) -> Result<&payjoin::PayjoinHost> {
+        self.payjoin.as_ref().ok_or_else(|| eyre!("The Payjoin services aren't running"))
     }
 }
 
@@ -484,6 +502,11 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("POST", "/keyteleport/receive-response") => {
             state.key_teleport_receivers.receive_response(serde_json::from_slice(body)?)
         }
+        ("POST", "/payjoin/receiver") => {
+            state.payjoin()?.open_receiver(serde_json::from_slice(body)?)
+        }
+        ("POST", "/payjoin/original") => state.payjoin()?.wait_for_original(),
+        ("POST", "/payjoin/respond") => state.payjoin()?.respond(),
         _ => Err(eyre!("No route for {method} {path}")),
     }
 }
