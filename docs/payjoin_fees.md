@@ -44,10 +44,10 @@ without checking dust.
 
 The sender is built with `build_with_additional_fee(max, Some(change_index),
 fee_rate, false)`. With no offer it uses `build_with_additional_fee(0, None,
-fee_rate, true)`: a payment with change then sends a zero maximum, which
-reveals nothing extra with a single recipient, and a payment without change
-sends none. rust-payjoin rejects a proposal that takes more than the maximum,
-and a rejected or failed proposal broadcasts the original transaction.
+fee_rate, true)`: rust-payjoin drops a zero contribution, so the request names
+no maximum and no change output, with or without change. rust-payjoin rejects
+a proposal that takes more than the maximum, and a rejected or failed proposal
+broadcasts the original transaction.
 
 ## What the Confirm Screen Shows
 
@@ -68,5 +68,9 @@ BDK cannot compute a Payjoin transaction's fee, since it does not know the
 value of the receiver's input, so the wallet stores the fee of each Payjoin it
 broadcasts in `WalletData` under `payjoin_fees`, keyed by txid, and transaction
 details read the fee from there.
-A Payjoin whose session was cleaned up after a crash, before its broadcast was
-recorded, has no stored fee and shows the fee BDK computes.
+Only a proposal's fee is stored; BDK computes a fallback's, which spends only
+the wallet's coins. The fee is saved as the wallet records the broadcast, while
+the session record still holds the original it is worked out from. If that
+write fails, or a later send has to clean up a session whose broadcast the
+wallet never recorded because it couldn't save its state, the proposal has no
+stored fee and its details show none.

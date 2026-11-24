@@ -226,7 +226,7 @@ mod tests {
     /// recommendation does
     #[test]
     fn a_fractional_fee_rate_rounds_up() {
-        let fee_rate = BdkFeeRate::from_sat_per_kwu(375);
+        let fee_rate = BdkFeeRate::from_sat_per_kwu(376);
         let max = max_contribution(
             PayjoinFeeHelp::UpToOneInput,
             fee_rate,
@@ -234,8 +234,8 @@ mod tests {
             &change(100_000),
         );
 
-        // 1.5 sat/vB × 272 wu / 4 = 102 sats
-        assert_eq!(sats(max), Some(102));
+        // 376 sat/kwu × 272 wu = 102.272 sats
+        assert_eq!(sats(max), Some(103));
     }
 
     #[test]
