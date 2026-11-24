@@ -57,7 +57,7 @@ use crate::manager::cloud_backup_manager::verify::{
     CloudBackupUploadedDeepVerificationAutoSync, CloudBackupUploadedPasskeyWrapperRepair,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, PasskeyRequestAuthority, delay_before_new_passkey_auth,
+    PasskeyRequestAuthority, WalletRestoreOutcome, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_LABELS_WARNING_MESSAGE, CloudBackupCloudOnlyFetchOutcome,

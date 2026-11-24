@@ -15,11 +15,6 @@ pub(crate) use identity_set::{
 };
 pub(crate) use public::{PublicWalletIdentity, PublicWalletIdentityError};
 
-#[cfg(test)]
-pub(crate) mod test_support {
-    pub(crate) use super::identity_set::test_support::*;
-}
-
 use cove_device::keychain::KeychainError;
 
 use crate::{database, wallet::metadata::WalletId};
@@ -46,6 +41,23 @@ pub(crate) enum WalletIdentityError {
 
     #[error("xpub identity: {0}")]
     BackupXpub(#[source] PublicWalletIdentityError),
+}
+
+impl WalletIdentityError {
+    /// Whether the platform could not read a local wallet's keychain items at all, such as while
+    /// the device is locked, so the same read can succeed later
+    pub(crate) fn is_keychain_unavailable(&self) -> bool {
+        match self {
+            Self::ExistingWalletSecret { source, .. } => matches!(source, KeychainError::Read(_)),
+            Self::ExistingWalletPublicIdentity { source, .. } => {
+                matches!(source, PublicWalletIdentityError::Keychain(KeychainError::Read(_)))
+            }
+            Self::Database(_)
+            | Self::MissingExistingWalletPublicIdentity { .. }
+            | Self::BackupDescriptor(_)
+            | Self::BackupXpub(_) => false,
+        }
+    }
 }
 
 #[cfg(test)]

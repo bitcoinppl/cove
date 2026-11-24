@@ -24,8 +24,8 @@ use crate::manager::cloud_backup_manager::owner::delete_authorization::{
 use crate::manager::cloud_backup_manager::owner::inventory::RecordRead;
 use crate::manager::cloud_backup_manager::screen::CloudBackupUnreadableKind;
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup,
-    WalletBackupReadError, WalletBackupReader,
+    DownloadedWalletBackup, PasskeyRequestAuthority, WalletBackupLookup, WalletBackupReadError,
+    WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
@@ -42,7 +42,7 @@ impl CloudBackupPreparedWalletRestore {
     pub(crate) async fn restore_record(
         &self,
         record_id: &str,
-    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         let outcome = self
             .restore_downloaded_record(record_id)
             .await
@@ -55,20 +55,17 @@ impl CloudBackupPreparedWalletRestore {
     async fn restore_downloaded_record(
         &self,
         record_id: &str,
-    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         let wallet = self.reader.download(record_id).await?;
 
         // read after the download, so a local wallet deleted while it waited is not counted and
         // a wallet this run restored earlier is
-        let local_wallets =
-            crate::wallet_identity::collect_local_wallet_identities().map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
+        let local_wallets = crate::wallet_identity::collect_local_wallet_identities()?;
 
         let outcome = wallet.restore_cloud_only(&local_wallets)?;
 
         // the record is the restored wallet's own backup only under the backup's wallet id
-        if let CloudOnlyRestoreOutcome::Restored { wallet: restored, .. } = &outcome
+        if let WalletRestoreOutcome::Restored { wallet: restored, .. } = &outcome
             && restored.placement() == CloudRestorePlacement::BackupWalletId
         {
             self.record_restored_backup(&wallet);
@@ -120,7 +117,7 @@ impl CloudBackupPreparedRestoreAll {
     pub(crate) async fn restore_record(
         &self,
         record_id: &str,
-    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         if !self.ordered_queue.iter().any(|wallet| wallet.record_id == record_id) {
             return Err(CloudBackupError::Internal(
                 "restore all record is not in the prepared queue".into(),
@@ -275,7 +272,7 @@ impl RustCloudBackupManager {
         writes: &CloudBackupWriteClient,
         record_id: &str,
         authority: PasskeyRequestAuthority,
-    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
         let prepared = self.prepare_active_namespace_wallet_restore(writes, authority).await?;
         let result = prepared.restore_record(record_id).await;
         self.handle_cloud_only_restore_committed(&result);
@@ -291,19 +288,32 @@ impl RustCloudBackupManager {
     /// which the backup's record does not describe
     pub(crate) fn handle_cloud_only_restore_committed(
         &self,
-        result: &Result<CloudOnlyRestoreOutcome, CloudBackupError>,
+        result: &Result<WalletRestoreOutcome, CloudBackupError>,
     ) {
         match result {
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id, .. }) => {
-                self.handle_restored_wallet_needs_backup(wallet_id.clone());
+            Ok(WalletRestoreOutcome::SecretAdded { wallet, .. }) => {
+                self.handle_restored_wallet_needs_backup(wallet.id.clone());
             }
-            Ok(CloudOnlyRestoreOutcome::Restored { wallet, .. })
+            Ok(WalletRestoreOutcome::Restored { wallet, .. })
                 if wallet.placement() == CloudRestorePlacement::NewWalletId =>
             {
                 self.handle_restored_wallet_needs_backup(wallet.metadata().id.clone());
             }
             _ => {}
         }
+    }
+
+    /// A restore session over the current local wallets for a batch, queueing the upload of each
+    /// wallet it restores, or adds a secret to, as soon as that commits
+    ///
+    /// The batch may read the record from another namespace, or under an id the record doesn't
+    /// describe, so nothing else uploads such a wallet if the run's own upload fails
+    pub(crate) fn restore_session(&self) -> Result<WalletRestoreSession<'_>, CloudBackupError> {
+        let local_wallets = crate::wallet_identity::collect_local_wallet_identities()?;
+
+        Ok(WalletRestoreSession::new(local_wallets, |wallet_id| {
+            self.handle_restored_wallet_needs_backup(wallet_id.clone())
+        }))
     }
 
     /// Uses `authority` only when the local master key is missing

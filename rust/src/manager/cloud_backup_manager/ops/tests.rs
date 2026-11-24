@@ -47,7 +47,7 @@ use crate::manager::cloud_backup_manager::screen::{
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::PermitIntent;
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
+    NamespaceMatch, WalletRestoreOutcome, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome, NamespacePasskeyMatcher,
@@ -535,6 +535,8 @@ mod pending_upload;
 mod restore;
 mod restored_history;
 mod round_trip;
+mod seed_restore;
+mod source_delete;
 mod sync_health;
 mod ui_fixture;
 mod undecryptable_wallets;

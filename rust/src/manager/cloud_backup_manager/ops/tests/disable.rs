@@ -672,8 +672,7 @@ async fn backed_up_hot_wallet(
     namespace: &str,
     name: &str,
 ) -> WalletMetadata {
-    let mnemonic = Mnemonic::from_entropy(&rand::random::<[u8; 16]>()).unwrap();
-    backed_up_hot_wallet_with(manager, globals, namespace, name, mnemonic).await
+    backed_up_hot_wallet_with(manager, globals, namespace, name, random_mnemonic()).await
 }
 
 /// [`backed_up_hot_wallet`] for a wallet holding `mnemonic`
@@ -691,40 +690,6 @@ async fn backed_up_hot_wallet_with(
     globals
         .cloud
         .set_wallet_files(namespace.to_owned(), vec![wallet_filename_from_record_id(&record_id)]);
-
-    metadata
-}
-
-/// Saves a hot wallet named `name` holding `mnemonic` in the keychain, as this device's only
-/// wallet
-fn save_hot_wallet(name: &str, mnemonic: Mnemonic) -> WalletMetadata {
-    use crate::wallet_secret::WalletSecretExt as _;
-
-    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic);
-
-    let mut metadata = WalletMetadata::preview_new();
-    metadata.name = name.into();
-    metadata.wallet_type = WalletType::Hot;
-
-    let xpub = secret.xpub(metadata.network);
-    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
-    metadata.master_fingerprint =
-        Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(xpub.fingerprint())));
-
-    let keychain = Keychain::global();
-    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
-    keychain
-        .save_public_descriptor(
-            &metadata.id,
-            descriptors.external.extended_descriptor.clone(),
-            descriptors.internal.extended_descriptor,
-        )
-        .unwrap();
-    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
-    Database::global()
-        .wallets()
-        .save_all_wallets(metadata.network, metadata.wallet_mode, vec![metadata.clone()])
-        .unwrap();
 
     metadata
 }

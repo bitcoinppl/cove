@@ -12,7 +12,10 @@ use crate::{
         Wallet,
         fingerprint::Fingerprint,
         metadata::{WalletId, WalletMetadata, WalletMode},
-        secret_upgrade::{ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeSource},
+        secret_upgrade::{
+            ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeScope,
+            SecretUpgradeSource,
+        },
     },
     wallet_secret::WalletSecretExt as _,
 };
@@ -154,7 +157,14 @@ fn import_wallet_secret_with_default_name(
     let database = Database::global();
     let keychain = Keychain::global();
 
-    let upgrade = ExistingWalletSecretUpgrade::find(&database, keychain, &secret, network, mode)?;
+    let upgrade = ExistingWalletSecretUpgrade::find(
+        &database,
+        keychain,
+        &secret,
+        network,
+        mode,
+        SecretUpgradeScope::Import,
+    )?;
     let Some(upgrade) = upgrade else {
         return create_new_wallet(secret, network, mode, fingerprint, default_name, &database);
     };

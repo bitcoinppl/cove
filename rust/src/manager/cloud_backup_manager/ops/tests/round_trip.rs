@@ -155,7 +155,7 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
         )
         .await
         .unwrap();
-    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None, .. }));
+    assert!(matches!(outcome, WalletRestoreOutcome::Restored { labels_warning: None, .. }));
 
     let restored = Database::global()
         .wallets()
@@ -220,7 +220,7 @@ async fn a_wallet_restored_from_cloud_backup_counts_as_backed_up() {
         )
         .await
         .unwrap();
-    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { .. }));
+    assert!(matches!(outcome, WalletRestoreOutcome::Restored { .. }));
 
     let restored = Database::global()
         .wallets()

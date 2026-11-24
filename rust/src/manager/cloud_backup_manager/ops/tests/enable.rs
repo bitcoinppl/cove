@@ -598,6 +598,11 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
         ],
     );
 
+    // the merge's uploads reach the cloud only after the test says so, and the test holds the
+    // verifier pass and runs each one itself
+    globals.cloud.set_uploaded_wallets_pending_confirmation(true);
+    let verifier_pass =
+        crate::manager::cloud_backup_manager::pending::test_support::hold_verifier_pass().await;
     enable_cloud_backup_create_new(&manager).await.unwrap();
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
@@ -607,12 +612,31 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     );
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(3));
     assert!(globals.cloud.has_namespace(&second_namespace));
-    wait_for_test_condition(
-        Duration::from_secs(1),
-        "merged source namespace should be deleted after proof",
-        || !globals.cloud.has_namespace(&first_namespace),
-    )
-    .await;
+
+    // the cleanup proves the source by reading the active records back, which can read a file
+    // only staged on this device, so the source stays until the provider reports them uploaded
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while !call!(manager.supervisor.cleanup_idle_for_test()).await.expect("cleanup idle") {
+        assert!(tokio::time::Instant::now() < deadline, "cleanup should finish");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    assert!(globals.cloud.has_namespace(&first_namespace));
+    let state = Database::global().cloud_backup_state.get().unwrap();
+    let [pending] = state.pending_source_deletes() else {
+        panic!("expected the merged source pending deletion, found {state:?}");
+    };
+    assert_eq!(pending.source_namespace_id, first_namespace);
+    assert_eq!(replacement_record_ids(pending), vec![first_record_id.clone()]);
+    verifier_pass.verify_once(&manager).await;
+    assert!(globals.cloud.has_namespace(&first_namespace));
+
+    globals.cloud.set_uploaded_wallets_pending_confirmation(false);
+    verifier_pass.verify_once(&manager).await;
+    assert!(!globals.cloud.has_namespace(&first_namespace));
+
+    drop(verifier_pass);
+    wait_for_background_refreshes(&manager).await;
 
     let active_records =
         CloudStorage::global_explicit_client().list_wallet_backups(second_namespace).await.unwrap();

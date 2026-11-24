@@ -468,6 +468,69 @@ pub(crate) fn convert_cloud_secret(secret: &CloudWalletSecret) -> LocalWalletSec
     }
 }
 
+/// Whether the backup record `current` holds everything `source` does: its key material, its
+/// public keys and, when it has labels, the same labels
+///
+/// A matching record id alone proves nothing, since the current copy can be watch-only while the
+/// source holds the seed, watch other descriptors after an address type change, or hold none of
+/// the source's labels. Keys compare by what they are, so an extended private key stored in
+/// another network's form still matches
+pub(crate) fn backup_entry_holds(current: &WalletEntry, source: &WalletEntry) -> bool {
+    let holds_descriptors = match (&source.descriptors, &current.descriptors) {
+        (None, _) => true,
+        (Some(source), Some(current)) => {
+            source.external == current.external && source.internal == current.internal
+        }
+        (Some(_), None) => false,
+    };
+    let holds_xpub = source.xpub.is_none() || source.xpub == current.xpub;
+    let holds_labels = source.labels_count == 0
+        || (source.labels_hash.is_some() && source.labels_hash == current.labels_hash);
+
+    holds_key_material(&current.secret, &source.secret)
+        && holds_descriptors
+        && holds_xpub
+        && holds_labels
+}
+
+fn holds_key_material(current: &CloudWalletSecret, source: &CloudWalletSecret) -> bool {
+    match (source, current) {
+        (CloudWalletSecret::WatchOnly, _) => true,
+        (CloudWalletSecret::Mnemonic(source), CloudWalletSecret::Mnemonic(current)) => {
+            match (bip39::Mnemonic::from_str(source), bip39::Mnemonic::from_str(current)) {
+                (Ok(source), Ok(current)) => source == current,
+                _ => source == current,
+            }
+        }
+        (CloudWalletSecret::Xprv(source), CloudWalletSecret::Xprv(current)) => {
+            match (WalletXprv::parse(source.as_str()), WalletXprv::parse(current.as_str())) {
+                (Ok(source), Ok(current)) => same_extended_key(&source, &current),
+                _ => source == current,
+            }
+        }
+        (
+            CloudWalletSecret::TapSignerBackup(source),
+            CloudWalletSecret::TapSignerBackup(current),
+        ) => source == current,
+
+        // a descriptor secret is the wallet's own descriptor, which watch-only copies don't keep
+        (CloudWalletSecret::Descriptor(source), CloudWalletSecret::Descriptor(current)) => {
+            source == current
+        }
+        _ => false,
+    }
+}
+
+/// Whether two extended private keys are the same key, whichever network form each is stored in
+fn same_extended_key(source: &WalletXprv, current: &WalletXprv) -> bool {
+    let (source, current) = (source.to_xpriv(), current.to_xpriv());
+
+    source.private_key == current.private_key
+        && source.chain_code == current.chain_code
+        && source.depth == current.depth
+        && source.child_number == current.child_number
+}
+
 pub(crate) fn descriptor_pair_from_cloud(
     descriptors: &Option<DescriptorPair>,
 ) -> Option<LocalDescriptorPair> {
@@ -501,6 +564,71 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry_with_secret(secret: CloudWalletSecret) -> WalletEntry {
+        WalletEntry {
+            wallet_id: "wallet-1".into(),
+            secret,
+            metadata: serde_json::Value::Null,
+            descriptors: Some(DescriptorPair {
+                external: "wpkh(external)".into(),
+                internal: "wpkh(internal)".into(),
+            }),
+            xpub: None,
+            wallet_mode: WalletMode::Main,
+            labels_zstd_jsonl: None,
+            labels_count: 0,
+            labels_hash: None,
+            labels_uncompressed_size: None,
+            content_revision_hash: "revision".into(),
+            updated_at: 1,
+        }
+    }
+
+    #[test]
+    fn backup_entry_holds_compares_key_material_by_value() {
+        use bdk_wallet::bitcoin::NetworkKind;
+        use bdk_wallet::bitcoin::bip32::Xpriv;
+
+        let mainnet = Xpriv::new_master(NetworkKind::Main, &[9; 32]).unwrap();
+        let mut testnet = mainnet;
+        testnet.network = NetworkKind::Test;
+        let words = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+        let xprv = entry_with_secret(CloudWalletSecret::Xprv(mainnet.to_string()));
+        let tprv = entry_with_secret(CloudWalletSecret::Xprv(testnet.to_string()));
+        let seed = entry_with_secret(CloudWalletSecret::Mnemonic(words.into()));
+        let watch_only = entry_with_secret(CloudWalletSecret::WatchOnly);
+
+        // the same key in another network's form is the same key
+        assert!(backup_entry_holds(&tprv, &xprv));
+
+        // a watch-only copy never holds a seed, though a seed copy holds a watch-only one
+        assert!(!backup_entry_holds(&watch_only, &seed));
+        assert!(backup_entry_holds(&seed, &watch_only));
+    }
+
+    #[test]
+    fn backup_entry_holds_requires_the_same_descriptor_secret_and_labels() {
+        let descriptor = entry_with_secret(CloudWalletSecret::Descriptor("wpkh(a)".into()));
+        let other_descriptor = entry_with_secret(CloudWalletSecret::Descriptor("wpkh(b)".into()));
+        let watch_only = entry_with_secret(CloudWalletSecret::WatchOnly);
+
+        assert!(!backup_entry_holds(&watch_only, &descriptor));
+        assert!(!backup_entry_holds(&other_descriptor, &descriptor));
+        assert!(backup_entry_holds(&descriptor, &descriptor));
+
+        let labelled = |labels_hash: &str| {
+            let mut entry = entry_with_secret(CloudWalletSecret::WatchOnly);
+            entry.labels_count = 1;
+            entry.labels_hash = Some(labels_hash.into());
+            entry
+        };
+
+        assert!(!backup_entry_holds(&labelled("labels-b"), &labelled("labels-a")));
+        assert!(!backup_entry_holds(&watch_only, &labelled("labels-a")));
+        assert!(backup_entry_holds(&labelled("labels-a"), &labelled("labels-a")));
+    }
 
     #[test]
     fn hot_cloud_backup_derives_descriptors_when_both_mirrors_are_missing() {

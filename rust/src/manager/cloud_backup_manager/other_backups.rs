@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 
+use cove_cspp::backup_data::wallet_record_id;
 use cove_device::cloud_storage::CloudStorageClient;
+use cove_device::keychain::Keychain;
 use tracing::warn;
 
 use super::{
@@ -9,8 +11,9 @@ use super::{
     CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary,
     CloudBackupPasskeyHint, OtherBackupsOperation, RustCloudBackupManager, blocking_cloud_error,
 };
-use super::{CloudFolders, WrappedFolder, WrapperRead};
+use super::{CloudBackupStore, CloudFolders, WrappedFolder, WrapperRead};
 use crate::database::cloud_backup::CloudStorageIssue;
+use crate::wallet_identity::{collect_local_wallet_identities, local_wallets_hold_seed_of};
 
 impl RustCloudBackupManager {
     /// Applies the other-backups scan's state, for the scan started under `scope`, returning
@@ -46,7 +49,7 @@ impl RustCloudBackupManager {
         cloud: &CloudStorageClient,
     ) -> Result<CloudBackupOtherBackupsSummary, CloudBackupError> {
         let current_namespace = self.current_namespace_id()?;
-        let local_wallet_record_ids = self.expected_wallet_record_ids().await?;
+        let seeded_record_ids = seeded_local_record_ids()?;
         let backups =
             self.other_backups(cloud, &current_namespace, BlockingCloudStep::DetailRefresh).await?;
 
@@ -70,7 +73,7 @@ impl RustCloudBackupManager {
 
             let unrecovered_wallet_count = record_ids
                 .iter()
-                .filter(|record_id| !local_wallet_record_ids.contains(*record_id))
+                .filter(|record_id| !seeded_record_ids.contains(*record_id))
                 .count() as u32;
             if unrecovered_wallet_count == 0 {
                 continue;
@@ -153,4 +156,37 @@ impl RustCloudBackupManager {
             other_backups_operation,
         ));
     }
+}
+
+/// Record ids of the local wallets whose seed a local hot wallet holds
+///
+/// The summary reads no record before the passkey opens a folder, so it judges a folder by its
+/// record ids alone. A record under one of these ids can add nothing the device lacks, so a folder
+/// listing only these is hidden. A watch-only, cold or hardware wallet, or a hot wallet whose
+/// secret is gone, may find its seed in another folder, so its id still offers that folder. A
+/// failed read leaves the wallet out, which offers a folder rather than hiding a seed
+fn seeded_local_record_ids() -> Result<HashSet<String>, CloudBackupError> {
+    let wallets = CloudBackupStore::global().all_wallets()?;
+    let identities = match collect_local_wallet_identities() {
+        Ok(identities) => identities,
+        Err(error) => {
+            warn!("Other Backups could not read the local wallet identities: {error}");
+            return Ok(HashSet::new());
+        }
+    };
+
+    let keychain = Keychain::global();
+    let seeded = wallets
+        .into_iter()
+        .filter(|metadata| {
+            local_wallets_hold_seed_of(&identities, metadata, keychain).unwrap_or_else(|error| {
+                let id = &metadata.id;
+                warn!("Other Backups could not tell whether wallet {id} holds its seed: {error}");
+                false
+            })
+        })
+        .map(|metadata| wallet_record_id(metadata.id.as_ref()))
+        .collect();
+
+    Ok(seeded)
 }

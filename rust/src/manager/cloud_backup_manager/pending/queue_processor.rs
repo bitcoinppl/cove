@@ -2,7 +2,8 @@
 //!
 //! Uploaded blobs are not trusted until a later cloud read confirms that the
 //! expected revision is visible remotely. Authorization failures pause this
-//! verifier without rewriting the persisted blob state
+//! verifier without rewriting the persisted blob state. Each pass ends by
+//! settling the pending source deletes whose replacements it may have confirmed
 
 use act_zero::call;
 use cove_cspp::backup_data::EncryptedWalletBackup;
@@ -13,6 +14,7 @@ use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use super::MASTER_KEY_UPLOAD_CONFIRMATION_GRACE;
+use super::source_deletes::PendingSourceDeletes;
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudBlobConfirmedState, CloudBlobDirtyState, CloudBlobFailedState,
@@ -149,6 +151,12 @@ impl PendingUploadVerifier {
             }
         }
 
+        // after this pass's confirmations, so a source whose replacements just confirmed is
+        // deleted in the same pass
+        if !blocked_on_authorization {
+            PendingSourceDeletes(&self.0).settle().await;
+        }
+
         let has_pending = self.0.has_pending_cloud_upload_verification();
         self.send_pending_state(blocked_on_authorization, has_pending);
         self.0.refresh_sync_health();
@@ -241,8 +249,12 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         let cloud = CloudStorage::global_silent_client();
+
+        // a legacy copy counts only when nothing is at the written location, so it never vouches
+        // for a new upload still staged there, and a wrapper Verify read only at the legacy
+        // location still confirms
         match cloud
-            .is_backup_uploaded(
+            .is_current_backup_uploaded(
                 namespace_id.to_string(),
                 cove_cspp::backup_data::MASTER_KEY_RECORD_ID.to_string(),
             )
@@ -286,8 +298,14 @@ impl PendingUploadVerifier {
         current: &CloudBlobUploadedPendingConfirmationState,
     ) -> BlobCheckResult {
         let cloud = CloudStorage::global_silent_client();
+
+        // this device wrote the record to its upload location, so a legacy copy proves nothing,
+        // and a missing written copy uploads again rather than being judged by a legacy one
         match cloud
-            .is_backup_uploaded(sync_state.namespace_id.clone(), sync_state.record_id().to_string())
+            .is_written_backup_uploaded(
+                sync_state.namespace_id.clone(),
+                sync_state.record_id().to_string(),
+            )
             .await
         {
             Ok(CloudBackupUploadStatus::Uploaded) => info!(

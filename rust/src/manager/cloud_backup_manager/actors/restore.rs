@@ -20,7 +20,7 @@ use crate::manager::cloud_backup_manager::ops::{
 use crate::manager::cloud_backup_manager::wallets::{
     DownloadedWalletBackup, NamespaceMatch, NamespaceMatchOutcome, NamespaceMatchSnapshotOutcome,
     NamespacePasskeyMatcher, PasskeyRequestAuthority, Unopened, UnopenedReason, WalletBackupLookup,
-    WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
+    WalletBackupReader, WalletRestoreOutcome,
 };
 
 use crate::manager::cloud_backup_manager::{
@@ -350,7 +350,8 @@ impl RestoreOperation {
                 &mut report,
             )
             .await?;
-        let applied = self.apply_downloaded_wallets(&downloaded_wallets, &mut report).await?;
+        let applied =
+            self.apply_downloaded_wallets(manager, &downloaded_wallets, &mut report).await?;
 
         if matches!(applied.resolution, RestoreResolution::Nothing) && report.wallets_failed > 0 {
             self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
@@ -508,14 +509,11 @@ impl RestoreOperation {
     /// Restore the downloaded wallets locally and say which namespace, if any, proved usable
     async fn apply_downloaded_wallets(
         &self,
+        manager: &RustCloudBackupManager,
         downloaded_wallets: &[(usize, DownloadedWalletRecord)],
         report: &mut CloudBackupRestoreReport,
     ) -> Result<RestoreApplication, CloudBackupError> {
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
-        let mut restore_session = WalletRestoreSession::new(existing_identities);
+        let mut restore_session = manager.restore_session()?;
         let restore_total = downloaded_wallets.len() as u32;
         let mut resolution = RestoreResolution::Nothing;
         // download failures already counted here have no local category of their own
@@ -535,8 +533,10 @@ impl RestoreOperation {
             downloaded_wallets.iter().enumerate()
         {
             self.ensure_current().await?;
-            match restore_session.restore_downloaded(wallet) {
-                Ok(WalletRestoreOutcome::Restored { labels_warning, .. }) => {
+            match restore_session.restore(wallet) {
+                // activation marks every local wallet dirty, so an upgraded wallet uploads too
+                Ok(WalletRestoreOutcome::Restored { labels_warning, .. })
+                | Ok(WalletRestoreOutcome::SecretAdded { labels_warning, .. }) => {
                     resolution = resolution.restored(*namespace_index);
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {
@@ -546,7 +546,7 @@ impl RestoreOperation {
                             .push(CLOUD_BACKUP_LABELS_WARNING_MESSAGE.into());
                     }
                 }
-                Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+                Ok(WalletRestoreOutcome::AlreadyOnDevice { .. }) => {
                     resolution = resolution.skipped_duplicate(*namespace_index);
                 }
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),

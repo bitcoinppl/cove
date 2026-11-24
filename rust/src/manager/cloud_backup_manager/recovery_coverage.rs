@@ -330,6 +330,7 @@ mod tests {
             pending_verification_completion: None,
             pending_restore_all: None,
             heal_notice: None,
+            pending_source_deletes: Vec::new(),
         })
     }
 

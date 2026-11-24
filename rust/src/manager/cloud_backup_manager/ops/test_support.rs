@@ -1930,6 +1930,21 @@ pub(crate) fn enable_cloud_backup_without_reset(
     block_on_supervisor_checkpoint(manager);
 }
 
+/// Puts the configured namespace's master key wrapper in the mock cloud, as every real backup
+/// holds one, for tests whose code requires the provider to report it uploaded
+pub(crate) fn upload_active_master_key_wrapper(globals: &TestGlobals) {
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .expect("a configured backup has a local master key");
+    let encrypted =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+
+    globals
+        .cloud
+        .set_master_key_backup(master_key.namespace_id(), serde_json::to_vec(&encrypted).unwrap());
+}
+
 /// Blocks sync test code until the supervisor handled every message sent before this call
 pub(crate) fn block_on_supervisor_checkpoint(manager: &RustCloudBackupManager) {
     let supervisor = manager.supervisor.clone();
@@ -2020,13 +2035,24 @@ pub(crate) async fn finish_operation_for_test(
         .expect("complete exclusive operation");
 }
 
+/// The active records `pending` waits on, in the order it lists them
+pub(crate) fn replacement_record_ids(
+    pending: &crate::database::cloud_backup::PersistedPendingSourceDelete,
+) -> Vec<String> {
+    pending
+        .replacements
+        .iter()
+        .map(|replacement| replacement.replacement_record_id.clone())
+        .collect()
+}
+
 /// Backs up wallets through a background write ticket, the way the upload worker does
 pub(crate) async fn backup_wallets_for_test(
     manager: &RustCloudBackupManager,
     wallets: &[crate::wallet::metadata::WalletMetadata],
 ) -> Result<(), CloudBackupError> {
     let writes = manager.background_writes().await?;
-    manager.do_backup_wallets(&writes, wallets).await
+    manager.do_backup_wallets(&writes, wallets).await.map(|_| ())
 }
 
 pub(crate) fn persisted_enabled_cloud_backup_state(
@@ -2042,6 +2068,7 @@ pub(crate) fn persisted_enabled_cloud_backup_state(
         pending_verification_completion: None,
         pending_restore_all: None,
         heal_notice: None,
+        pending_source_deletes: Vec::new(),
     })
 }
 
@@ -2058,6 +2085,7 @@ pub(crate) fn persisted_passkey_missing_cloud_backup_state(
         pending_verification_completion: None,
         pending_restore_all: None,
         heal_notice: None,
+        pending_source_deletes: Vec::new(),
     })
 }
 
@@ -2514,4 +2542,43 @@ pub(crate) fn tap(intent: PermitIntent) -> PermitTicket {
 /// A live permit for driving one passkey-presenting step by hand
 pub(crate) fn permit(intent: PermitIntent) -> PasskeyRequestAuthority {
     authority_test_support::live_permit(intent)
+}
+
+/// Saves a hot wallet named `name` holding `mnemonic` in the keychain, as this device's only
+/// wallet
+pub(crate) fn save_hot_wallet(name: &str, mnemonic: Mnemonic) -> WalletMetadata {
+    use crate::wallet_secret::WalletSecretExt as _;
+
+    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic);
+
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.name = name.into();
+    metadata.wallet_type = WalletType::Hot;
+
+    let xpub = secret.xpub(metadata.network);
+    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
+    metadata.master_fingerprint =
+        Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(xpub.fingerprint())));
+
+    let keychain = Keychain::global();
+    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+    keychain
+        .save_public_descriptor(
+            &metadata.id,
+            descriptors.external.extended_descriptor.clone(),
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
+    Database::global()
+        .wallets()
+        .save_all_wallets(metadata.network, metadata.wallet_mode, vec![metadata.clone()])
+        .unwrap();
+
+    metadata
+}
+
+/// A fresh 12-word mnemonic
+pub(crate) fn random_mnemonic() -> Mnemonic {
+    Mnemonic::from_entropy(&rand::random::<[u8; 16]>()).unwrap()
 }

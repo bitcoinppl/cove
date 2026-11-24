@@ -243,33 +243,35 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         record_id: String,
         listing_generation: u64,
-        result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
+        result: Result<WalletRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
         let (outcome, committed_local_wallet) = match result {
-            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning, .. }) => (
+            Ok(WalletRestoreOutcome::Restored { labels_warning, .. }) => (
                 CloudBackupCloudOnlyWalletOutcome::Restored {
                     record_id,
                     warning: labels_warning.map(cloud_only_restore_warning),
                 },
                 true,
             ),
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { covered_by, .. }) => (
+            Ok(WalletRestoreOutcome::SecretAdded { covered_by, labels_warning, .. }) => (
                 CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                     record_id,
                     covered_by,
                     listing_generation,
+                    warning: labels_warning.map(cloud_only_restore_warning),
                 },
                 true,
             ),
-            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice { covered_by }) => (
+            Ok(WalletRestoreOutcome::AlreadyOnDevice { covered_by }) => (
                 CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                     record_id,
                     covered_by,
                     listing_generation,
+                    warning: None,
                 },
                 false,
             ),

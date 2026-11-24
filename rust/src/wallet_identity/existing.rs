@@ -35,14 +35,28 @@ pub(crate) fn collect_local_wallet_identities() -> Result<LocalWalletIdentities,
             let wallets = db.wallets.get_all(network, mode)?;
 
             for wallet in wallets {
-                let covering = CoveringWallet { id: wallet.id.clone(), name: wallet.name.clone() };
-                let duplicate_key = existing_wallet_identity_key(wallet, keychain)?;
-                identities.insert(covering, duplicate_key);
+                identities.insert_wallet(wallet, keychain)?;
             }
         }
     }
 
     Ok(identities)
+}
+
+impl LocalWalletIdentities {
+    /// Adds the identity of the stored wallet `wallet`, read the way every local wallet's is, so
+    /// a wallet a restore just wrote covers exactly what it holds
+    pub(crate) fn insert_wallet(
+        &mut self,
+        wallet: WalletMetadata,
+        keychain: &Keychain,
+    ) -> Result<(), WalletIdentityError> {
+        let covering = CoveringWallet { id: wallet.id.clone(), name: wallet.name.clone() };
+        let key = existing_wallet_identity_key(wallet, keychain)?;
+        self.insert(covering, key);
+
+        Ok(())
+    }
 }
 
 /// Whether a local wallet holds the seed a backup of `metadata`'s wallet could hold

@@ -297,58 +297,62 @@ impl LabelsTable {
         self.insert_records(records_to_insert)
     }
 
-    fn prepare_imported_label(&self, label: Label) -> Result<ImportedLabelAction, Error> {
-        let Label::Output(output) = label else {
-            if has_non_empty_label(label.label()) {
-                return Ok(ImportedLabelAction::Insert(label));
+    /// Imports only the labels for items this wallet has no record of, so a label or output
+    /// lock set on this device is never replaced by another copy's
+    ///
+    /// Each record is checked inside the write that inserts it, so a label or lock the user
+    /// saves meanwhile is never overwritten
+    pub fn insert_missing_imported_labels(&self, parsed: ParsedLabels) -> Result<(), Error> {
+        let timestamps = Timestamps::now();
+        let _persistence = self.begin_persistence()?;
+        let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        for label in parsed.labels.into_vec() {
+            if Self::has_record_for(&label, &write_txn)? {
+                continue;
             }
 
-            return Ok(ImportedLabelAction::Ignore);
-        };
+            // with no local record there is nothing to merge the imported label with
+            if let ImportedLabelAction::Insert(label) = imported_label_action(label, None) {
+                self.insert_label_with_write_txn(label, timestamps, &write_txn)?;
+            }
+        }
 
-        self.prepare_imported_output_label(output)
+        write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
+
+        Ok(())
     }
 
-    fn prepare_imported_output_label(
-        &self,
-        mut output: OutputRecord,
-    ) -> Result<ImportedLabelAction, Error> {
-        let current = self.get_output_record(output.ref_)?;
-
-        if has_non_empty_label(output.label.as_deref()) {
-            if output.spendable.is_none()
-                && let Some(current) = current
-            {
-                output.spendable = current.item.spendable;
+    /// Whether this wallet holds a record for the item `label` describes; a label type this
+    /// table never stores counts as held, so it is never imported
+    fn has_record_for(label: &Label, write_txn: &redb::WriteTransaction) -> Result<bool, Error> {
+        let held = match label {
+            Label::Transaction(txn) => {
+                let key: TxId = txn.ref_.into();
+                write_txn.open_table(TXN_TABLE)?.get(key)?.is_some()
             }
-
-            return Ok(ImportedLabelAction::Insert(Label::Output(output)));
-        }
-
-        let Some(spendable) = output.spendable else {
-            return Ok(ImportedLabelAction::Ignore);
+            Label::Address(address) => {
+                write_txn.open_table(ADDRESS_TABLE)?.get(&address.ref_)?.is_some()
+            }
+            Label::Output(output) => {
+                write_txn.open_table(OUTPUT_TABLE)?.get(OutPointKey::from(&output.ref_))?.is_some()
+            }
+            Label::Input(input) => {
+                write_txn.open_table(INPUT_TABLE)?.get(OutPointKey::from(&input.ref_))?.is_some()
+            }
+            _ => true,
         };
 
-        if !spendable {
-            if let Some(current) = current {
-                output.label = current.item.label;
-            }
-            output.spendable = Some(false);
+        Ok(held)
+    }
 
-            return Ok(ImportedLabelAction::Insert(Label::Output(output)));
-        }
-
-        let Some(mut current) = current else {
-            return Ok(ImportedLabelAction::Ignore);
+    fn prepare_imported_label(&self, label: Label) -> Result<ImportedLabelAction, Error> {
+        let current_output = match &label {
+            Label::Output(output) => self.get_output_record(output.ref_)?,
+            _ => None,
         };
 
-        if current.item.spendable == Some(false) {
-            current.item.spendable = Some(true);
-
-            return Ok(ImportedLabelAction::Insert(Label::Output(current.item)));
-        }
-
-        Ok(ImportedLabelAction::Ignore)
+        Ok(imported_label_action(label, current_output))
     }
 
     pub fn insert_labels_with_timestamps(
@@ -649,6 +653,62 @@ pub(crate) mod test_support {
     }
 }
 
+/// What importing `label` writes, given the output record already stored for it, if any
+fn imported_label_action(
+    label: Label,
+    current_output: Option<Record<OutputRecord>>,
+) -> ImportedLabelAction {
+    let Label::Output(output) = label else {
+        if has_non_empty_label(label.label()) {
+            return ImportedLabelAction::Insert(label);
+        }
+
+        return ImportedLabelAction::Ignore;
+    };
+
+    imported_output_action(output, current_output)
+}
+
+fn imported_output_action(
+    mut output: OutputRecord,
+    current: Option<Record<OutputRecord>>,
+) -> ImportedLabelAction {
+    if has_non_empty_label(output.label.as_deref()) {
+        if output.spendable.is_none()
+            && let Some(current) = current
+        {
+            output.spendable = current.item.spendable;
+        }
+
+        return ImportedLabelAction::Insert(Label::Output(output));
+    }
+
+    let Some(spendable) = output.spendable else {
+        return ImportedLabelAction::Ignore;
+    };
+
+    if !spendable {
+        if let Some(current) = current {
+            output.label = current.item.label;
+        }
+        output.spendable = Some(false);
+
+        return ImportedLabelAction::Insert(Label::Output(output));
+    }
+
+    let Some(mut current) = current else {
+        return ImportedLabelAction::Ignore;
+    };
+
+    if current.item.spendable == Some(false) {
+        current.item.spendable = Some(true);
+
+        return ImportedLabelAction::Insert(Label::Output(current.item));
+    }
+
+    ImportedLabelAction::Ignore
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr as _;
@@ -790,6 +850,49 @@ mod tests {
 
         assert_eq!(record.item.label, Some("renamed".to_string()));
         assert_eq!(record.item.spendable, Some(false));
+    }
+
+    #[test]
+    fn missing_only_import_keeps_local_labels_and_locks() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let txid = "d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290";
+        let new_txid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let existing = format!(
+            "{}\n{}",
+            r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","spendable":false}"#,
+            format_args!(r#"{{"type":"tx","ref":"{txid}","label":"edited here"}}"#),
+        );
+        let imported = [
+            r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"older","spendable":true}"#.to_string(),
+            format!(r#"{{"type":"tx","ref":"{txid}","label":"older"}}"#),
+            format!(r#"{{"type":"tx","ref":"{new_txid}","label":"only in the backup"}}"#),
+        ]
+        .join("\n");
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(&existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
+        db.insert_missing_imported_labels(
+            Labels::try_from_str_with_metadata(&imported).expect("failed to parse imported labels"),
+        )
+        .expect("failed to insert imported labels");
+
+        let output = db.get_output_record(outpoint).unwrap().expect("missing output record");
+        assert_eq!((output.item.label, output.item.spendable), (None, Some(false)));
+
+        let label_of = |txid: &str| {
+            let txid: bitcoin::Txid = txid.parse().unwrap();
+            db.get_txn_label_record(txid).unwrap().and_then(|record| record.item.label)
+        };
+        assert_eq!(label_of(txid).as_deref(), Some("edited here"));
+        assert_eq!(label_of(new_txid).as_deref(), Some("only in the backup"));
     }
 
     #[test]

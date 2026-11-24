@@ -163,6 +163,11 @@ impl PersistedCloudBackupState {
         self.configured().and_then(|configured| configured.pending_restore_all.as_ref())
     }
 
+    /// Source namespaces waiting for the provider to report their replacements uploaded
+    pub fn pending_source_deletes(&self) -> &[PersistedPendingSourceDelete] {
+        self.configured().map_or(&[], |configured| configured.pending_source_deletes.as_slice())
+    }
+
     pub(crate) fn drive_account_switch(&self) -> Option<&PersistedDriveAccountSwitch> {
         match self {
             Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
@@ -231,6 +236,7 @@ impl PersistedCloudBackupState {
             pending_verification_completion: None,
             pending_restore_all: None,
             heal_notice: None,
+            pending_source_deletes: Vec::new(),
         })
     }
 
@@ -248,6 +254,7 @@ impl PersistedCloudBackupState {
             pending_verification_completion: None,
             pending_restore_all: None,
             heal_notice: None,
+            pending_source_deletes: Vec::new(),
         })
     }
 
@@ -381,6 +388,27 @@ impl PersistedCloudBackupState {
         configured.pending_restore_all.take().is_some()
     }
 
+    /// Records `pending` in place of any entry for the same source namespace
+    pub fn replace_pending_source_delete(&mut self, pending: PersistedPendingSourceDelete) -> bool {
+        let Some(configured) = self.configured_mut() else { return false };
+
+        configured
+            .pending_source_deletes
+            .retain(|existing| existing.source_namespace_id != pending.source_namespace_id);
+        configured.pending_source_deletes.push(pending);
+        true
+    }
+
+    /// Clears `pending`, only while it is still the stored entry, so an entry a later run
+    /// recorded for the same source stays
+    pub fn clear_pending_source_delete(&mut self, pending: &PersistedPendingSourceDelete) -> bool {
+        let Some(configured) = self.configured_mut() else { return false };
+
+        let before = configured.pending_source_deletes.len();
+        configured.pending_source_deletes.retain(|existing| existing != pending);
+        configured.pending_source_deletes.len() != before
+    }
+
     pub(crate) fn set_drive_account_switch(
         &mut self,
         account_switch: PersistedDriveAccountSwitch,
@@ -504,6 +532,46 @@ pub struct PersistedConfiguredCloudBackup {
     /// Older builds ignore the field, and a rewrite by an older build only drops the notice
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heal_notice: Option<PersistedHealNotice>,
+    /// Source namespaces to delete once the provider reports every record that replaced them
+    /// uploaded
+    ///
+    /// Older builds ignore the field, and a rewrite by an older build drops it, which only keeps
+    /// those sources
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_source_deletes: Vec<PersistedPendingSourceDelete>,
+}
+
+/// Another backup namespace whose wallets the active namespace now holds, deleted only once the
+/// provider reports each of those records uploaded
+///
+/// A returned upload can mean the file is only staged on this device, as on iOS, so deleting the
+/// source then could leave the cloud with no copy of a wallet
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedPendingSourceDelete {
+    pub source_namespace_id: String,
+    /// The namespace that holds the source's wallets; the entry is stale once another is active
+    pub active_namespace_id: String,
+    /// One entry per source record the proof covered; a source that lists any other record by
+    /// the time it would be deleted gained a wallet the proof never read, so it stays
+    pub replacements: Vec<PersistedSourceReplacement>,
+}
+
+impl PersistedPendingSourceDelete {
+    /// The source records the proof covered
+    pub fn source_record_ids(&self) -> impl Iterator<Item = &str> {
+        self.replacements.iter().map(|replacement| replacement.source_record_id.as_str())
+    }
+}
+
+/// The active-namespace record that holds one source record, at the revision the proof saw
+///
+/// The source is deleted only while that record is still this revision: a later revision was
+/// never compared with the source, so it proves nothing about it
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedSourceReplacement {
+    pub source_record_id: String,
+    pub replacement_record_id: String,
+    pub revision_hash: String,
 }
 
 /// Durable notice that Cloud Backup was healed from a disable that never deleted anything
