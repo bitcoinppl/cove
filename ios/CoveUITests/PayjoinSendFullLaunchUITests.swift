@@ -460,7 +460,10 @@ final class PayjoinSendFullLaunchUITests: XCTestCase {
         // the wallet lists its broadcast as unconfirmed, which reads Sending while it has no label
         let row = app.staticTexts["Sending"]
         XCTAssertTrue(row.waitForExistence(timeout: 60), "the wallet screen doesn't list the payment")
-        row.tap()
+
+        // the row takes taps through a gesture rather than a button, and XCUITest can report its
+        // texts unhittable even on screen, so the tap goes to the text's center
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         // whether details are expanded is remembered per wallet
         let showDetails = app.buttons["transactionDetails.showDetails"]
