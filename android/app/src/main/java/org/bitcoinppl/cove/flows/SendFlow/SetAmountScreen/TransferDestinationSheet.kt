@@ -26,6 +26,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.utils.toComposeColor
@@ -51,10 +53,12 @@ fun TransferDestinationSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
+        // the sheet is its own window, so the app root's resource id mapping doesn't reach it
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .semantics { testTagsAsResourceId = true }
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 24.dp),
         ) {

@@ -86,18 +86,21 @@ class HardwareSignerControl(
         return signedFrames(http.request("POST", "/unrelated-psbt", body))
     }
 
-    /** The test mnemonic's Signet account as a hardware wallet exports it, external then internal */
-    fun watchOnlyDescriptors(): Pair<String, String> {
-        val response = JSONObject(http.request("POST", "/watch-only-descriptor", JSONObject().put("mnemonic", TEST_MNEMONIC)))
+    /** The [mnemonic]'s Signet account as a hardware wallet exports it, external then internal */
+    fun watchOnlyDescriptors(mnemonic: String = TEST_MNEMONIC): Pair<String, String> {
+        val response = JSONObject(http.request("POST", "/watch-only-descriptor", JSONObject().put("mnemonic", mnemonic)))
         return response.getString("external") to response.getString("internal")
     }
 
     /**
-     * The test mnemonic's Signet account of the address type as a bare public key, with the first
+     * The [mnemonic]'s Signet account of the address type as a bare public key, with the first
      * receive address the host derives from the mnemonic itself
      */
-    fun publicKeyExport(addressType: PublicKeyAddressType): PublicKeyExport {
-        val body = JSONObject().put("mnemonic", TEST_MNEMONIC).put("address_type", addressType.wireName)
+    fun publicKeyExport(
+        addressType: PublicKeyAddressType,
+        mnemonic: String = TEST_MNEMONIC,
+    ): PublicKeyExport {
+        val body = JSONObject().put("mnemonic", mnemonic).put("address_type", addressType.wireName)
         val json = JSONObject(http.request("POST", "/public-key-export", body))
 
         return PublicKeyExport(

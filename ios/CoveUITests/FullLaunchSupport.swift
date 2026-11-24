@@ -151,11 +151,17 @@ extension XCUIApplication {
 
     /// Opens Send from the wallet screen and enters the address
     func startSend(to address: String) {
+        openSend()
+        enterAddress(address)
+    }
+
+    /// Opens Send from the wallet screen and waits for its address field
+    func openSend() {
         let send = buttons.matching(NSPredicate(format: "label == 'Send' OR label ENDSWITH ', Send'")).firstMatch
         XCTAssertTrue(send.waitForExistence(timeout: 10))
         send.tap()
 
-        enterAddress(address)
+        XCTAssertTrue(textViews["sendFlow.address"].waitForExistence(timeout: 15), "Send never opened")
     }
 
     func enterAddress(_ address: String) {

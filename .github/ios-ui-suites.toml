@@ -129,6 +129,10 @@ paths = ["ios/CoveUITests/RenameWalletFullLaunchUITests.swift"]
 suites = ["CoveUITests/RenameWalletFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/SendToMyWalletFullLaunchUITests.swift"]
+suites = ["CoveUITests/SendToMyWalletFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift"]
 suites = ["CoveUITests/WatchOnlyUpgradeFullLaunchUITests"]
 
@@ -220,6 +224,7 @@ suites = [
     "CoveUITests/QrSheetAppearanceFullLaunchUITests",
     "CoveUITests/HardwareSigningFullLaunchUITests",
     "CoveUITests/PublicKeyImportFullLaunchUITests",
+    "CoveUITests/SendToMyWalletFullLaunchUITests",
     "CoveUITests/TapSignerLayoutFullLaunchUITests",
 ]
 
@@ -249,6 +254,7 @@ suites = [
     "CoveUITests/BiometricLockFullLaunchUITests",
     "CoveUITests/HardwareSigningFullLaunchUITests",
     "CoveUITests/PublicKeyImportFullLaunchUITests",
+    "CoveUITests/SendToMyWalletFullLaunchUITests",
     "CoveUITests/TapSignerLayoutFullLaunchUITests",
     "CoveUITests/KeyTeleportReceiveFullLaunchUITests",
     "CoveUITests/KeyTeleportSendFullLaunchUITests",
@@ -297,6 +303,11 @@ suites = [
     "CoveUITests/UtxoLockFullLaunchUITests",
     "CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests",
 ]
+
+# the wallet picker sheet, which opens only from the wallet picker button on Send's address field
+[[rule]]
+paths = ["ios/Cove/Flows/SendFlow/SetAmountScreen/TransferDestinationSheet.swift"]
+suites = ["CoveUITests/SendToMyWalletFullLaunchUITests"]
 
 # the keyTeleport route, which RouteView shows with KeyTeleportContainer
 [[rule]]

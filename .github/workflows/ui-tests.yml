@@ -80,6 +80,7 @@ env:
     CoveUITests/KeyTeleportAppScannerFullLaunchUITests,
     CoveUITests/VerifyWordsFullLaunchUITests,
     CoveUITests/RenameWalletFullLaunchUITests,
+    CoveUITests/SendToMyWalletFullLaunchUITests,
     CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
     CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
