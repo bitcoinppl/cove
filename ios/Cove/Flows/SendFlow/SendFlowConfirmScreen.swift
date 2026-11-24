@@ -376,14 +376,12 @@ private struct SendFlowConfirmationBody: View {
                     manager: manager,
                     details: details,
                     prices: prices,
+                    payjoinSwitch: payjoin.map {
+                        // the payment's mode is fixed once sending starts
+                        SendFlowPayjoinSwitch(isOn: $0.$usePayjoin, isLocked: sendState != .idle)
+                    },
                     payjoinFeeContribution: payjoin?.feeContribution
                 )
-
-                if let payjoin {
-                    SendFlowPayjoinToggle(isOn: payjoin.$usePayjoin)
-                        // the payment's mode is fixed once sending starts
-                        .disabled(sendState != .idle)
-                }
             }
 
             Spacer(minLength: 0)
@@ -410,26 +408,6 @@ private struct SendFlowPayjoinChoice {
     /// The fee help the confirm screen shows, nil when the payment offers none or Payjoin is off
     var feeContribution: PayjoinFeeContribution? {
         usePayjoin ? intent.feeContribution : nil
-    }
-}
-
-private struct SendFlowPayjoinToggle: View {
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Payjoin")
-                    .font(.footnote)
-                    .fontWeight(.semibold)
-
-                Text("Combines a coin from the receiver for better privacy.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .accessibilityIdentifier("sendConfirm.payjoinToggle")
     }
 }
 

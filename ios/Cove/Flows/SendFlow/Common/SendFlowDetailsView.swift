@@ -16,6 +16,9 @@ struct SendFlowDetailsView: View {
     let details: ConfirmDetails
     @State var prices: PriceResponse?
 
+    /// The per-payment Payjoin switch, nil for a payment that cannot use Payjoin
+    var payjoinSwitch: SendFlowPayjoinSwitch? = nil
+
     /// What a Payjoin payment offers toward the receiver's coin, nil when it offers nothing or is
     /// sent without Payjoin
     var payjoinFeeContribution: PayjoinFeeContribution? = nil
@@ -64,6 +67,12 @@ struct SendFlowDetailsView: View {
                 .padding(.top, 6)
                 .onTapGesture { presentingInputOutputDetails = true }
 
+            // above the fee rows its fee help changes
+            if let payjoinSwitch {
+                SendFlowPayjoinToggle(isOn: payjoinSwitch.$isOn)
+                    .disabled(payjoinSwitch.isLocked)
+            }
+
             SendFlowDetailsAmountRows(
                 feeAmount: displayFiatOrBtcAmount(details.feeTotal()),
                 feePercentage: details.feePercentage(),
@@ -91,6 +100,32 @@ struct SendFlowDetailsView: View {
         if total == 3 { presentationSize = .height(300) }
         if total > 3 { presentationSize = .height(400) }
         if total > 5 { presentationSize = .height(500) }
+    }
+}
+
+/// The confirm screen's per-payment Payjoin switch; off sends the payment as a normal transaction
+struct SendFlowPayjoinSwitch {
+    @Binding var isOn: Bool
+    let isLocked: Bool
+}
+
+private struct SendFlowPayjoinToggle: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Payjoin")
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+
+                Text("Combines a coin from the receiver for better privacy.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("sendConfirm.payjoinToggle")
     }
 }
 

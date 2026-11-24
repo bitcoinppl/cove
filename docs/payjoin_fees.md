@@ -52,9 +52,9 @@ and a rejected or failed proposal broadcasts the original transaction.
 ## What the Confirm Screen Shows
 
 When the payment is a Payjoin, the confirm screen has a per-payment Payjoin
-switch, on by default. Turning it off sends the payment as a normal
-transaction. While it is on and the payment has an offer, the network fee row
-adds "+ up to N with Payjoin" (`PayjoinFeeContribution::max`), and the total
+switch, on by default, placed above the network fee and total rows it
+changes. Turning it off sends the payment as a normal transaction. While it is
+on and the payment has an offer, the network fee row adds "+ up to N with Payjoin" (`PayjoinFeeContribution::max`), and the total
 reads "up to" `max_spending_amount`.
 
 ## The Fee Actually Paid
