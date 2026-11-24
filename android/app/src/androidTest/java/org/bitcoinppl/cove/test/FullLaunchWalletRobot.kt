@@ -133,6 +133,20 @@ class FullLaunchWalletRobot(
         }
     }
 
+    /**
+     * Sets the address field to a BIP 21 payment request, such as a pj URI, and waits until the
+     * screen shows the [address] it pays; the field keeps only the address once the app reads it
+     */
+    fun enterPaymentRequest(
+        uri: String,
+        address: String,
+    ) {
+        setAddress(uri)
+        if (!showsAddressSoon(address)) {
+            fail("expected the address field to show $address after entering $uri\n${device.hierarchy()}")
+        }
+    }
+
     // once the app accepts the address it moves focus to the amount, whose keyboard toolbar can
     // cover the spaced-out address; a covered node is left out of the accessibility tree, so close
     // the keyboard and look again before calling the address missing
@@ -246,12 +260,17 @@ class FullLaunchWalletRobot(
 
     /** Swipes the confirm screen's handle across, accepts the success alert and returns to the wallet */
     fun swipeToSend() {
-        val track = device.waitFor(By.res("sendFlowConfirm.swipeToSend")).visibleBounds
-        device.swipe(track.left + 40, track.centerY(), track.right - 4, track.centerY(), 40)
+        swipeToConfirm()
 
         device.waitFor(By.text("Transaction sent successfully!"), timeoutMs = 60_000L)
         device.waitFor(By.text("OK")).click()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+    }
+
+    /** Swipes the confirm screen's handle across, leaving whatever the send shows next on screen */
+    fun swipeToConfirm() {
+        val track = device.waitFor(By.res("sendFlowConfirm.swipeToSend")).visibleBounds
+        device.swipe(track.left + 40, track.centerY(), track.right - 4, track.centerY(), 40)
     }
 
     fun dismissKeyboard() {
