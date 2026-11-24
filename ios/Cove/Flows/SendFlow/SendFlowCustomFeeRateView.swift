@@ -18,6 +18,7 @@ func isTooHighCustomFeeError(_ error: Error) -> Bool {
     }
 }
 
+/// The send flow's custom fee rate sheet, pricing each rate as the payment being built
 struct SendFlowCustomFeeRateView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var manager
@@ -29,118 +30,82 @@ struct SendFlowCustomFeeRateView: View {
     @Binding var selectedOption: FeeRateOptionWithTotalFee
     @Binding var selectedPresentationDetent: PresentationDetent
 
-    // private
-    @State private var feeRate: String = "4.46"
-    @State private var loaded = false
-
-    // total sats
-    @State private var totalSats: Int? = nil
-    @State private var totalSatsTask: Task<Void, Never>?
-
-    var erroredFeeRate: Float? {
-        presenter.erroredFeeRate
-    }
-
-    var lastWorkingFeeRate: Float? {
-        presenter.lastWorkingFeeRate
-    }
-
-    var sliderBinding: Binding<Float> {
-        Binding(
-            get: {
-                let feeRate = Float(feeRate) ?? selectedOption.satPerVb()
-                return (feeRate * 100).rounded() / 100
-            },
-            set: {
-                var feeRate = $0
-                if let erroredFeeRate, feeRate > erroredFeeRate {
-                    feeRate = max(erroredFeeRate - 0.02, lastWorkingFeeRate.map { $0 - 0.01 } ?? 1, 1)
-                }
-
-                self.feeRate = String(format: "%.2f", feeRate)
-            }
+    private var policy: CustomFeeRatePolicy {
+        CustomFeeRatePolicy(
+            minimumFeeRate: 1,
+            maximumFeeRate: feeOptions.fast().satPerVb() * 3,
+            isBelowMinimum: { FeeRate.fromSatPerVb(satPerVb: $0).isBelowMinimum() },
+            belowMinimumMessage: "The fee rate must be at least 1 sat/vB",
+            price: price
         )
     }
 
-    var feeInFiat: String {
+    var body: some View {
+        CustomFeeRateForm(
+            title: "Set Custom Network Fee",
+            unitLabel: "satoshi/byte",
+            feeOptions: feeOptions,
+            initialFeeRate: selectedOption.feeRate().satPerVb(),
+            policy: policy,
+            erroredFeeRate: presenter.erroredFeeRate,
+            lastWorkingFeeRate: presenter.lastWorkingFeeRate,
+            totalText: { "\($0.asSats()) sats" },
+            totalDetail: feeInFiat,
+            onPriced: priced,
+            onPriceFailed: priceFailed,
+            onDone: addCustomFeeOption
+        )
+        .padding(.horizontal)
+        .padding(.vertical)
+        .padding(.top, 22)
+        .navigationBarBackButtonHidden()
+    }
+
+    private func feeInFiat(_ amount: Amount) -> String {
         guard let prices = app.prices else {
             app.dispatch(action: .updateFiatPrices)
             return ""
         }
 
-        return
-            "≈ \(manager.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
+        return "≈ \(manager.convertAndDisplayFiat(amount: amount, prices: prices))"
     }
 
-    /// Whether the typed rate is under the minimum rust enforces when building the transaction
-    var isBelowMinimum: Bool {
-        guard let feeRate = Float(feeRate) else { return false }
-        return FeeRate.fromSatPerVb(satPerVb: feeRate).isBelowMinimum()
+    /// No payment to price until the address and amount are in
+    private func price(_ feeRate: FeeRate, _ feeSpeed: FeeSpeed) async throws -> FeeRateOptionWithTotalFee? {
+        if sendFlowManager.amount == nil { return nil }
+        if sendFlowManager.address == nil { return nil }
+
+        return try await sendFlowManager.getNewCustomFeeRateWithTotal(feeRate: feeRate, feeSpeed: feeSpeed)
     }
 
-    var feeSpeed: FeeSpeed {
-        let feeRate = Float(feeRate) ?? 20.0
-        return feeOptions.calculateCustomFeeSpeed(feeRate: Float(feeRate))
+    private func priced(_ feeRateOption: FeeRateOptionWithTotalFee) {
+        feeOptions = feeOptions.addCustomFeeRate(feeRate: feeRateOption)
+        presenter.lastWorkingFeeRate = feeRateOption.feeRate().satPerVb()
     }
 
-    func getTotalSatsDeduped(for feeRate: Float) {
-        if sendFlowManager.amount == nil { return }
-        if sendFlowManager.address == nil { return }
+    private func priceFailed(_ error: Error, _ feeRate: FeeRate) {
+        // the Rust Display text, since interpolating SendFlowError reflects its payload
+        let errorText = (error as? SendFlowError)?.description ?? "\(error)"
 
-        let feeRate = FeeRate.fromSatPerVb(satPerVb: Float(feeRate))
+        guard isTooHighCustomFeeError(error) else {
+            Log.error("Unable to get accurate total sats \(errorText)")
+            return
+        }
 
-        if let totalSatsTask { totalSatsTask.cancel() }
-        totalSatsTask = Task {
-            try? await Task.sleep(for: .milliseconds(50))
-            if Task.isCancelled { return }
+        Log.error("Unable to get accurate total sats \(errorText), setting max fee rate to \(feeRate.satPerVb())")
+        presenter.erroredFeeRate = feeRate.satPerVb()
 
-            do {
-                let feeRateOption = try await sendFlowManager.getNewCustomFeeRateWithTotal(
-                    feeRate: feeRate, feeSpeed: feeSpeed
-                )
-
-                // the rate may have changed or become invalid while Rust computed this total
-                if Task.isCancelled { return }
-
-                if let totalFee = feeRateOption.totalFee() {
-                    self.totalSats = Int(totalFee.asSats())
-                }
-                await MainActor.run {
-                    let feeOptions = feeOptions.addCustomFeeRate(feeRate: feeRateOption)
-                    self.feeOptions = feeOptions
-                    presenter.lastWorkingFeeRate = feeRate.satPerVb()
-                }
-            } catch {
-                if Task.isCancelled { return }
-
-                // the Rust Display text, since interpolating SendFlowError reflects its payload
-                let errorText = (error as? SendFlowError)?.description ?? "\(error)"
-
-                guard isTooHighCustomFeeError(error) else {
-                    Log.error("Unable to get accurate total sats \(errorText)")
-                    return
-                }
-
-                Log.error("Unable to get accurate total sats \(errorText), setting max fee rate to \(feeRate.satPerVb())")
-                let feeRate = feeRate.satPerVb()
-
-                await MainActor.run { presenter.erroredFeeRate = feeRate }
-
-                guard lastWorkingFeeRate != nil else { return }
-                await MainActor.run { presenter.sheetState = .none }
-                Task {
-                    try? await Task.sleep(for: .milliseconds(850))
-                    await MainActor.run {
-                        presenter.alertState = .init(.general(title: "Fee too high!", message: "The fee rate you entered is too high, we automatically selected a lower fee"))
-                    }
-                }
+        guard presenter.lastWorkingFeeRate != nil else { return }
+        presenter.sheetState = .none
+        Task {
+            try? await Task.sleep(for: .milliseconds(850))
+            await MainActor.run {
+                presenter.alertState = .init(.general(title: "Fee too high!", message: "The fee rate you entered is too high, we automatically selected a lower fee"))
             }
         }
     }
 
-    func addCustomFeeOption() {
-        guard let feeRate = Float(feeRate), !isBelowMinimum else { return }
-
+    private func addCustomFeeOption(_ feeRate: Float) {
         // if there is an non custom fee option for the same fee rate select it and remove the custom fee option
         if let newSelectedOption = feeOptions.getFeeRateWith(feeRate: feeRate),
            !newSelectedOption.isCustom()
@@ -149,7 +114,7 @@ struct SendFlowCustomFeeRateView: View {
                 "removing custom fee option (fee rate: \(feeRate)), selected: \(newSelectedOption.feeSpeed().string)"
             )
             presenter.sheetState = .none
-            self.feeOptions = feeOptions.removeCustomFee()
+            feeOptions = feeOptions.removeCustomFee()
             selectedOption = newSelectedOption
             return
         }
@@ -160,178 +125,6 @@ struct SendFlowCustomFeeRateView: View {
         }
 
         presenter.sheetState = .none
-    }
-
-    func feeRateChanged(_: String?, newFeeRate: String?) {
-        guard let newFeeRate, let feeRate = Float(newFeeRate), !isBelowMinimum else {
-            // a pending request for the previous rate must not update totals or dismiss the sheet
-            totalSatsTask?.cancel()
-            totalSatsTask = nil
-            return
-        }
-
-        getTotalSatsDeduped(for: feeRate)
-    }
-
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Set Custom Network Fee")
-                .font(.title3)
-                .fontWeight(.bold)
-                .padding(.vertical, 12)
-
-            SendFlowCustomFeeEditor(
-                feeRate: $feeRate,
-                feeSpeed: feeSpeed,
-                sliderValue: sliderBinding,
-                maximumFeeRate: feeOptions.fast().satPerVb() * 3,
-                erroredFeeRate: erroredFeeRate,
-                totalSats: totalSats,
-                feeInFiat: feeInFiat,
-                isBelowMinimum: isBelowMinimum
-            )
-
-            Divider()
-
-            SendFlowCustomFeeDoneButton(action: addCustomFeeOption, isDisabled: isBelowMinimum)
-        }
-        .padding(.horizontal)
-        .padding(.vertical)
-        .padding(.top, 22)
-        .onChange(of: feeRate, initial: true, feeRateChanged)
-        .onAppear(perform: loadSelectedFeeRate)
-        .onDisappear(perform: addCustomFeeOption)
-        .navigationBarBackButtonHidden()
-        .opacity(loaded ? 1 : 0)
-    }
-
-    private func loadSelectedFeeRate() {
-        feeRate = String(selectedOption.feeRate().satPerVb())
-        withAnimation { loaded = true }
-    }
-}
-
-private struct SendFlowCustomFeeEditor: View {
-    @Binding var feeRate: String
-
-    let feeSpeed: FeeSpeed
-    let sliderValue: Binding<Float>
-    let maximumFeeRate: Float
-    let erroredFeeRate: Float?
-    let totalSats: Int?
-    let feeInFiat: String
-    let isBelowMinimum: Bool
-
-    var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text("satoshi/byte")
-                    .fontWeight(.medium)
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-
-                Spacer()
-            }
-            .offset(y: 4)
-
-            HStack {
-                TextField(feeRate, text: $feeRate)
-                    .keyboardType(.decimalPad)
-                    .font(.system(size: 34, weight: .semibold))
-
-                Spacer()
-
-                SendFlowDurationCapsule(
-                    speed: feeSpeed,
-                    fontColor: .primary,
-                    font: .footnote,
-                    fontWeight: .semibold
-                )
-            }
-
-            if isBelowMinimum {
-                HStack {
-                    Text("The fee rate must be at least 1 sat/vB")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-
-                    Spacer()
-                }
-            }
-
-            SendFlowCustomFeeSlider(
-                value: sliderValue,
-                maximumFeeRate: maximumFeeRate,
-                erroredFeeRate: erroredFeeRate
-            )
-
-            SendFlowCustomFeeTotal(
-                totalSats: totalSats,
-                feeInFiat: feeInFiat
-            )
-        }
-    }
-}
-
-private struct SendFlowCustomFeeSlider: View {
-    let value: Binding<Float>
-    let maximumFeeRate: Float
-    let erroredFeeRate: Float?
-
-    private var upperBound: Float {
-        min(erroredFeeRate.map { $0 + 0.01 } ?? maximumFeeRate, maximumFeeRate)
-    }
-
-    var body: some View {
-        HStack {
-            Slider(value: value, in: 1 ... upperBound, step: 0.01)
-        }
-    }
-}
-
-private struct SendFlowCustomFeeTotal: View {
-    let totalSats: Int?
-    let feeInFiat: String
-
-    var body: some View {
-        HStack {
-            AsyncText(
-                text: totalSats.map { "\($0) sats" },
-                font: .caption,
-                spinnerScale: 0.7
-            )
-            .fontWeight(.semibold)
-
-            if totalSats != nil {
-                Text(feeInFiat)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-        }
-    }
-}
-
-private struct SendFlowCustomFeeDoneButton: View {
-    let action: () -> Void
-    let isDisabled: Bool
-
-    var body: some View {
-        Button(action: action) {
-            Text("Done")
-                .font(.footnote)
-                .fontWeight(.semibold)
-                .frame(maxWidth: .infinity)
-                .padding()
-        }
-        .background(Color.midnightBtn)
-        .foregroundColor(.white)
-        .cornerRadius(10)
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.5 : 1)
-        .padding(.horizontal, detailsExpandedPadding)
-        .padding(.top, 14)
     }
 }
 

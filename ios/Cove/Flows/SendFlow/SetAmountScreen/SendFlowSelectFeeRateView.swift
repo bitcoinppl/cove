@@ -80,42 +80,15 @@ struct SendFlowSelectFeeRateView: View {
     }
 }
 
+/// A fee option in the send flow's picker, which picks it and closes the sheet on tap
 private struct FeeOptionView: View {
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     // passed in args
     let manager: WalletManager
     let feeOption: FeeRateOptionWithTotalFee
     @Binding var selectedOption: FeeRateOptionWithTotalFee
-
-    var isSelected: Bool {
-        selectedOption.feeSpeed() == feeOption.feeSpeed()
-    }
-
-    var fontColor: Color {
-        if isSelected { .white } else { .primary }
-    }
-
-    var strokeColor: Color {
-        if colorScheme == .dark {
-            return if isSelected { Color.primary.opacity(0.75) } else {
-                Color(UIColor.tertiaryLabel).opacity(0.6)
-            }
-        }
-
-        // light
-        return if isSelected { Color.primary } else { Color.secondary }
-    }
-
-    var isLoading: Bool {
-        feeOption.totalFee() == nil
-    }
-
-    var totalFee: String? {
-        feeOption.totalFee()?.satsString()
-    }
 
     private var fiatAmount: String? {
         guard let totalFee = feeOption.totalFee() else { return nil }
@@ -129,57 +102,18 @@ private struct FeeOptionView: View {
     }
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(String(feeOption.feeSpeed()))
-                        .font(.headline)
-                        .foregroundColor(fontColor)
-
-                    SendFlowDurationCapsule(
-                        speed: feeOption.feeSpeed(), fontColor: fontColor
-                    )
-                    .font(.caption2)
-                }
-
-                HStack {
-                    Text(feeOption.satsPerVbyteString())
-                        .font(.subheadline)
-                        .foregroundColor(fontColor)
-                }
-            }
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 4) {
-                AsyncText(
-                    text: totalFee.map { "\($0) sats" },
-                    font: .headline,
-                    color: fontColor
-                )
-
-                AsyncText(
-                    text: fiatAmount,
-                    font: .subheadline,
-                    color: fontColor,
-                    spinnerScale: 0.8
-                )
-            }
-        }
-        .padding()
-        .background(
-            isSelected
-                ? Color.midnightBtn.opacity(0.8) : Color(UIColor.systemGray6)
+        FeeRateOptionRow(
+            feeOption: feeOption,
+            isSelected: selectedOption.feeSpeed() == feeOption.feeSpeed(),
+            fiatAmount: fiatAmount,
+            identifierPrefix: "sendFlow.feeOption",
+            onSelect: select
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(strokeColor, lineWidth: 1)
-        )
-        .onTapGesture {
-            selectedOption = feeOption
-            dismiss()
-        }
-        .cornerRadius(12)
+    }
+
+    private func select() {
+        selectedOption = feeOption
+        dismiss()
     }
 }
 
