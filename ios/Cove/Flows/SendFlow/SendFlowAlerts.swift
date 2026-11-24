@@ -4,7 +4,40 @@ enum SendFlowConfirmAlertState: Equatable {
     case sent(WalletId)
     /// A Payjoin payment that went out as the normal transaction, a normal send and not an error
     case sentWithoutPayjoin(WalletId)
+    /// A completed Payjoin session that reported what it cost in fees
+    case sentWithPayjoinFee(WalletId, PayjoinSentFee)
     case broadcastError(String)
+}
+
+/// What a completed Payjoin payment cost in fees, with its amounts already formatted
+enum PayjoinSentFee: Equatable {
+    /// The receiver's proposal went out; `feeHelp` is nil when the receiver took nothing for its coin
+    case proposal(total: String, feeHelp: String?)
+    /// The original went out as a normal payment
+    case fallback(total: String)
+
+    init(kind: PayjoinTransactionKind, feePaid: PayjoinFeePaid, format: (Amount) -> String) {
+        let total = format(feePaid.total)
+
+        switch kind {
+        case .proposal:
+            let feeHelp = feePaid.feeHelp.asSats() == 0 ? nil : format(feePaid.feeHelp)
+            self = .proposal(total: total, feeHelp: feeHelp)
+        case .fallback:
+            self = .fallback(total: total)
+        }
+    }
+
+    var message: String {
+        switch self {
+        case let .proposal(total: total, feeHelp: feeHelp?):
+            "Sent with Payjoin. You paid \(total) in fees, including \(feeHelp) toward the receiver's coin."
+        case let .proposal(total: total, feeHelp: nil):
+            "Sent with Payjoin. You paid \(total) in fees."
+        case let .fallback(total: total):
+            "Sent without Payjoin. You paid \(total) in fees."
+        }
+    }
 }
 
 struct SendFlowErrorAlertContext {
@@ -76,6 +109,18 @@ extension SendFlowConfirmAlertState: TaggedAlertPresentable {
             AlertBuilder(
                 title: "Sent!",
                 message: "Transaction was successfully sent, without Payjoin.",
+                actions: {
+                    Button("OK") {
+                        context.dismissAlert()
+                        context.presenter.loadAndReset(to: Route.selectedWallet(walletId))
+                    }
+                }
+            ).eraseToAny()
+
+        case let .sentWithPayjoinFee(walletId, fee):
+            AlertBuilder(
+                title: "Sent!",
+                message: fee.message,
                 actions: {
                     Button("OK") {
                         context.dismissAlert()

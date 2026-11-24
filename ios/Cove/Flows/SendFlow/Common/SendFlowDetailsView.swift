@@ -16,6 +16,10 @@ struct SendFlowDetailsView: View {
     let details: ConfirmDetails
     @State var prices: PriceResponse?
 
+    /// What a Payjoin payment offers toward the receiver's coin, nil when it offers nothing or is
+    /// sent without Payjoin
+    var payjoinFeeContribution: PayjoinFeeContribution? = nil
+
     // private
     @State private var presentingInputOutputDetails = false
     @State private var presentationSize: PresentationDetent = .medium
@@ -36,11 +40,22 @@ struct SendFlowDetailsView: View {
     func displayFiatOrBtcAmount(_ amount: Amount) -> String {
         switch metadata.fiatOrBtc {
         case .fiat:
-            return "≈ \(fiatAmount(amount))"
+            "≈ \(fiatAmount(amount))"
         case .btc:
-            let units = metadata.selectedUnit == .sat ? "sats" : "btc"
-            return "\(manager.amountFmt(amount)) \(units)"
+            manager.sendFlowAmountFmt(amount)
         }
+    }
+
+    /// The most the receiver can take from the change, under the fee
+    private var payjoinFeeHelp: String? {
+        guard let payjoinFeeContribution else { return nil }
+        return "+ up to \(displayFiatOrBtcAmount(payjoinFeeContribution.max())) with Payjoin"
+    }
+
+    /// A Payjoin that offers fee help can cost up to its maximum, never less than the plain total
+    private var spendingAmount: String {
+        guard let payjoinFeeContribution else { return displayFiatOrBtcAmount(details.spendingAmount()) }
+        return "up to \(displayFiatOrBtcAmount(payjoinFeeContribution.maxSpendingAmount()))"
     }
 
     var body: some View {
@@ -52,8 +67,9 @@ struct SendFlowDetailsView: View {
             SendFlowDetailsAmountRows(
                 feeAmount: displayFiatOrBtcAmount(details.feeTotal()),
                 feePercentage: details.feePercentage(),
+                payjoinFeeHelp: payjoinFeeHelp,
                 receiveAmount: displayFiatOrBtcAmount(details.sendingAmount()),
-                spendingAmount: displayFiatOrBtcAmount(details.spendingAmount())
+                spendingAmount: spendingAmount
             )
             .onTapGesture { manager.dispatch(action: .toggleFiatOrBtc) }
         }
@@ -106,6 +122,7 @@ private struct SendFlowDetailsAddressRow: View {
 private struct SendFlowDetailsAmountRows: View {
     let feeAmount: String
     let feePercentage: UInt64
+    let payjoinFeeHelp: String?
     let receiveAmount: String
     let spendingAmount: String
 
@@ -118,11 +135,20 @@ private struct SendFlowDetailsAmountRows: View {
 
             Spacer()
 
-            Text(feeAmount)
-                .font(.footnote)
-                .fontWeight(feePercentage > 20 ? .bold : .medium)
-                .foregroundStyle(feePercentage > 20 ? .red : .secondary)
-                .padding(.vertical, 10)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(feeAmount)
+                    .font(.footnote)
+                    .fontWeight(feePercentage > 20 ? .bold : .medium)
+                    .foregroundStyle(feePercentage > 20 ? .red : .secondary)
+
+                if let payjoinFeeHelp {
+                    Text(payjoinFeeHelp)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("sendConfirm.payjoinFeeHelp")
+                }
+            }
+            .padding(.vertical, 10)
         }
 
         HStack {
@@ -137,9 +163,18 @@ private struct SendFlowDetailsAmountRows: View {
             Text("You'll pay")
             Spacer()
             Text(spendingAmount)
+                .accessibilityIdentifier("sendConfirm.totalSpending")
         }
         .font(.footnote)
         .fontWeight(.semibold)
+    }
+}
+
+extension WalletManager {
+    /// An amount in the wallet's bitcoin unit, labelled the way the send flow labels it
+    func sendFlowAmountFmt(_ amount: Amount) -> String {
+        let units = walletMetadata.selectedUnit == .sat ? "sats" : "btc"
+        return "\(amountFmt(amount)) \(units)"
     }
 }
 

@@ -83,6 +83,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
     var colorSchemeSelection = Database().globalConfig().colorScheme()
     var selectedNode = Database().globalConfig().selectedNode()
     var selectedFiatCurrency = Database().globalConfig().selectedFiatCurrency()
+    var payjoinFeeHelp = Database().globalConfig().payjoinFeeHelp()
 
     var nfcReader = NFCReader()
     var nfcWriter = NFCWriter()
@@ -254,6 +255,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
         colorSchemeSelection = globalConfig.colorScheme()
         selectedNode = globalConfig.selectedNode()
         selectedFiatCurrency = globalConfig.selectedFiatCurrency()
+        payjoinFeeHelp = globalConfig.payjoinFeeHelp()
         wallets = Self.readWallets(database, logger: logger)
 
         router = rust.state().router
@@ -728,7 +730,8 @@ struct CorruptedWalletDeletionRetry: Equatable {
         case .routeUpdated, .pushedRoute, .defaultRouteChanged:
             applyNavigationMessage(message)
         case .databaseUpdated, .colorSchemeChanged, .selectedNodeChanged,
-             .selectedNetworkChanged, .fiatPricesChanged, .feesChanged, .fiatCurrencyChanged:
+             .selectedNetworkChanged, .fiatPricesChanged, .feesChanged, .fiatCurrencyChanged,
+             .payjoinFeeHelpChanged:
             applyConfigurationMessage(message)
         case .walletModeChanged, .walletsChanged, .clearCachedWalletManager,
              .showLoadingPopup, .hideLoadingPopup:
@@ -811,6 +814,9 @@ extension AppManager {
         case let .fiatCurrencyChanged(fiatCurrency):
             selectedFiatCurrency = fiatCurrency
             refreshWalletFiatValues()
+
+        case let .payjoinFeeHelpChanged(payjoinFeeHelp):
+            self.payjoinFeeHelp = payjoinFeeHelp
 
         default:
             preconditionFailure("Expected an app configuration reconcile message")
@@ -924,6 +930,7 @@ extension AppManager {
         colorSchemeSelection = completion.colorScheme
         selectedNode = completion.selectedNode
         selectedFiatCurrency = completion.fiatCurrency
+        payjoinFeeHelp = completion.payjoinFeeHelp
         wallets = completion.wallets
         router = completion.router
         routeId = UUID()

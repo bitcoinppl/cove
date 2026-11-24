@@ -21,7 +21,7 @@ extension PayjoinStatus {
             sessionId
         case let .broadcasting(sessionId: sessionId, txid: _, kind: _):
             sessionId
-        case let .completed(sessionId: sessionId, txid: _, kind: _):
+        case let .completed(sessionId: sessionId, txid: _, kind: _, feePaid: _):
             sessionId
         }
     }

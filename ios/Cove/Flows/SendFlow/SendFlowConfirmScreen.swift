@@ -36,6 +36,9 @@ struct SendFlowConfirmScreen: View {
     /// Lock this screen took to ask for authentication before sending
     @State private var sendConfirmationLock: SendConfirmationLock? = nil
 
+    /// The per-payment Payjoin switch, off sends a Payjoin payment as a normal transaction
+    @State private var usePayjoin = true
+
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
@@ -64,10 +67,20 @@ struct SendFlowConfirmScreen: View {
         )
     }
 
+    /// The Payjoin this payment can use, nil for an ordinary send
+    private var payjoinIntent: PayjoinIntent? {
+        guard case let .unsigned(mode: .payjoin(intent: intent)) = input else { return nil }
+        return intent
+    }
+
+    /// The Payjoin this screen sends, nil for an ordinary send or one the user switched Payjoin off for
+    private var activePayjoinIntent: PayjoinIntent? {
+        usePayjoin ? payjoinIntent : nil
+    }
+
     /// The Payjoin session this screen starts, nil for an ordinary send
     private var payjoinSessionId: PayjoinSessionId? {
-        guard case let .unsigned(mode: .payjoin(intent: intent)) = input else { return nil }
-        return intent.sessionId
+        activePayjoinIntent?.sessionId
     }
 
     /// The wallet's Payjoin status when it is this screen's payment; another payment's
@@ -100,6 +113,7 @@ struct SendFlowConfirmScreen: View {
                 sendState: $sendState,
                 lockingTask: $lockingTask,
                 walletType: metadata.walletType,
+                payjoin: payjoinIntent.map { SendFlowPayjoinChoice(intent: $0, usePayjoin: $usePayjoin) },
                 payjoinWaiting: ownPayjoinStatus?.negotiation,
                 confirmSend: confirmSend,
                 lockWallet: lockForSendConfirmation,
@@ -154,18 +168,34 @@ struct SendFlowConfirmScreen: View {
             if case .idle = sendState { sendState = .sending }
 
         // a fallback is a normal send, not an error
-        case let .completed(sessionId: _, txid: _, kind: kind):
+        case let .completed(sessionId: _, txid: _, kind: kind, feePaid: feePaid):
             if case .sent = sendState { return }
 
             sendState = .sent
-            presenter.confirmationAlertState = switch kind {
-            case .proposal: .init(.sent(id))
-            case .fallback: .init(.sentWithoutPayjoin(id))
-            }
+            presenter.confirmationAlertState = .init(payjoinSentAlert(kind: kind, feePaid: feePaid))
 
         case .idle:
             break
         }
+    }
+
+    /// The success alert for a completed Payjoin session, which names its fee when the wallet
+    /// could work it out
+    private func payjoinSentAlert(
+        kind: PayjoinTransactionKind,
+        feePaid: PayjoinFeePaid?
+    ) -> SendFlowConfirmAlertState {
+        guard let feePaid else {
+            return switch kind {
+            case .proposal: .sent(id)
+            case .fallback: .sentWithoutPayjoin(id)
+            }
+        }
+
+        return .sentWithPayjoinFee(
+            id,
+            PayjoinSentFee(kind: kind, feePaid: feePaid, format: manager.sendFlowAmountFmt)
+        )
     }
 
     /// A Payjoin broadcast failure arrives as the wallet's send flow error, which the send flow
@@ -202,7 +232,9 @@ struct SendFlowConfirmScreen: View {
                     throw SendConfirmationError.unfinalizedSignedPsbt
                 }
                 try await manager.broadcastTransaction(finalizedTransaction)
-            case let .unsigned(mode: mode):
+            case .unsigned:
+                // a Payjoin the user switched off goes out as the normal transaction it was built as
+                let mode: UnsignedPaymentMode = activePayjoinIntent.map { .payjoin(intent: $0) } ?? .standard
                 try await manager.initiatePayment(psbt: details.psbt(), mode: mode)
                 // for payjoin, stay in .sending until its session completes
                 if case .standard = mode {
@@ -264,6 +296,7 @@ private struct SendFlowConfirmationContent: View {
     @Binding var sendState: SendState
     @Binding var lockingTask: Task<Void, Never>?
     let walletType: WalletType
+    let payjoin: SendFlowPayjoinChoice?
     let payjoinWaiting: PayjoinNegotiation?
     let confirmSend: () -> Void
     let lockWallet: () -> Void
@@ -283,6 +316,7 @@ private struct SendFlowConfirmationContent: View {
                     sendState: $sendState,
                     lockingTask: $lockingTask,
                     walletType: walletType,
+                    payjoin: payjoin,
                     payjoinWaiting: payjoinWaiting,
                     confirmSend: confirmSend,
                     lockWallet: lockWallet,
@@ -304,6 +338,7 @@ private struct SendFlowConfirmationBody: View {
     @Binding var sendState: SendState
     @Binding var lockingTask: Task<Void, Never>?
     let walletType: WalletType
+    let payjoin: SendFlowPayjoinChoice?
     let payjoinWaiting: PayjoinNegotiation?
     let confirmSend: () -> Void
     let lockWallet: () -> Void
@@ -337,7 +372,18 @@ private struct SendFlowConfirmationBody: View {
 
                 Divider()
 
-                SendFlowDetailsView(manager: manager, details: details, prices: prices)
+                SendFlowDetailsView(
+                    manager: manager,
+                    details: details,
+                    prices: prices,
+                    payjoinFeeContribution: payjoin?.feeContribution
+                )
+
+                if let payjoin {
+                    SendFlowPayjoinToggle(isOn: payjoin.$usePayjoin)
+                        // the payment's mode is fixed once sending starts
+                        .disabled(sendState != .idle)
+                }
             }
 
             Spacer(minLength: 0)
@@ -353,6 +399,37 @@ private struct SendFlowConfirmationBody: View {
             )
         }
         .padding(.horizontal)
+    }
+}
+
+/// A Payjoin payment's per-payment switch and what it offers while the switch is on
+private struct SendFlowPayjoinChoice {
+    let intent: PayjoinIntent
+    @Binding var usePayjoin: Bool
+
+    /// The fee help the confirm screen shows, nil when the payment offers none or Payjoin is off
+    var feeContribution: PayjoinFeeContribution? {
+        usePayjoin ? intent.feeContribution : nil
+    }
+}
+
+private struct SendFlowPayjoinToggle: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Payjoin")
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+
+                Text("Combines a coin from the receiver for better privacy.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityIdentifier("sendConfirm.payjoinToggle")
     }
 }
 
