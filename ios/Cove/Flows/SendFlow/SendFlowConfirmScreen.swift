@@ -168,12 +168,19 @@ struct SendFlowConfirmScreen: View {
         }
     }
 
+    /// A Payjoin broadcast failure arrives as the wallet's send flow error, which the send flow
+    /// presents, so this screen only follows it: the send has failed while the alert shows, and
+    /// can be tried again once it is dismissed
     private func sendFlowErrorChanged(
         _: TaggedItem<SendFlowErrorAlert>?,
         _ alert: TaggedItem<SendFlowErrorAlert>?
     ) {
-        // payjoin broadcast failure arrives via reconcile, so unblock the sending UI here
-        guard let alert, case .sending = sendState else { return }
+        guard let alert else {
+            if case .error = sendState { sendState = .idle }
+            return
+        }
+
+        guard case .sending = sendState else { return }
 
         let errorMessage =
             switch alert.item {
@@ -182,8 +189,6 @@ struct SendFlowConfirmScreen: View {
             }
 
         sendState = .error(errorMessage)
-        manager.sendFlowErrorAlert = nil
-        presenter.confirmationAlertState = .init(.broadcastError(errorMessage))
     }
 
     @MainActor

@@ -28,6 +28,7 @@ public struct SendFlowContainer: View {
 
 private struct SendFlowLoadedView: View {
     @Environment(AppManager.self) private var app
+    @Environment(AuthManager.self) private var auth
 
     let sendRoute: SendRoute
     let manager: WalletManager
@@ -67,10 +68,19 @@ private struct SendFlowLoadedView: View {
         }
     }
 
+    /// The one presenter of the wallet's send flow errors, which the confirm screen follows for
+    /// its send state; a second alert for the same error raced this one, and the user saw neither
+    ///
+    /// The error waits for any app lock to clear, as the confirm screen's result does, since a
+    /// Payjoin payment's broadcast can fail minutes after the user left the app
     private var sendFlowErrorAlert: Binding<TaggedItem<SendFlowErrorAlert>?> {
         Binding(
-            get: { manager.sendFlowErrorAlert },
-            set: { manager.sendFlowErrorAlert = $0 }
+            get: { auth.lockState == .unlocked ? manager.sendFlowErrorAlert : nil },
+            set: { newValue in
+                // a write while locked is the lock hiding the alert, which must keep the error
+                guard auth.lockState == .unlocked else { return }
+                manager.sendFlowErrorAlert = newValue
+            }
         )
     }
 

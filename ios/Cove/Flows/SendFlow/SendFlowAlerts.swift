@@ -46,7 +46,7 @@ extension SendFlowAlertState: TaggedAlertPresentable {
 extension SendFlowErrorAlert: TaggedAlertPresentable {
     func alert(context: SendFlowErrorAlertContext) -> AnyAlertBuilder {
         AlertBuilder(
-            title: "Error!",
+            title: title,
             message: message,
             actions: {
                 Button("OK") {
@@ -192,6 +192,13 @@ private extension SendFlowAlertState {
 }
 
 private extension SendFlowErrorAlert {
+    var title: String {
+        switch self {
+        case .confirmDetails: "Error!"
+        case .signAndBroadcast: "Error Broadcasting!"
+        }
+    }
+
     var message: String {
         switch self {
         case let .confirmDetails(error):

@@ -91,6 +91,7 @@ paths = [
     "rust/src/manager/wallet_manager/actor/transactions.rs",
     "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift",
     "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowContainer.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmRoute.kt",
 ]
 coverage = [
