@@ -14,6 +14,7 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::manager::cloud_backup_manager::cloud_folders::DownloadedWrapper;
 use crate::manager::cloud_backup_manager::ops::{
     CLOUD_BACKUP_LOAD_FAILED_MESSAGE, try_restore_from_local_master_key,
 };
@@ -39,6 +40,7 @@ use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationCl
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 
 use super::CloudBackupSupervisor;
+use super::write::CloudBackupWriteClient;
 
 #[derive(Clone, Debug)]
 pub(crate) enum CloudBackupRestoreEvent {
@@ -59,6 +61,8 @@ struct RestorableNamespacePasskey {
     credential_id: Vec<u8>,
     prf_salt: [u8; 32],
     provider_hint: Option<PasskeyProviderHint>,
+    /// The wrapper the passkey opened, which activation writes back to the namespace
+    opened_wrapper: DownloadedWrapper,
 }
 
 struct RestoreDownloadProgress {
@@ -195,6 +199,8 @@ pub(crate) async fn lookup_wallet_backup(
 pub(crate) struct RestoreOperation {
     operation_claim: CloudBackupExclusiveOperationClaim,
     supervisor: Addr<CloudBackupSupervisor>,
+    /// Writes under the restore's claim, which the lane runs only once it activated a namespace
+    writes: CloudBackupWriteClient,
     event_sender: Option<flume::Sender<CloudBackupRestoreEvent>>,
     cancellation: Arc<AtomicBool>,
     /// What may present the passkey requests that find the restorable backups
@@ -205,15 +211,17 @@ impl RestoreOperation {
     pub(crate) fn new(
         operation_claim: CloudBackupExclusiveOperationClaim,
         supervisor: Addr<CloudBackupSupervisor>,
+        writes: CloudBackupWriteClient,
         cancellation: Arc<AtomicBool>,
         authority: PasskeyRequestAuthority,
     ) -> Self {
-        Self { operation_claim, supervisor, event_sender: None, cancellation, authority }
+        Self { operation_claim, supervisor, writes, event_sender: None, cancellation, authority }
     }
 
     pub(crate) fn new_with_events(
         operation_claim: CloudBackupExclusiveOperationClaim,
         supervisor: Addr<CloudBackupSupervisor>,
+        writes: CloudBackupWriteClient,
         event_sender: flume::Sender<CloudBackupRestoreEvent>,
         cancellation: Arc<AtomicBool>,
         authority: PasskeyRequestAuthority,
@@ -221,6 +229,7 @@ impl RestoreOperation {
         Self {
             operation_claim,
             supervisor,
+            writes,
             event_sender: Some(event_sender),
             cancellation,
             authority,
@@ -415,6 +424,7 @@ impl RestoreOperation {
                             credential_id: matched.credential_id,
                             prf_salt: matched.prf_salt,
                             provider_hint: matched.provider_hint,
+                            opened_wrapper: matched.opened_wrapper,
                         }),
                     })
                     .collect());
@@ -457,6 +467,9 @@ impl RestoreOperation {
         let (master_key, namespace_id) = fallback
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?
             .ok_or(error)?;
+
+        // the local master key opens the namespace without reading its wrapper, so there is no
+        // wrapper to write back when it activates
         Ok(vec![RestorableNamespace { namespace_id, master_key, passkey: None }])
     }
 
@@ -638,7 +651,26 @@ impl RestoreOperation {
             enabled_state,
             wallets.into_iter().map(|wallet| wallet.id).collect(),
         )
-        .await
+        .await?;
+
+        if let Some(passkey) = &active.passkey {
+            self.write_back_opened_wrapper(&active.namespace_id, &passkey.opened_wrapper).await;
+        }
+
+        Ok(())
+    }
+
+    /// Writes the wrapper the passkey opened back to the namespace this restore just activated
+    ///
+    /// It runs before any wallet upload into the namespace can: activation queues those uploads
+    /// as ordinary writes, which the lane pauses while the restore runs and resumes only once
+    /// the restore ends, and the restore waits here for the lane's answer first. A failure
+    /// doesn't fail the restore, whose wallets are already restored; the wrapper row is then
+    /// absent, and sync health asks the provider about the key as it would for any namespace
+    async fn write_back_opened_wrapper(&self, namespace_id: &str, wrapper: &DownloadedWrapper) {
+        if let Err(error) = self.writes.write_back_opened_wrapper(namespace_id, wrapper).await {
+            warn!("Restore: failed to write back the opened master key wrapper: {error}");
+        }
     }
 
     async fn download_wallets_for_restore(
@@ -1165,6 +1197,7 @@ mod tests {
                 credential_id: vec![1, 2, 3],
                 prf_salt: [4; 32],
                 provider_hint: None,
+                opened_wrapper: DownloadedWrapper::new(b"{}".to_vec()),
             }),
         };
 
@@ -1337,6 +1370,7 @@ mod tests {
                 credential_id: vec![1, 2, 3],
                 prf_salt: [4; 32],
                 provider_hint: None,
+                opened_wrapper: DownloadedWrapper::new(b"{}".to_vec()),
             }),
         };
         let operation = new_restore_operation_for_test(manager).await;
@@ -1372,6 +1406,7 @@ mod tests {
             prf_salt,
             credential_id: vec![1, 2, 3],
             provider_hint: None,
+            opened_wrapper: DownloadedWrapper::new(b"{}".to_vec()),
         };
         let mut accumulated =
             vec![namespace_match("first", [1; 32]), namespace_match("second", [2; 32])];

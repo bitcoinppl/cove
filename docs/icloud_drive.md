@@ -165,6 +165,34 @@ Rust owns upload confirmation. Its pending-upload worker later calls
 marking the blob confirmed. Do not make the upload methods wait for metadata
 visibility; provider confirmation belongs to that retryable background flow.
 
+### Confirming that a file is in iCloud
+
+A local file and its `ubiquitousItemIsUploaded` value don't prove that iCloud
+still has the file. A device can keep a local copy of a file that another device
+or Turn Off already deleted from iCloud, and iOS reports that copy as uploaded
+until it syncs the delete. One iPhone restored a turned-off backup from such a
+copy, then wrote its wallets back, which put a backup folder with no master key
+in iCloud.
+
+`isBackupUploaded` therefore reports `uploaded` only for a file the metadata
+index lists, using the upload state of the metadata item. A local file the index
+doesn't list is `pending`, never `uploaded`, so Restore and Enable wait for it
+as they wait for an upload still in progress, until iCloud either lists it or
+removes it. A file that isn't local and isn't listed is `notFound`.
+
+The metadata index is the iCloud daemon's view of the container, so it is the
+best evidence iOS gives, not proof from the server. Whether the index can list
+a stale copy before the daemon syncs the delete hasn't been confirmed. Rust
+doesn't rely on it: a restore, and Enable's Use Existing, write the master key
+their passkey opened back to the backup folder before any wallet, so their
+wallet uploads can't leave that folder without a key (see
+[cloud_backup.md](cloud_backup.md)).
+
+The rule has a cost after a cold launch: until the metadata index finishes its
+first gather, a backup this device really uploaded also reads `pending`, so
+Restore and Enable wait and sync health briefly says the key is still
+uploading. The next metadata update clears it.
+
 ### Deleting files
 
 After a coordinated delete succeeds, the iOS storage helper records the resolved

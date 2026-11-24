@@ -66,8 +66,34 @@ struct ListedFolder {
 pub(crate) struct ReadableFolder {
     pub(crate) namespace_id: String,
     pub(crate) encrypted: EncryptedMasterKeyBackup,
+    pub(crate) wrapper: DownloadedWrapper,
+}
+
+/// A master key wrapper exactly as the provider returned it, with the revision that names it
+///
+/// The revision is derived from the bytes on construction, so the two always describe the same
+/// wrapper
+#[derive(Clone)]
+pub(crate) struct DownloadedWrapper {
+    json: Vec<u8>,
+    revision: String,
+}
+
+impl DownloadedWrapper {
+    pub(crate) fn new(json: Vec<u8>) -> Self {
+        let revision = master_key_wrapper_revision_hash(&json);
+        Self { json, revision }
+    }
+
+    /// The bytes as downloaded
+    pub(crate) fn json(&self) -> &[u8] {
+        &self.json
+    }
+
     /// Tells this revision of the wrapper from a later upload to the same namespace
-    pub(crate) revision: String,
+    pub(crate) fn revision(&self) -> &str {
+        &self.revision
+    }
 }
 
 /// Which master key wrappers a read downloads
@@ -292,7 +318,7 @@ async fn read_folder(
         }
     };
 
-    Ok(classify_wrapper(namespace_id, &master_json))
+    Ok(classify_wrapper(namespace_id, master_json))
 }
 
 /// The folder a wrapper whose upload isn't confirmed leaves, or `None` once it is
@@ -328,8 +354,8 @@ async fn read_upload_state(
     }
 }
 
-fn classify_wrapper(namespace_id: String, master_json: &[u8]) -> ReadFolder {
-    let encrypted = match serde_json::from_slice::<EncryptedMasterKeyBackup>(master_json) {
+fn classify_wrapper(namespace_id: String, master_json: Vec<u8>) -> ReadFolder {
+    let encrypted = match serde_json::from_slice::<EncryptedMasterKeyBackup>(&master_json) {
         Ok(encrypted) => encrypted,
         Err(error) => {
             warn!("Failed to deserialize cloud backup master key: {error}");
@@ -347,8 +373,8 @@ fn classify_wrapper(namespace_id: String, master_json: &[u8]) -> ReadFolder {
         return (CloudFolder::Unreadable(None), passkey_hint);
     }
 
-    let revision = master_key_wrapper_revision_hash(master_json);
-    let folder = ReadableFolder { namespace_id, encrypted, revision };
+    let wrapper = DownloadedWrapper::new(master_json);
+    let folder = ReadableFolder { namespace_id, encrypted, wrapper };
     (CloudFolder::Readable(Box::new(folder)), passkey_hint)
 }
 

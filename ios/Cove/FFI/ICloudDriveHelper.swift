@@ -68,6 +68,9 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let walletsSubdirectory = csppWalletsDirectory()
     private let containerURLProvider: @Sendable () -> URL?
     private let coordinatedDeleter: @Sendable (URL, String) throws -> URL
+    /// Replaces the iCloud resource-value read of an item's upload state, which a test's
+    /// temporary directory can't answer
+    private let uploadStateReader: (@Sendable (URL) -> UploadState)?
     let metadataIndexProvider: @MainActor @Sendable () -> ICloudMetadataIndex
     let defaultTimeout: TimeInterval
     let metadataListingTimeout: TimeInterval
@@ -95,6 +98,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         coordinatedDeleter: @escaping @Sendable (URL, String) throws -> URL = { url, missingItemID in
             try ICloudDriveHelper.coordinatedDelete(at: url, missingItemID: missingItemID)
         },
+        uploadStateReader: (@Sendable (URL) -> UploadState)? = nil,
         defaultTimeout: TimeInterval = 60,
         metadataListingTimeout: TimeInterval = 15,
         readAttemptTimeout: TimeInterval = 5
@@ -102,6 +106,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         self.containerURLProvider = containerURLProvider
         self.metadataIndexProvider = metadataIndexProvider
         self.coordinatedDeleter = coordinatedDeleter
+        self.uploadStateReader = uploadStateReader
         self.defaultTimeout = defaultTimeout
         self.metadataListingTimeout = metadataListingTimeout
         self.readAttemptTimeout = readAttemptTimeout
@@ -112,7 +117,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
         let metadataPath: String?
     }
 
-    private enum UploadState: CustomStringConvertible {
+    enum UploadState: CustomStringConvertible {
         case uploaded
         case uploading
         case failed(Error)
@@ -1083,14 +1088,23 @@ extension ICloudDriveHelper {
                 named: url.lastPathComponent,
                 parentDirectoryURL: url.deletingLastPathComponent()
             )
-            let resolvedURL = metadataItem?.url ?? url
-            let exists = FileManager.default.fileExists(atPath: resolvedURL.path)
-            guard metadataItem != nil || exists else { continue }
 
-            let state = uploadState(for: resolvedURL)
-            let usedMetadata = resolvedURL != url
+            // iOS can keep a local copy of a file iCloud already deleted and report it uploaded,
+            // so only a file the metadata index lists counts as uploaded; a local copy it doesn't
+            // list stays pending until iCloud either lists it or removes it
+            guard let metadataItem else {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    Log.info(
+                        "isBackupUploaded: recordId=\(recordId.prefix(12))… path=\(url.path) local copy not in iCloud metadata"
+                    )
+                    foundPendingItem = true
+                }
+                continue
+            }
+
+            let state = uploadStateReader?(metadataItem.url) ?? uploadState(for: metadataItem.url)
             Log.info(
-                "isBackupUploaded: recordId=\(recordId.prefix(12))… path=\(url.path) state=\(state) usedMetadata=\(usedMetadata)"
+                "isBackupUploaded: recordId=\(recordId.prefix(12))… path=\(url.path) state=\(state) metadataPath=\(metadataItem.metadataPath ?? "<unknown>")"
             )
 
             if case .uploaded = state {

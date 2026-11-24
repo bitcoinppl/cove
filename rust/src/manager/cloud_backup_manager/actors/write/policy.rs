@@ -60,7 +60,8 @@ pub(crate) enum CommandClass {
     /// A dirty wallet upload or another background blob write
     Ordinary { generation: ConfigGeneration },
     /// A write by the running operation: Enable, an account switch's reinitialize, verification,
-    /// passkey repair and the other configured operations, or Turn Off's drain barrier
+    /// passkey repair and the other configured operations, a restore once it activated its
+    /// namespace, or Turn Off's drain barrier
     Operation(CloudBackupExclusiveOperationClaim),
     /// Turn Off's delete of the namespace it committed to delete
     TurnOffDelete { claim: CloudBackupExclusiveOperationClaim, namespace_id: String },
@@ -162,6 +163,9 @@ pub(crate) enum OffWrites {
     Discard(CloudBackupExclusiveOperationClaim),
     /// A restore writes nothing through the lane until it activates the namespace
     Restore(CloudBackupExclusiveOperationClaim),
+    /// A restore that activated its namespace, which writes back the master key wrapper its
+    /// passkey opened through its claim
+    ActivatedRestore(CloudBackupExclusiveOperationClaim),
 }
 
 /// Which command classes may run, derived from the runtime; see the module docs
@@ -217,7 +221,9 @@ impl WritePolicy {
 
             C::Operation(claim) => match &self.body {
                 B::Configured { op: Some(op) } if op.claim == *claim => Decision::Run,
-                B::Off { op: Some(OffWrites::Enable(running)) }
+                B::Off {
+                    op: Some(OffWrites::Enable(running) | OffWrites::ActivatedRestore(running)),
+                }
                 | B::AccountSwitch { op: Some(running) }
                 | B::FinishingDisable { op: Some(running), .. }
                     if running == claim =>

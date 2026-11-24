@@ -1052,10 +1052,21 @@ mod tests {
                 CommandClass::EnableDiscard(discard),
                 Decision::Run,
             ),
+            // a restore writes through its claim only once it activated its namespace
             (
                 policy(PolicyBody::Off { op: Some(OffWrites::Restore(enable)) }),
                 CommandClass::Operation(enable),
                 Decision::Stale,
+            ),
+            (
+                policy(PolicyBody::Off { op: Some(OffWrites::ActivatedRestore(enable)) }),
+                CommandClass::Operation(enable),
+                Decision::Run,
+            ),
+            (
+                policy(PolicyBody::Off { op: Some(OffWrites::ActivatedRestore(enable)) }),
+                ordinary.clone(),
+                Decision::Paused(PauseReason::BackupOff),
             ),
             // an account switch pauses background work and runs its own reinitialize
             (

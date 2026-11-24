@@ -78,8 +78,10 @@ impl CloudBackupSupervisor {
             namespace_id,
             passkey,
             active_critical_key,
+            master_key_wrapper_revision,
+            uploaded_at,
             uploaded_wallets,
-            pending_uploads,
+            mut pending_uploads,
             cleanup_sources,
         } = completion;
 
@@ -87,6 +89,16 @@ impl CloudBackupSupervisor {
             .manager()
             .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
         manager.pending_enable.begin_enable_recovery_local_promotion(&namespace_id, passkey)?;
+
+        // the wrapper written back before the wallets is confirmed with them, as a fresh
+        // Enable's new wrapper is
+        let wrapper_completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
+            namespace_id.clone(),
+            CloudBackupRecordKey::MasterKeyWrapper,
+            master_key_wrapper_revision,
+            uploaded_at,
+        );
+        pending_uploads.insert(0, PendingVerificationUpload::master_key_wrapper());
 
         let pending_completion =
             enable_pending_verification_completion(namespace_id.clone(), pending_uploads);
@@ -97,18 +109,29 @@ impl CloudBackupSupervisor {
             pending_completion: pending_completion.clone(),
             cleanup_sources,
         };
+        let write = self.write.clone();
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         self.addr.send_fut_with(move |addr| async move {
-            let result = writes
-                .finalize_uploaded_wallets(
-                    CloudStorage::global_explicit_client(),
-                    namespace_id,
-                    uploaded_wallets,
-                    CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
-                        pending_completion,
-                    ),
+            let result = async {
+                Self::apply_cloud_backup_write_completion_for_operation(
+                    write,
+                    wrapper_completion,
+                    claim,
                 )
-                .await;
+                .await?;
+
+                writes
+                    .finalize_uploaded_wallets(
+                        CloudStorage::global_explicit_client(),
+                        namespace_id,
+                        uploaded_wallets,
+                        CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
+                            pending_completion,
+                        ),
+                    )
+                    .await
+            }
+            .await;
             send!(addr.complete_enable_recovery_finalization(claim, finalization, result));
         });
 
