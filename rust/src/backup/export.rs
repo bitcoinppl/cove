@@ -331,10 +331,14 @@ mod tests {
         crate::app::reconcile::test_support::init_noop_updater();
         crate::test_support::init_test_keychain();
 
+        // delete_database keeps the open handle, so another test's choice can outlive it
+        let config = &Database::global().global_config;
+        config.delete(GlobalConfigKey::PayjoinFeeHelp).unwrap();
+
         let unset = BackupExporter::new().gather_settings();
         assert_eq!(unset.payjoin_fee_help, None, "a setting never chosen isn't backed up");
 
-        Database::global().global_config.set_payjoin_fee_help(PayjoinFeeHelp::DontHelp).unwrap();
+        config.set_payjoin_fee_help(PayjoinFeeHelp::DontHelp).unwrap();
         let chosen = BackupExporter::new().gather_settings();
 
         assert_eq!(chosen.payjoin_fee_help.as_deref(), Some("dont_help"));
