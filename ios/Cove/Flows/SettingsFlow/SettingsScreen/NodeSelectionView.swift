@@ -433,10 +433,12 @@ private struct DiscoveredNodeRow: View {
             Spacer()
 
             if isSelected {
+                // the selected trait says this to VoiceOver
                 Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
@@ -497,14 +499,18 @@ private struct NodeSelectionRow: View {
             Spacer()
 
             if isSelected {
+                // the selected trait says this to VoiceOver
                 Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

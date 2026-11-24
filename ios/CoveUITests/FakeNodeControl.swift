@@ -17,6 +17,10 @@ enum UITestHostPorts {
         "http://127.0.0.1:\(base + 1)"
     }
 
+    static var electrumPort: Int {
+        base + 2
+    }
+
     static var signerControl: URL {
         URL(string: "http://127.0.0.1:\(base + 10)")!
     }

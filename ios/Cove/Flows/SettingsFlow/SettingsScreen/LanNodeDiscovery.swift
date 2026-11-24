@@ -14,7 +14,11 @@ import Foundation
 /// connections before the person answers, so a first search can come back empty
 enum LanNodeDiscovery {
     static func discover(nodeSelector: NodeSelector) async throws -> [DiscoveredNode] {
-        try await nodeSelector.discoverLanNodes(interfaces: lanInterfaces())
+        #if DEBUG
+            if let scripted = try await UITestLanDiscovery.discover() { return scripted }
+        #endif
+
+        return try await nodeSelector.discoverLanNodes(interfaces: lanInterfaces())
     }
 
     /// The IPv4 address and prefix of each Wi-Fi or wired Ethernet interface that is up
