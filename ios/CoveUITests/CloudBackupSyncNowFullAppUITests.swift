@@ -191,8 +191,10 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
 
         dismissVerifyPrompt()
 
-        // Settings names the rejection before the detail is opened
+        // Settings names the rejection before the detail is opened; with two wallets listed, the
+        // backup row starts below the screen, and the list builds no row until it is near
         robot.openSettings()
+        robot.scrollToHittable(app.buttons["settings.cloudBackup"], initialWait: 15)
         XCTAssertTrue(
             robot.staticText(containing: "Your cloud storage is full").waitForExistence(timeout: 15),
             "Settings should show the rejected upload's quota error"
