@@ -489,3 +489,14 @@ func satsFromAmountLabel(_ label: String) -> UInt64? {
     let whole = NSDecimalNumber(decimal: sats).uint64Value
     return Decimal(whole) == sats ? whole : nil
 }
+
+/// Parses every amount in a label, such as `+ up to 141 sats with Payjoin` or `up to 0.0002 btc`,
+/// into sats, in the order the label names them
+///
+/// The send flow writes its units in lowercase, so the unit is matched in any case
+func satsAmounts(in label: String) -> [UInt64] {
+    let amount = #/(\d[\d,]*(?:\.\d+)?) (sats|btc)\b/#.ignoresCase()
+    return label.matches(of: amount).compactMap { match in
+        satsFromAmountLabel("\(match.1) \(match.2.uppercased())")
+    }
+}

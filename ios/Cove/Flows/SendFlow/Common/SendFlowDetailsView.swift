@@ -175,6 +175,7 @@ private struct SendFlowDetailsAmountRows: View {
                     .font(.footnote)
                     .fontWeight(feePercentage > 20 ? .bold : .medium)
                     .foregroundStyle(feePercentage > 20 ? .red : .secondary)
+                    .accessibilityIdentifier("sendConfirm.networkFee")
 
                 if let payjoinFeeHelp {
                     Text(payjoinFeeHelp)

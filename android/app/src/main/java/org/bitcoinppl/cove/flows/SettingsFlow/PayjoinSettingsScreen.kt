@@ -122,7 +122,7 @@ private fun FeeHelpRow(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    // selectable, so ui tests read the chosen option from its selected state
+    // selectable as a radio button, so accessibility and ui tests read the chosen option as checked
     Row(
         modifier =
             Modifier

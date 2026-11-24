@@ -88,6 +88,7 @@ private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 internal const val SEND_CONFIRM_PAYJOIN_TOGGLE_TAG = "sendConfirm.payjoinToggle"
 internal const val SEND_CONFIRM_PAYJOIN_FEE_HELP_TAG = "sendConfirm.payjoinFeeHelp"
 internal const val SEND_CONFIRM_TOTAL_SPENDING_TAG = "sendConfirm.totalSpending"
+internal const val SEND_CONFIRM_NETWORK_FEE_TAG = "sendConfirm.networkFee"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -457,6 +458,7 @@ private fun SummaryWidget(
             value = networkFee,
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            valueTag = SEND_CONFIRM_NETWORK_FEE_TAG,
             valueNote = payjoinFeeHelp,
             valueNoteTag = SEND_CONFIRM_PAYJOIN_FEE_HELP_TAG,
         )
