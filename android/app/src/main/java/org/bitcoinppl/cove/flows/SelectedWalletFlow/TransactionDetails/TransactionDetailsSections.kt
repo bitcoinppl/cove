@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.ConfirmationIndicatorView
+import org.bitcoinppl.cove.flows.FeeBumpFlow.SpeedUpOrange
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
@@ -75,6 +77,7 @@ import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.HeaderIconPresenter
+import org.bitcoinppl.cove_core.PendingSendStatus
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.TransactionLockState
 import org.bitcoinppl.cove_core.TransactionState
@@ -96,7 +99,9 @@ internal fun TransactionDetailsRefreshContent(
     manager: WalletManager,
     metadata: WalletMetadata,
     numberOfConfirmations: Int?,
+    pendingSend: PendingSendStatus?,
     feeFiatFmt: String?,
+    previousFeeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
     historicalFiatFmt: String?,
@@ -147,7 +152,9 @@ internal fun TransactionDetailsRefreshContent(
                 manager = manager,
                 metadata = metadata,
                 numberOfConfirmations = numberOfConfirmations,
+                pendingSend = pendingSend,
                 feeFiatFmt = feeFiatFmt,
+                previousFeeFiatFmt = previousFeeFiatFmt,
                 sentSansFeeFiatFmt = sentSansFeeFiatFmt,
                 totalSpentFiatFmt = totalSpentFiatFmt,
                 historicalFiatFmt = historicalFiatFmt,
@@ -175,7 +182,9 @@ private fun TransactionDetailsColumn(
     manager: WalletManager,
     metadata: WalletMetadata,
     numberOfConfirmations: Int?,
+    pendingSend: PendingSendStatus?,
     feeFiatFmt: String?,
+    previousFeeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
     historicalFiatFmt: String?,
@@ -226,13 +235,14 @@ private fun TransactionDetailsColumn(
 
             TransactionStatusSection(transactionDetails = transactionDetails, secondaryColor = secondary)
             TransactionAmountsSection(transactionDetails, metadata, totalSpentFiatFmt, foreground)
-            TransactionCapsuleSection(transactionDetails)
+            TransactionCapsuleSection(transactionDetails, pendingSend)
             TransactionConfirmationsSection(numberOfConfirmations, isExpanded)
             TransactionExpandedDetailsSection(
                 isExpanded = isExpanded,
                 transactionDetails = transactionDetails,
                 numberOfConfirmationsFmt = numberOfConfirmationsFmt,
                 feeFiatFmt = feeFiatFmt,
+                previousFeeFiatFmt = previousFeeFiatFmt,
                 sentSansFeeFiatFmt = sentSansFeeFiatFmt,
                 totalSpentFiatFmt = totalSpentFiatFmt,
                 historicalFiatFmt = historicalFiatFmt,
@@ -268,9 +278,10 @@ private fun TransactionDetailsHeaderSection(
     val configuration = LocalConfiguration.current
     val headerSize = (configuration.screenWidthDp * HEADER_WIDTH_RATIO).dp
 
-    TransactionDetailsHeaderIcon(
+    TransactionHeaderIcon(
         diameter = headerSize,
-        transactionDetails = transactionDetails,
+        isConfirmed = transactionDetails.isConfirmed(),
+        isSent = transactionDetails.isSent(),
         numberOfConfirmations = numberOfConfirmations,
     )
 
@@ -297,20 +308,22 @@ private fun TransactionDetailsHeaderSection(
     Spacer(Modifier.height(24.dp))
 }
 
+/** The ringed check or clock at the top of a transaction's details, and of the Sped Up screen */
 @Composable
-private fun TransactionDetailsHeaderIcon(
+internal fun TransactionHeaderIcon(
     diameter: Dp,
-    transactionDetails: TransactionDetails,
+    isConfirmed: Boolean,
+    isSent: Boolean,
     numberOfConfirmations: Int?,
 ) {
-    val iconColors = transactionHeaderIconColors(transactionDetails, numberOfConfirmations)
+    val iconColors = transactionHeaderIconColors(isConfirmed, isSent, numberOfConfirmations)
 
     CheckWithRingsWidget(
         diameter = diameter,
         circleColor = iconColors.circleColor,
         ringColors = iconColors.ringColors,
         iconColor = iconColors.iconColor,
-        isConfirmed = transactionDetails.isConfirmed(),
+        isConfirmed = isConfirmed,
     )
 }
 
@@ -319,6 +332,7 @@ private fun transactionHeaderTitle(transactionDetails: TransactionDetails): Stri
     stringResource(
         id =
             when {
+                transactionDetails.isPendingFeeBump -> R.string.title_transaction_sped_up
                 !transactionDetails.isConfirmed() -> R.string.title_transaction_pending
                 transactionDetails.isSent() -> R.string.title_transaction_sent
                 else -> R.string.title_transaction_received
@@ -327,14 +341,14 @@ private fun transactionHeaderTitle(transactionDetails: TransactionDetails): Stri
 
 @Composable
 private fun transactionHeaderIconColors(
-    transactionDetails: TransactionDetails,
+    isConfirmed: Boolean,
+    isSent: Boolean,
     numberOfConfirmations: Int?,
 ): TransactionHeaderIconColors {
     val presenter = remember { HeaderIconPresenter() }
-    val isConfirmed = transactionDetails.isConfirmed()
     val txState = if (isConfirmed) TransactionState.CONFIRMED else TransactionState.PENDING
     val direction =
-        if (transactionDetails.isSent()) {
+        if (isSent) {
             TransactionDirection.OUTGOING
         } else {
             TransactionDirection.INCOMING
@@ -387,6 +401,12 @@ private fun TransactionStatusSection(
                     secondaryColor,
                 )
                 TransactionStatusText(formattedDate, secondaryColor, fontWeight = FontWeight.Medium)
+            }
+            transactionDetails.isPendingFeeBump -> {
+                TransactionStatusText("Rebroadcast with a higher fee.", secondaryColor)
+                transactionDetails.confirmationEstimate()?.let {
+                    TransactionStatusText(it, secondaryColor, fontWeight = FontWeight.SemiBold)
+                }
             }
             !isConfirmed -> {
                 TransactionStatusText("Your transaction is pending.", secondaryColor)
@@ -446,23 +466,39 @@ private fun TransactionAmountsSection(
 }
 
 @Composable
-private fun TransactionCapsuleSection(transactionDetails: TransactionDetails) {
+private fun TransactionCapsuleSection(
+    transactionDetails: TransactionDetails,
+    pendingSend: PendingSendStatus?,
+) {
     val isSent = transactionDetails.isSent()
-    val capsule = transactionCapsuleStyle(transactionDetails)
+    val isDelayed = pendingSend?.isDelayed() == true
+    val capsule = transactionCapsuleStyle(transactionDetails, isDelayed)
+    val icon =
+        when {
+            isDelayed -> Icons.Filled.Schedule
+            isSent -> Icons.Filled.NorthEast
+            else -> Icons.Filled.SouthWest
+        }
 
     TransactionCapsule(
         text = stringResource(capsule.labelRes),
-        icon = if (isSent) Icons.Filled.NorthEast else Icons.Filled.SouthWest,
+        icon = icon,
         backgroundColor = capsule.backgroundColor,
         textColor = capsule.textColor,
         showStroke = capsule.showStroke,
     )
 
-    Spacer(Modifier.height(32.dp))
+    // a pending send offers Speed Up under its status
+    Spacer(Modifier.height(12.dp))
+    pendingSend?.let { FeeBumpDetailsEntry(transactionDetails, it) }
+    Spacer(Modifier.height(20.dp))
 }
 
 @Composable
-private fun transactionCapsuleStyle(transactionDetails: TransactionDetails): TransactionCapsuleStyle {
+private fun transactionCapsuleStyle(
+    transactionDetails: TransactionDetails,
+    isDelayed: Boolean,
+): TransactionCapsuleStyle {
     val isDark = !MaterialTheme.colorScheme.isLight
     val isSent = transactionDetails.isSent()
     val isConfirmed = transactionDetails.isConfirmed()
@@ -481,6 +517,12 @@ private fun transactionCapsuleStyle(transactionDetails: TransactionDetails): Tra
                 backgroundColor = Color.Black,
                 textColor = Color.White,
                 showStroke = true,
+            )
+        isSent && isDelayed ->
+            TransactionCapsuleStyle(
+                labelRes = R.string.label_transaction_sending,
+                backgroundColor = SpeedUpOrange,
+                textColor = Color.White,
             )
         isSent ->
             TransactionCapsuleStyle(
@@ -537,6 +579,7 @@ private fun TransactionExpandedDetailsSection(
     transactionDetails: TransactionDetails,
     numberOfConfirmationsFmt: String?,
     feeFiatFmt: String?,
+    previousFeeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
     historicalFiatFmt: String?,
@@ -558,6 +601,7 @@ private fun TransactionExpandedDetailsSection(
             transactionDetails = transactionDetails,
             numberOfConfirmationsFmt = numberOfConfirmationsFmt,
             feeFiatFmt = feeFiatFmt,
+            previousFeeFiatFmt = previousFeeFiatFmt,
             sentSansFeeFiatFmt = sentSansFeeFiatFmt,
             totalSpentFiatFmt = totalSpentFiatFmt,
             historicalFiatFmt = historicalFiatFmt,

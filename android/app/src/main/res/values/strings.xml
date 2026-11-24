@@ -97,6 +97,7 @@
     <string name="title_transaction_sent">Transaction Sent</string>
     <string name="title_transaction_received">Transaction Received</string>
     <string name="title_transaction_pending">Transaction Pending</string>
+    <string name="title_transaction_sped_up">Sped Up</string>
     <string name="label_transaction_pending">Pending</string>
     <string name="btn_add_label">Add label</string>
     <string name="btn_edit_label">Edit</string>

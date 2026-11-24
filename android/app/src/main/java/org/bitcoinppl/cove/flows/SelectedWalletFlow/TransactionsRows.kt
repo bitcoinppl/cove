@@ -2,7 +2,6 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +44,10 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.FeeBumpFlow.DelayedTransactionIcon
+import org.bitcoinppl.cove.flows.FeeBumpFlow.LocalFeeBumpPresenter
+import org.bitcoinppl.cove.flows.FeeBumpFlow.PendingSendSubtitle
+import org.bitcoinppl.cove.flows.FeeBumpFlow.TransactionMenuTarget
 import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -244,17 +248,8 @@ internal fun ConfirmedTransactionWidget(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 6.dp)
-                .clickable {
-                    val walletId = manager.walletMetadata?.id
-                    if (walletId != null) {
-                        if (index > SCROLL_THRESHOLD_INDEX) {
-                            manager.pendingScrollTransactionId = txId.toString()
-                        }
-
-                        app.pushRoute(Route.TransactionDetails(walletId, txId))
-                    }
-                },
+                .transactionRowGestures(transaction, txId, index, manager, app)
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -339,6 +334,7 @@ internal fun UnconfirmedTransactionWidget(
     sensitiveVisible: Boolean,
 ) {
     val txId = transaction.v1.id()
+    val pendingSend = transaction.v1.pendingSend()
     val lockState = transactionLockStateForRow(txId, manager)
     val showsLockedTreatment = lockState.showsLockedTransactionTreatment
 
@@ -378,34 +374,29 @@ internal fun UnconfirmedTransactionWidget(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 6.dp)
-                .clickable {
-                    val walletId = manager.walletMetadata?.id
-                    if (walletId != null) {
-                        if (index > SCROLL_THRESHOLD_INDEX) {
-                            manager.pendingScrollTransactionId = txId.toString()
-                        }
-
-                        app.pushRoute(Route.TransactionDetails(walletId, txId))
-                    }
-                },
+                .transactionRowGestures(transaction, txId, index, manager, app)
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = iconModifier) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(iconBackground),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = iconContentDescription,
-                    tint = iconForeground,
-                    modifier = Modifier.size(24.dp),
-                )
+        if (pendingSend?.isDelayed() == true) {
+            DelayedTransactionIcon(txId = txId, pendingSend = pendingSend)
+        } else {
+            Box(modifier = iconModifier) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(50.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(iconBackground),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = iconContentDescription,
+                        tint = iconForeground,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
             }
         }
 
@@ -421,6 +412,8 @@ internal fun UnconfirmedTransactionWidget(
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             )
+
+            pendingSend?.let { PendingSendSubtitle(it) }
         }
 
         Column(horizontalAlignment = Alignment.End) {
@@ -451,6 +444,39 @@ internal fun UnconfirmedTransactionWidget(
             )
         }
     }
+}
+
+/**
+ * Tap opens the transaction's details, long press its actions sheet, and the row carries the
+ * `transactionRow.<txid>` test tag
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.transactionRowGestures(
+    transaction: Transaction,
+    txId: TxId,
+    index: Int,
+    manager: WalletManager,
+    app: AppManager,
+): Modifier {
+    val presenter = LocalFeeBumpPresenter.current
+
+    val openDetails = {
+        val walletId = manager.walletMetadata?.id
+        if (walletId != null) {
+            if (index > SCROLL_THRESHOLD_INDEX) {
+                manager.pendingScrollTransactionId = txId.toString()
+            }
+
+            app.pushRoute(Route.TransactionDetails(walletId, txId))
+        }
+    }
+
+    return this
+        .combinedClickable(
+            onClick = openDetails,
+            onLongClick = presenter?.let { { it.openMenu(TransactionMenuTarget(transaction, openDetails)) } },
+        ).testTag("transactionRow.$txId")
 }
 
 @Composable

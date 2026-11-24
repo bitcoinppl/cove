@@ -64,6 +64,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.FeeBumpFlow.FeeBumpHost
 import org.bitcoinppl.cove.initialScanActive
 import org.bitcoinppl.cove.initialScanIncomplete
 import org.bitcoinppl.cove.Log
@@ -79,6 +80,7 @@ import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.Transaction
 import org.bitcoinppl.cove_core.WalletErrorAlert
 import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletLoadState
@@ -231,302 +233,306 @@ fun SelectedWalletScreen(
         -> Unit
     }
 
-    Scaffold(
-        containerColor = listBg,
-        topBar = {
-            CenterAlignedTopAppBar(
-                modifier =
-                    Modifier.clickable {
-                        scope.launch {
-                            listState.animateScrollToItem(0)
-                        }
-                    },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        // gradual fade from transparent to midnight blue based on scroll progress
-                        containerColor = CoveColor.midnightBlue.copy(alpha = scrollProgress),
-                        titleContentColor = Color.White,
-                        actionIconContentColor = Color.White,
-                        navigationIconContentColor = Color.White,
-                    ),
-                title = {
-                    Box {
-                        Row(
-                            modifier =
-                                Modifier
-                                    .combinedClickable(
-                                        onClick = {
-                                            scope.launch {
-                                                listState.animateScrollToItem(0)
-                                            }
-                                        },
-                                        onLongClick = { showRenameMenu = true },
-                                    ).padding(vertical = 8.dp, horizontal = 16.dp)
-                                    .testTag("selectedWallet.title"),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (showsShieldIcon) {
-                                BitcoinShieldIcon(size = 13.dp, color = Color.White)
-                                Spacer(modifier = Modifier.size(8.dp))
-                            }
-                            AutoSizeText(
-                                text = actualWalletName,
-                                maxFontSize = 16.sp,
-                                minimumScaleFactor = 0.75f,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showRenameMenu,
-                            onDismissRequest = { showRenameMenu = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.change_name)) },
-                                onClick = {
-                                    showRenameMenu = false
-                                    manager.walletMetadata?.id?.let { id ->
-                                        app.pushRoute(
-                                            Route.Settings(
-                                                SettingsRoute.Wallet(
-                                                    id = id,
-                                                    route = WalletSettingsRoute.CHANGE_NAME,
-                                                ),
-                                            ),
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    if (canGoBack) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                            )
-                        }
-                    } else {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.Filled.Menu,
-                                contentDescription = "Menu",
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        IconButton(
-                            onClick = onQrCode,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.QrCode2,
-                                contentDescription = "QR Code",
-                            )
-                        }
-                        IconButton(
-                            onClick = onMore,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = "More",
-                            )
-                        }
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        // only apply bottom padding from scaffold - header handles top (status bar) internally
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(bottom = padding.calculateBottomPadding()),
-        ) {
-            val fiatOrBtc = manager.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
-            val sensitiveVisible = manager.walletMetadata?.sensitiveVisible ?: true
-
-            Column(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                val (primaryAmount, secondaryAmount) =
-                    when (fiatOrBtc) {
-                        FiatOrBtc.FIAT -> fiatBalance to actualSatsAmount
-                        FiatOrBtc.BTC -> actualSatsAmount to fiatBalance
-                    }
-
-                val pendingAmount =
-                    when (fiatOrBtc) {
-                        FiatOrBtc.FIAT -> fiatBalancePending ?: actualSatsPending
-                        FiatOrBtc.BTC -> actualSatsPending
-                    }
-
-                val hasTransactions =
-                    when (val loadState = manager.loadState) {
-                        is WalletLoadState.Loading -> unsignedTransactions.isNotEmpty()
-                        is WalletLoadState.Scanning -> loadState.v1.isNotEmpty() || unsignedTransactions.isNotEmpty()
-                        is WalletLoadState.Loaded -> loadState.v1.isNotEmpty() || unsignedTransactions.isNotEmpty()
-                    }
-
-                val isVerified = manager.isVerified
-                val walletId = manager.walletMetadata?.id
-                val shouldShowVerifyReminder = !isVerified && !isCloudBackupOn
-                val showLabels = manager.walletMetadata?.showLabels ?: false
-                val loadState = manager.loadState
-                val isScanStatusActive =
-                    manager.scanStatus is WalletScanStatus.Scanning ||
-                        manager.scanStatus is WalletScanStatus.ScanningPendingProgress ||
-                        manager.ledgerState.initialScanActive
-                val transactionsAreLoading = loadState is WalletLoadState.Loading
-
-                // determine transaction data based on load state
-                val (transactions, isFirstScan) =
-                    when (loadState) {
-                        is WalletLoadState.Scanning -> {
-                            val txns = loadState.v1
-
-                            // pre-migration wallets stay first-scan until a new full scan completes
-                            val firstScan = manager.ledgerState.initialScanIncomplete
-                            Pair(txns, firstScan)
-                        }
-                        is WalletLoadState.Loaded -> Pair(loadState.v1, false)
-                        is WalletLoadState.Loading -> Pair(emptyList(), true)
-                    }
-
-                // transfer pending scroll ID to active when returning from details screen
-                LaunchedEffect(manager.pendingScrollTransactionId) {
-                    manager.pendingScrollTransactionId?.let { id ->
-                        manager.scrolledTransactionId = id
-                        manager.pendingScrollTransactionId = null
-                    }
-                }
-
-                // scroll to saved transaction when returning from details
-                LaunchedEffect(manager.scrolledTransactionId, hasTransactions, isScanStatusActive) {
-                    val targetId = manager.scrolledTransactionId ?: return@LaunchedEffect
-                    if (!hasTransactions) return@LaunchedEffect
-
-                    // account for header items:
-                    // index 0 = header
-                    // index 1 = verify reminder (even if empty)
-                    // index 2 = txn-title
-                    // index 3 = scanning indicator (if scanning and hasTransactions)
-                    val baseOffset = 2 + 1 + (if (isScanStatusActive && hasTransactions) 1 else 0)
-
-                    // find the index of the transaction with the matching ID
-                    val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
-                    if (unsignedIndex >= 0) {
-                        listState.animateScrollToItem(baseOffset + unsignedIndex)
-                        manager.scrolledTransactionId = null
-                        return@LaunchedEffect
-                    }
-
-                    val txIndex =
-                        transactions.indexOfFirst {
-                            when (it) {
-                                is org.bitcoinppl.cove_core.Transaction.Confirmed -> it.v1.id().toString() == targetId
-                                is org.bitcoinppl.cove_core.Transaction.Unconfirmed -> it.v1.id().toString() == targetId
-                            }
-                        }
-                    if (txIndex >= 0) {
-                        listState.animateScrollToItem(baseOffset + unsignedTransactions.size + txIndex)
-                        manager.scrolledTransactionId = null
-                    }
-                }
-
-                val content: @Composable () -> Unit = {
-                    PullToRefreshBox(
-                        isRefreshing = isRefreshing,
-                        onRefresh = {
-                            if (canRefreshSelectedWallet(
-                                    manager.loadState,
-                                    manager.scanStatus,
-                                    manager.ledgerState,
-                                ) &&
-                                isRefreshInProgress.compareAndSet(false, true)
-                            ) {
-                                scope.launch {
-                                    isRefreshing = true
-                                    try {
-                                        val minDelay = async { delay(1750) }
-                                        manager.setScanning()
-                                        manager.forceWalletScan()
-                                        manager.forceUpdateHeight()
-                                        manager.updateWalletBalance()
-                                        manager.refreshTransactions()
-                                        minDelay.await()
-                                    } finally {
-                                        isRefreshing = false
-                                        isRefreshInProgress.set(false)
-                                    }
-                                }
+    // long press, the delayed icon and the Speed Up sheet open over the wallet
+    FeeBumpHost(app = app, walletManager = manager) {
+        Scaffold(
+            containerColor = listBg,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    modifier =
+                        Modifier.clickable {
+                            scope.launch {
+                                listState.animateScrollToItem(0)
                             }
                         },
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            // header as first item
-                            item(key = "header") {
-                                WalletBalanceHeaderView(
-                                    sensitiveVisible = sensitiveVisible,
-                                    primaryAmount = primaryAmount,
-                                    secondaryAmount = secondaryAmount,
-                                    pendingAmount = pendingAmount,
-                                    balancePresentation = manager.balancePresentation,
-                                    onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
-                                    onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
-                                    onSend = onSend,
-                                    onSendUnavailable = onSendUnavailable,
-                                    onReceive = onReceive,
-                                    isWatchOnly = isWatchOnly,
-                                    initialScanIncomplete = manager.ledgerState.initialScanIncomplete,
-                                    balanceUnavailable = false,
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            // gradual fade from transparent to midnight blue based on scroll progress
+                            containerColor = CoveColor.midnightBlue.copy(alpha = scrollProgress),
+                            titleContentColor = Color.White,
+                            actionIconContentColor = Color.White,
+                            navigationIconContentColor = Color.White,
+                        ),
+                    title = {
+                        Box {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .combinedClickable(
+                                            onClick = {
+                                                scope.launch {
+                                                    listState.animateScrollToItem(0)
+                                                }
+                                            },
+                                            onLongClick = { showRenameMenu = true },
+                                        ).padding(vertical = 8.dp, horizontal = 16.dp)
+                                        .testTag("selectedWallet.title"),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (showsShieldIcon) {
+                                    BitcoinShieldIcon(size = 13.dp, color = Color.White)
+                                    Spacer(modifier = Modifier.size(8.dp))
+                                }
+                                AutoSizeText(
+                                    text = actualWalletName,
+                                    maxFontSize = 16.sp,
+                                    minimumScaleFactor = 0.75f,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
                                 )
                             }
-
-                            // verify reminder as second item
-                            item(key = "verify-reminder") {
-                                VerifyReminder(
-                                    walletId = walletId,
-                                    visible = shouldShowVerifyReminder,
-                                    app = app,
+                            DropdownMenu(
+                                expanded = showRenameMenu,
+                                onDismissRequest = { showRenameMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.change_name)) },
+                                    onClick = {
+                                        showRenameMenu = false
+                                        manager.walletMetadata?.id?.let { id ->
+                                            app.pushRoute(
+                                                Route.Settings(
+                                                    SettingsRoute.Wallet(
+                                                        id = id,
+                                                        route = WalletSettingsRoute.CHANGE_NAME,
+                                                    ),
+                                                ),
+                                            )
+                                        }
+                                    },
                                 )
                             }
+                        }
+                    },
+                    navigationIcon = {
+                        if (canGoBack) {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                )
+                            }
+                        } else {
+                            IconButton(onClick = onBack) {
+                                Icon(
+                                    imageVector = Icons.Filled.Menu,
+                                    contentDescription = "Menu",
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            IconButton(
+                                onClick = onQrCode,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.QrCode2,
+                                    contentDescription = "QR Code",
+                                )
+                            }
+                            IconButton(
+                                onClick = onMore,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = "More",
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            // only apply bottom padding from scaffold - header handles top (status bar) internally
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(bottom = padding.calculateBottomPadding()),
+            ) {
+                val fiatOrBtc = manager.walletMetadata?.fiatOrBtc ?: FiatOrBtc.BTC
+                val sensitiveVisible = manager.walletMetadata?.sensitiveVisible ?: true
 
-                            transactionItems(
-                                transactions = transactions,
-                                unsignedTransactions = unsignedTransactions,
-                                isScanning = isScanStatusActive || transactionsAreLoading,
-                                isFirstScan = isFirstScan,
-                                fiatOrBtc = fiatOrBtc,
-                                sensitiveVisible = sensitiveVisible,
-                                showLabels = showLabels,
-                                manager = manager,
-                                app = app,
-                                primaryText = primaryText,
-                                secondaryText = secondaryText,
-                                dividerColor = dividerColor,
-                            )
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    val (primaryAmount, secondaryAmount) =
+                        when (fiatOrBtc) {
+                            FiatOrBtc.FIAT -> fiatBalance to actualSatsAmount
+                            FiatOrBtc.BTC -> actualSatsAmount to fiatBalance
+                        }
+
+                    val pendingAmount =
+                        when (fiatOrBtc) {
+                            FiatOrBtc.FIAT -> fiatBalancePending ?: actualSatsPending
+                            FiatOrBtc.BTC -> actualSatsPending
+                        }
+
+                    val hasTransactions =
+                        unsignedTransactions.isNotEmpty() ||
+                            when (val loadState = manager.loadState) {
+                                is WalletLoadState.Loading -> false
+                                is WalletLoadState.Scanning -> loadState.v1.isNotEmpty()
+                                is WalletLoadState.Loaded -> loadState.v1.isNotEmpty()
+                            }
+
+                    val isVerified = manager.isVerified
+                    val walletId = manager.walletMetadata?.id
+                    val shouldShowVerifyReminder = !isVerified && !isCloudBackupOn
+                    val showLabels = manager.walletMetadata?.showLabels ?: false
+                    val loadState = manager.loadState
+                    val isScanStatusActive =
+                        manager.scanStatus is WalletScanStatus.Scanning ||
+                            manager.scanStatus is WalletScanStatus.ScanningPendingProgress ||
+                            manager.ledgerState.initialScanActive
+                    val transactionsAreLoading = loadState is WalletLoadState.Loading
+
+                    // determine transaction data based on load state
+                    val (transactions, isFirstScan) =
+                        when (loadState) {
+                            is WalletLoadState.Scanning -> {
+                                val txns = loadState.v1
+
+                                // pre-migration wallets stay first-scan until a new full scan completes
+                                val firstScan = manager.ledgerState.initialScanIncomplete
+                                Pair(txns, firstScan)
+                            }
+                            is WalletLoadState.Loaded -> Pair(loadState.v1, false)
+                            is WalletLoadState.Loading -> Pair(emptyList(), true)
+                        }
+
+                    // transfer pending scroll ID to active when returning from details screen
+                    LaunchedEffect(manager.pendingScrollTransactionId) {
+                        manager.pendingScrollTransactionId?.let { id ->
+                            manager.scrolledTransactionId = id
+                            manager.pendingScrollTransactionId = null
                         }
                     }
-                }
 
-                if (hasTransactions) {
-                    content()
-                } else {
-                    CompositionLocalProvider(LocalOverscrollFactory provides null) {
+                    // scroll to saved transaction when returning from details
+                    LaunchedEffect(manager.scrolledTransactionId, hasTransactions, isScanStatusActive) {
+                        val targetId = manager.scrolledTransactionId ?: return@LaunchedEffect
+                        if (!hasTransactions) return@LaunchedEffect
+
+                        // account for header items:
+                        // index 0 = header
+                        // index 1 = verify reminder (even if empty)
+                        // index 2 = txn-title
+                        // index 3 = scanning indicator (if scanning and hasTransactions)
+                        val baseOffset = 2 + 1 + (if (isScanStatusActive && hasTransactions) 1 else 0)
+
+                        // find the index of the transaction with the matching ID
+                        val unsignedIndex = unsignedTransactions.indexOfFirst { it.id().toString() == targetId }
+                        if (unsignedIndex >= 0) {
+                            listState.animateScrollToItem(baseOffset + unsignedIndex)
+                            manager.scrolledTransactionId = null
+                            return@LaunchedEffect
+                        }
+
+                        val txIndex =
+                            transactions.indexOfFirst {
+                                when (it) {
+                                    is Transaction.Confirmed -> it.v1.id().toString() == targetId
+                                    is Transaction.Unconfirmed -> it.v1.id().toString() == targetId
+                                }
+                            }
+                        if (txIndex >= 0) {
+                            listState.animateScrollToItem(baseOffset + unsignedTransactions.size + txIndex)
+                            manager.scrolledTransactionId = null
+                        }
+                    }
+
+                    val content: @Composable () -> Unit = {
+                        PullToRefreshBox(
+                            isRefreshing = isRefreshing,
+                            onRefresh = {
+                                if (canRefreshSelectedWallet(
+                                        manager.loadState,
+                                        manager.scanStatus,
+                                        manager.ledgerState,
+                                    ) &&
+                                    isRefreshInProgress.compareAndSet(false, true)
+                                ) {
+                                    scope.launch {
+                                        isRefreshing = true
+                                        try {
+                                            val minDelay = async { delay(1750) }
+                                            manager.setScanning()
+                                            manager.forceWalletScan()
+                                            manager.forceUpdateHeight()
+                                            manager.updateWalletBalance()
+                                            manager.refreshTransactions()
+                                            minDelay.await()
+                                        } finally {
+                                            isRefreshing = false
+                                            isRefreshInProgress.set(false)
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                // header as first item
+                                item(key = "header") {
+                                    WalletBalanceHeaderView(
+                                        sensitiveVisible = sensitiveVisible,
+                                        primaryAmount = primaryAmount,
+                                        secondaryAmount = secondaryAmount,
+                                        pendingAmount = pendingAmount,
+                                        balancePresentation = manager.balancePresentation,
+                                        onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) },
+                                        onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) },
+                                        onSend = onSend,
+                                        onSendUnavailable = onSendUnavailable,
+                                        onReceive = onReceive,
+                                        isWatchOnly = isWatchOnly,
+                                        initialScanIncomplete = manager.ledgerState.initialScanIncomplete,
+                                        balanceUnavailable = false,
+                                    )
+                                }
+
+                                // verify reminder as second item
+                                item(key = "verify-reminder") {
+                                    VerifyReminder(
+                                        walletId = walletId,
+                                        visible = shouldShowVerifyReminder,
+                                        app = app,
+                                    )
+                                }
+
+                                transactionItems(
+                                    transactions = transactions,
+                                    unsignedTransactions = unsignedTransactions,
+                                    isScanning = isScanStatusActive || transactionsAreLoading,
+                                    isFirstScan = isFirstScan,
+                                    fiatOrBtc = fiatOrBtc,
+                                    sensitiveVisible = sensitiveVisible,
+                                    showLabels = showLabels,
+                                    manager = manager,
+                                    app = app,
+                                    primaryText = primaryText,
+                                    secondaryText = secondaryText,
+                                    dividerColor = dividerColor,
+                                )
+                            }
+                        }
+                    }
+
+                    if (hasTransactions) {
                         content()
+                    } else {
+                        CompositionLocalProvider(LocalOverscrollFactory provides null) {
+                            content()
+                        }
                     }
                 }
             }
