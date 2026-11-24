@@ -88,12 +88,13 @@ class FakeNodeControl(
 
     /**
      * Funds the receive addresses `index` of the mnemonic's first account of [addressType], one
-     * confirmed transaction per amount
+     * transaction per amount, leaving them in the mempool unless [confirm]
      */
     fun fundWallet(
         mnemonic: String,
         satsByIndex: List<Pair<Int, Long>>,
         addressType: WalletAddressType = WalletAddressType.NATIVE_SEGWIT,
+        confirm: Boolean = true,
     ): List<FakeNodeFundedOutput> {
         val outputs = JSONArray()
         satsByIndex.forEach { (index, sats) ->
@@ -105,7 +106,7 @@ class FakeNodeControl(
                 .put("mnemonic", mnemonic)
                 .put("address_type", addressType.fakeNodeName())
                 .put("outputs", outputs)
-                .put("confirm", true)
+                .put("confirm", confirm)
 
         return fundedOutputs(request("POST", "/fund-wallet", body))
     }
@@ -128,8 +129,14 @@ class FakeNodeControl(
             )
         }
 
-    fun isSpent(outpoint: FakeNodeOutPoint): Boolean =
-        JSONObject(request("GET", "/outspend/${outpoint.txid}/${outpoint.vout}")).getBoolean("spent")
+    fun isSpent(outpoint: FakeNodeOutPoint): Boolean = outspend(outpoint).getBoolean("spent")
+
+    /** The transaction spending the output, pending or confirmed, or null while it is unspent */
+    fun spendingTxid(outpoint: FakeNodeOutPoint): String? =
+        outspend(outpoint).let { if (it.isNull("spending_txid")) null else it.getString("spending_txid") }
+
+    private fun outspend(outpoint: FakeNodeOutPoint): JSONObject =
+        JSONObject(request("GET", "/outspend/${outpoint.txid}/${outpoint.vout}"))
 
     private fun request(
         method: String,
