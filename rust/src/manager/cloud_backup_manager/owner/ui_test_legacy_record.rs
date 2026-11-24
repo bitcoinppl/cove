@@ -47,6 +47,7 @@ pub(crate) fn legacy_stuck_record(
         retry_after: None,
         disposition: PersistedDisableDisposition::DeleteRemote,
         try_again_failed: false,
+        other_namespace_ids: Default::default(),
     })
 }
 

@@ -39,9 +39,9 @@ use crate::manager::cloud_backup_manager::ops::{
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupActionAvailability, CloudBackupDisableConfirmation, CloudBackupDisableScreen,
-    CloudBackupFinishingDisableStage, CloudBackupInventoryControl, CloudBackupOutcome,
-    CloudBackupOutcomeTarget, CloudBackupProgressSection, CloudBackupRejection,
+    CloudBackupActionAvailability, CloudBackupDisableConfirmation, CloudBackupDisableOtherBackups,
+    CloudBackupDisableScreen, CloudBackupFinishingDisableStage, CloudBackupInventoryControl,
+    CloudBackupOutcome, CloudBackupOutcomeTarget, CloudBackupProgressSection, CloudBackupRejection,
     CloudBackupScreenAction, CloudBackupScreenBody, CloudBackupSection, CloudBackupTurnOffFailure,
     CloudBackupVerificationControl,
 };
@@ -918,47 +918,41 @@ fn disable_screen(app: &TestApp) -> CloudBackupDisableScreen {
     }
 }
 
-/// The other-backups count is information for the dialog, so a count that never answers holds
-/// neither the review nor the recheck, with no clock advance, and the review leaves it out
+/// A list of other backups that never answers is dropped at the evidence deadline: the review
+/// and the recheck show it unchecked, and the commit deletes none of them
 #[test]
-fn turn_off_reaches_a_review_and_a_commit_past_a_backup_count_that_never_answers() {
+fn turn_off_reaches_a_review_and_a_commit_past_an_other_backups_list_that_never_answers() {
     let test = concat!(
         module_path!(),
-        "::turn_off_reaches_a_review_and_a_commit_past_a_backup_count_that_never_answers"
+        "::turn_off_reaches_a_review_and_a_commit_past_an_other_backups_list_that_never_answers"
     );
     run_case(test, &[PhaseEnd::Exit], |_| {
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
         let namespace = FakeAccount::new(1, 0).seed(&app);
         load_detail(&mut app);
 
-        let review_count = Hold::default();
-        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(review_count.clone()));
+        let review_list = Hold::default();
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(review_list.clone()));
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_cannot(&[N::Enable]);
-        app.block_on("the review's count to have started", review_count.entered());
+        app.block_on("the review's list to have started", review_list.entered());
 
-        // the evidence that decides lands while the count is held, and the stage drops the count
-        app.event("the review drops its count", abandon_held_calls)
+        app.advance_clock(DISABLE_EVIDENCE_DEADLINE)
             .then_can(&[N::ConfirmDisable, N::CancelDisable])
             .then_cannot(&[N::Enable]);
-        let review = app.turn_off_review().expect("the Turn Off review without its count");
+        let review = app.turn_off_review().expect("the Turn Off review past its deadline");
         assert_eq!(review.impact.confirmation, CloudBackupDisableConfirmation::One, "{review:?}");
-        assert_eq!(review.impact.other_backups, 0, "{review:?}");
+        assert_eq!(review.impact.other_backups, CloudBackupDisableOtherBackups::Unchecked);
 
-        let recheck_count = Hold::default();
-        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(recheck_count.clone()));
+        let recheck_list = Hold::default();
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(recheck_list.clone()));
         app.confirm_turn_off().then_cannot(&[N::TurnOff]);
-        app.block_on("the recheck's count to have started", recheck_count.entered());
-        app.event("the recheck drops its count", abandon_held_calls)
+        app.block_on("the recheck's list to have started", recheck_list.entered());
+        app.advance_clock(DISABLE_EVIDENCE_DEADLINE)
             .then_can(&[N::Enable])
             .then_cannot(&[N::TurnOff]);
         assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
         assert!(!app.cloud.inner.has_namespace(&namespace));
     });
-}
-
-/// Waits until every held call's caller has dropped it, without releasing any
-fn abandon_held_calls(app: &TestApp) {
-    app.block_on("the held calls to be abandoned", super::fakes::until_no_call_is_held());
 }
 
 /// Restore Them First on a review naming one wallet not on this device ends the review and

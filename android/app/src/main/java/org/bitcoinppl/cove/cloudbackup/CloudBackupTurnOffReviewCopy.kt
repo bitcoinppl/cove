@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import org.bitcoinppl.cove_core.CloudBackupDisableConfirmation
 import org.bitcoinppl.cove_core.CloudBackupDisableImpact
+import org.bitcoinppl.cove_core.CloudBackupDisableOtherBackups
 import org.bitcoinppl.cove_core.CloudBackupInventoryAssessment
 import org.bitcoinppl.cove_core.CloudBackupNamedCount
 
@@ -18,7 +19,8 @@ internal data class CloudBackupTurnOffReviewCopy(
 /**
  * Builds the review copy from the impact, one line per shape that applies
  *
- * Never says "all": other-passkey backups stay, and the final step names them as untouched
+ * Never says "all": other-passkey backups Cove couldn't list stay, and the final step names them
+ * as untouched
  */
 internal fun cloudBackupTurnOffReviewCopy(impact: CloudBackupDisableImpact): CloudBackupTurnOffReviewCopy {
     val finalTitle =
@@ -74,6 +76,15 @@ private fun turnOffReviewRisks(impact: CloudBackupDisableImpact): List<String> =
                     "version of Cove. They will be deleted too.",
             )
         }
+
+        val otherBackups = impact.otherBackups
+        if (otherBackups is CloudBackupDisableOtherBackups.Deleted) {
+            add(
+                "This also deletes ${backups(otherBackups.count)} made with another passkey. " +
+                    "Cove can't check what's in them without that passkey, so wallets that " +
+                    "aren't on this device may be deleted.",
+            )
+        }
     }
 
 /** What the final step deletes and what it leaves */
@@ -95,11 +106,11 @@ private fun turnOffReviewFinalLines(impact: CloudBackupDisableImpact): List<Stri
             )
         }
 
-        if (impact.otherBackups > 0u) {
+        if (impact.otherBackups is CloudBackupDisableOtherBackups.Unchecked) {
             add(
-                "${backups(impact.otherBackups).replaceFirstChar(Char::uppercaseChar)} made with another " +
-                    "passkey won't be deleted. To remove them later, turn Cloud Backup on again, " +
-                    "or delete them from $PROVIDER storage settings.",
+                "Cove couldn't check for backups made with another passkey, so they won't be " +
+                    "deleted. To remove them later, turn Cloud Backup on again, or delete them " +
+                    "from $PROVIDER storage settings.",
             )
         }
     }

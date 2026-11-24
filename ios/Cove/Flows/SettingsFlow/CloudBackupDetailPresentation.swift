@@ -655,9 +655,16 @@ enum CloudBackupTurnOffCopy {
             )
         }
 
-        if impact.otherBackups > 0 {
+        switch impact.otherBackups {
+        case .noneFound:
+            break
+        case let .deleted(count: otherBackups):
             lines.append(
-                "\(count(impact.otherBackups, "backup", "backups")) made with another passkey won't be deleted. To remove them later, turn Cloud Backup on again, or delete them from \(provider) storage settings."
+                "This also deletes \(count(otherBackups, "backup", "backups")) made with another passkey. Cove can't check what's in them without that passkey, so wallets that aren't on this device may be deleted."
+            )
+        case .unchecked:
+            lines.append(
+                "Cove couldn't check for backups made with another passkey, so they won't be deleted. To remove them later, turn Cloud Backup on again, or delete them from \(provider) storage settings."
             )
         }
 

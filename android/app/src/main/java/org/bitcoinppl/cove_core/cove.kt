@@ -33359,9 +33359,9 @@ data class CloudBackupDisableImpact (
     var `unsupported`: kotlin.UInt
     ,
     /**
-     * Backups made with another passkey; Turn Off leaves them in place
+     * Backups made with another passkey, which Turn Off deletes with this one
      */
-    var `otherBackups`: kotlin.UInt
+    var `otherBackups`: CloudBackupDisableOtherBackups
     ,
     var `confirmation`: CloudBackupDisableConfirmation
 
@@ -33388,7 +33388,7 @@ public object FfiConverterTypeCloudBackupDisableImpact: FfiConverterRustBuffer<C
             FfiConverterUInt.read(buf),
             FfiConverterUInt.read(buf),
             FfiConverterUInt.read(buf),
-            FfiConverterUInt.read(buf),
+            FfiConverterTypeCloudBackupDisableOtherBackups.read(buf),
             FfiConverterTypeCloudBackupDisableConfirmation.read(buf),
         )
     }
@@ -33402,7 +33402,7 @@ public object FfiConverterTypeCloudBackupDisableImpact: FfiConverterRustBuffer<C
             FfiConverterUInt.allocationSize(value.`unchecked`) +
             FfiConverterUInt.allocationSize(value.`unreadable`) +
             FfiConverterUInt.allocationSize(value.`unsupported`) +
-            FfiConverterUInt.allocationSize(value.`otherBackups`) +
+            FfiConverterTypeCloudBackupDisableOtherBackups.allocationSize(value.`otherBackups`) +
             FfiConverterTypeCloudBackupDisableConfirmation.allocationSize(value.`confirmation`)
     )
 
@@ -33415,7 +33415,7 @@ public object FfiConverterTypeCloudBackupDisableImpact: FfiConverterRustBuffer<C
             FfiConverterUInt.write(value.`unchecked`, buf)
             FfiConverterUInt.write(value.`unreadable`, buf)
             FfiConverterUInt.write(value.`unsupported`, buf)
-            FfiConverterUInt.write(value.`otherBackups`, buf)
+            FfiConverterTypeCloudBackupDisableOtherBackups.write(value.`otherBackups`, buf)
             FfiConverterTypeCloudBackupDisableConfirmation.write(value.`confirmation`, buf)
     }
 }
@@ -42979,6 +42979,106 @@ public object FfiConverterTypeCloudBackupDisableNotStartedReason: FfiConverterRu
 
     override fun write(value: CloudBackupDisableNotStartedReason, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * What Turn Off does with the backups made with another passkey
+ */
+sealed class CloudBackupDisableOtherBackups {
+
+    /**
+     * No backup made with another passkey is listed
+     */
+    object NoneFound : CloudBackupDisableOtherBackups()
+
+
+    /**
+     * They are deleted with this backup; Cove can't read them without their passkey, so the
+     * review asks twice
+     */
+    data class Deleted(
+        val `count`: kotlin.UInt) : CloudBackupDisableOtherBackups()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Cove couldn't list them, so Turn Off leaves any there are in place
+     */
+    object Unchecked : CloudBackupDisableOtherBackups()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupDisableOtherBackups : FfiConverterRustBuffer<CloudBackupDisableOtherBackups>{
+    override fun read(buf: ByteBuffer): CloudBackupDisableOtherBackups {
+        return when(buf.getInt()) {
+            1 -> CloudBackupDisableOtherBackups.NoneFound
+            2 -> CloudBackupDisableOtherBackups.Deleted(
+                FfiConverterUInt.read(buf),
+                )
+            3 -> CloudBackupDisableOtherBackups.Unchecked
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupDisableOtherBackups): ULong = when(value) {
+        is CloudBackupDisableOtherBackups.NoneFound -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupDisableOtherBackups.Deleted -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`count`)
+            )
+        }
+        is CloudBackupDisableOtherBackups.Unchecked -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupDisableOtherBackups, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupDisableOtherBackups.NoneFound -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupDisableOtherBackups.Deleted -> {
+                buf.putInt(2)
+                FfiConverterUInt.write(value.`count`, buf)
+                Unit
+            }
+            is CloudBackupDisableOtherBackups.Unchecked -> {
+                buf.putInt(3)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 

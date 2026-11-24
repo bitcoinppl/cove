@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.cloudbackup
 
 import org.bitcoinppl.cove_core.CloudBackupDisableConfirmation
 import org.bitcoinppl.cove_core.CloudBackupDisableImpact
+import org.bitcoinppl.cove_core.CloudBackupDisableOtherBackups
 import org.bitcoinppl.cove_core.CloudBackupInventoryAssessment
 import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupNamedCount
@@ -80,18 +81,47 @@ class CloudBackupTurnOffReviewCopyTest {
     }
 
     @Test
-    fun extraCopiesAndOtherPasskeyBackupsAreExplainedInTheFinalStep() {
-        val copy = cloudBackupTurnOffReviewCopy(impact(ownBackups = 1u, extraCopies = 2u, otherBackups = 1u))
+    fun extraCopiesAndUncheckedOtherPasskeyBackupsAreExplainedInTheFinalStep() {
+        val copy =
+            cloudBackupTurnOffReviewCopy(
+                impact(
+                    ownBackups = 1u,
+                    extraCopies = 2u,
+                    otherBackups = CloudBackupDisableOtherBackups.Unchecked,
+                ),
+            )
 
         assertEquals(
             listOf(
                 "This deletes the backups of your 1 wallet from Google Drive. " +
                     "Your wallets stay on this device and will no longer be backed up.",
                 "This includes 2 extra copies, and any labels saved only in them.",
-                "1 backup made with another passkey won't be deleted. To remove them later, turn Cloud " +
-                    "Backup on again, or delete them from Google Drive storage settings.",
+                "Cove couldn't check for backups made with another passkey, so they won't be " +
+                    "deleted. To remove them later, turn Cloud Backup on again, or delete them " +
+                    "from Google Drive storage settings.",
             ),
             copy.finalLines,
+        )
+    }
+
+    @Test
+    fun otherPasskeyBackupsTurnOffDeletesAreARisk() {
+        val copy =
+            cloudBackupTurnOffReviewCopy(
+                impact(
+                    ownBackups = 1u,
+                    otherBackups = CloudBackupDisableOtherBackups.Deleted(count = 2u),
+                    confirmation = CloudBackupDisableConfirmation.TWO,
+                ),
+            )
+
+        assertEquals(
+            listOf(
+                "This also deletes 2 backups made with another passkey. Cove can't check what's " +
+                    "in them without that passkey, so wallets that aren't on this device may be " +
+                    "deleted.",
+            ),
+            copy.risks,
         )
     }
 
@@ -104,7 +134,7 @@ class CloudBackupTurnOffReviewCopyTest {
         unchecked: UInt = 0u,
         unreadable: UInt = 0u,
         unsupported: UInt = 0u,
-        otherBackups: UInt = 0u,
+        otherBackups: CloudBackupDisableOtherBackups = CloudBackupDisableOtherBackups.NoneFound,
         confirmation: CloudBackupDisableConfirmation = CloudBackupDisableConfirmation.ONE,
     ) = CloudBackupDisableImpact(
         assessment = assessment,

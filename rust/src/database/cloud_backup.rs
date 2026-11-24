@@ -297,16 +297,19 @@ mod tests {
             retry_after: None,
             disposition: PersistedDisableDisposition::DeleteRemote,
             try_again_failed: false,
+            other_namespace_ids: Default::default(),
         };
 
         let json = serde_json::to_value(&disabling).unwrap();
         assert!(json.get("disposition").is_none(), "{json}");
         assert!(json.get("try_again_failed").is_none(), "{json}");
+        assert!(json.get("other_namespace_ids").is_none(), "{json}");
         let older: PersistedDisablingCloudBackup = serde_json::from_value(json).unwrap();
         assert_eq!(older, disabling);
 
         disabling.disposition = PersistedDisableDisposition::LocalOnly;
         disabling.try_again_failed = true;
+        disabling.other_namespace_ids = ["namespace-2".to_owned()].into();
         let json = serde_json::to_string(&disabling).unwrap();
         let read: PersistedDisablingCloudBackup = serde_json::from_str(&json).unwrap();
         assert_eq!(read, disabling);
@@ -422,6 +425,7 @@ mod tests {
             retry_after: None,
             disposition: PersistedDisableDisposition::DeleteRemote,
             try_again_failed: false,
+            other_namespace_ids: Default::default(),
         });
 
         assert!(state.record_successful_sync(30, 3));

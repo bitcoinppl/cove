@@ -6,7 +6,10 @@
 //! ordinary writes through the derived policy while it drains, and rechecks the impact on fresh
 //! evidence before it commits. Any failure before the commit ends the operation with
 //! `DisableNotStarted` and leaves backup on. After the commit the body is `FinishingDisable`,
-//! whose runs delete the namespace, clean up this device and write `Disabled`
+//! whose runs delete the other backups the commit listed and then the namespace, clean up this
+//! device and write `Disabled`
+
+use std::collections::BTreeSet;
 
 use super::runtime::{ConfiguredBody, ConfiguredOp};
 use super::*;
@@ -271,17 +274,23 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.commit_confirmed_turn_off(manager, claim, review).await
+        let other_namespace_ids = rechecked.other_namespaces_to_delete();
+        self.commit_confirmed_turn_off(manager, claim, review, other_namespace_ids).await
     }
 
     /// The commit point: from here on Turn Off only goes forward
+    ///
+    /// It commits the other backups the recheck listed, which never include one the confirmed
+    /// review didn't, since a recheck that lists a new one asks again
     async fn commit_confirmed_turn_off(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
         review: DisableReview,
+        other_namespace_ids: BTreeSet<String>,
     ) -> ActorResult<()> {
-        let commit_review = DisableCommitReview { namespace_id: review.namespace_id };
+        let commit_review =
+            DisableCommitReview { namespace_id: review.namespace_id, other_namespace_ids };
         let attempt_id = next_disable_generation();
 
         match self.runtime.commit_turn_off(claim, &commit_review, attempt_id) {
@@ -500,6 +509,11 @@ impl CloudBackupSupervisor {
         manager.apply_sync_state(SyncState::Idle);
     }
 
+    /// Deletes the other backups the commit listed, then this device's namespace
+    ///
+    /// The other backups go first, so a run that fails partway leaves this device's namespace,
+    /// which Stop Using on This Device then leaves too. A namespace already gone counts as
+    /// deleted, so a resume after a partial run goes on from where it stopped
     fn schedule_disable_namespace_delete(
         &self,
         run: FinishRun,
@@ -508,12 +522,24 @@ impl CloudBackupSupervisor {
     ) {
         let write = self.write.clone();
         self.addr.send_fut_with(move |addr| async move {
-            let result = CloudBackupWriteClient::for_operation(write, run.claim)
-                .delete_committed_namespace(
-                    authority.cloud_client(),
-                    disabling.namespace_id.clone(),
-                )
-                .await;
+            let writes = CloudBackupWriteClient::for_operation(write, run.claim);
+            let cloud = authority.cloud_client();
+            let mut result = Ok(());
+            for namespace in &disabling.other_namespace_ids {
+                let deleted = writes.delete_committed_namespace(cloud.clone(), namespace.clone());
+                result = deleted.await.or_else(already_gone);
+                if result.is_err() {
+                    break;
+                }
+
+                info!("Turn Off deleted other cloud backup namespace {namespace}");
+            }
+
+            if result.is_ok() {
+                let namespace = disabling.namespace_id.clone();
+                result = writes.delete_committed_namespace(cloud, namespace).await;
+            }
+
             send!(addr.complete_disable_namespace_delete(run, disabling, result));
         });
     }
@@ -693,5 +719,13 @@ impl Runtime {
             }
             _ => TurnOffAdmission::None,
         }
+    }
+}
+
+/// A namespace delete that found the namespace already gone deleted it
+fn already_gone(error: CloudBackupError) -> Result<(), CloudBackupError> {
+    match error {
+        CloudBackupError::CloudStorage(CloudStorageError::NotFound(_)) => Ok(()),
+        error => Err(error),
     }
 }

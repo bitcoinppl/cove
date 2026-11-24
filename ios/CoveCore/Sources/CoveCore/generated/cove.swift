@@ -16449,9 +16449,9 @@ public struct CloudBackupDisableImpact: Equatable, Hashable {
     public var unreadable: UInt32
     public var unsupported: UInt32
     /**
-     * Backups made with another passkey; Turn Off leaves them in place
+     * Backups made with another passkey, which Turn Off deletes with this one
      */
-    public var otherBackups: UInt32
+    public var otherBackups: CloudBackupDisableOtherBackups
     public var confirmation: CloudBackupDisableConfirmation
 
     // Default memberwise initializers are never public by default, so we
@@ -16464,8 +16464,8 @@ public struct CloudBackupDisableImpact: Equatable, Hashable {
          * Local wallets whose secret is gone; their cloud record may be the only copy
          */ownSecretMissingLocally: CloudBackupNamedCount, extraCopies: UInt32, unchecked: UInt32, unreadable: UInt32, unsupported: UInt32,
         /**
-         * Backups made with another passkey; Turn Off leaves them in place
-         */otherBackups: UInt32, confirmation: CloudBackupDisableConfirmation) {
+         * Backups made with another passkey, which Turn Off deletes with this one
+         */otherBackups: CloudBackupDisableOtherBackups, confirmation: CloudBackupDisableConfirmation) {
         self.assessment = assessment
         self.ownBackups = ownBackups
         self.notOnDevice = notOnDevice
@@ -16502,7 +16502,7 @@ public struct FfiConverterTypeCloudBackupDisableImpact: FfiConverterRustBuffer {
                 unchecked: FfiConverterUInt32.read(from: &buf),
                 unreadable: FfiConverterUInt32.read(from: &buf),
                 unsupported: FfiConverterUInt32.read(from: &buf),
-                otherBackups: FfiConverterUInt32.read(from: &buf),
+                otherBackups: FfiConverterTypeCloudBackupDisableOtherBackups.read(from: &buf),
                 confirmation: FfiConverterTypeCloudBackupDisableConfirmation.read(from: &buf)
         )
     }
@@ -16516,7 +16516,7 @@ public struct FfiConverterTypeCloudBackupDisableImpact: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.unchecked, into: &buf)
         FfiConverterUInt32.write(value.unreadable, into: &buf)
         FfiConverterUInt32.write(value.unsupported, into: &buf)
-        FfiConverterUInt32.write(value.otherBackups, into: &buf)
+        FfiConverterTypeCloudBackupDisableOtherBackups.write(value.otherBackups, into: &buf)
         FfiConverterTypeCloudBackupDisableConfirmation.write(value.confirmation, into: &buf)
     }
 }
@@ -26454,6 +26454,95 @@ public func FfiConverterTypeCloudBackupDisableNotStartedReason_lift(_ buf: RustB
 #endif
 public func FfiConverterTypeCloudBackupDisableNotStartedReason_lower(_ value: CloudBackupDisableNotStartedReason) -> RustBuffer {
     return FfiConverterTypeCloudBackupDisableNotStartedReason.lower(value)
+}
+
+
+
+/**
+ * What Turn Off does with the backups made with another passkey
+ */
+
+public enum CloudBackupDisableOtherBackups: Equatable, Hashable {
+
+    /**
+     * No backup made with another passkey is listed
+     */
+    case noneFound
+    /**
+     * They are deleted with this backup; Cove can't read them without their passkey, so the
+     * review asks twice
+     */
+    case deleted(count: UInt32
+    )
+    /**
+     * Cove couldn't list them, so Turn Off leaves any there are in place
+     */
+    case unchecked
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension CloudBackupDisableOtherBackups: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCloudBackupDisableOtherBackups: FfiConverterRustBuffer {
+    typealias SwiftType = CloudBackupDisableOtherBackups
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CloudBackupDisableOtherBackups {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .noneFound
+
+        case 2: return .deleted(count: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        case 3: return .unchecked
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CloudBackupDisableOtherBackups, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .noneFound:
+            writeInt(&buf, Int32(1))
+
+
+        case let .deleted(count):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(count, into: &buf)
+
+
+        case .unchecked:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDisableOtherBackups_lift(_ buf: RustBuffer) throws -> CloudBackupDisableOtherBackups {
+    return try FfiConverterTypeCloudBackupDisableOtherBackups.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCloudBackupDisableOtherBackups_lower(_ value: CloudBackupDisableOtherBackups) -> RustBuffer {
+    return FfiConverterTypeCloudBackupDisableOtherBackups.lower(value)
 }
 
 

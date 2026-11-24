@@ -343,9 +343,21 @@ pub struct CloudBackupDisableImpact {
     pub unchecked: u32,
     pub unreadable: u32,
     pub unsupported: u32,
-    /// Backups made with another passkey; Turn Off leaves them in place
-    pub other_backups: u32,
+    /// Backups made with another passkey, which Turn Off deletes with this one
+    pub other_backups: CloudBackupDisableOtherBackups,
     pub confirmation: CloudBackupDisableConfirmation,
+}
+
+/// What Turn Off does with the backups made with another passkey
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupDisableOtherBackups {
+    /// No backup made with another passkey is listed
+    NoneFound,
+    /// They are deleted with this backup; Cove can't read them without their passkey, so the
+    /// review asks twice
+    Deleted { count: u32 },
+    /// Cove couldn't list them, so Turn Off leaves any there are in place
+    Unchecked,
 }
 
 /// How complete the evidence behind an inventory or a review is

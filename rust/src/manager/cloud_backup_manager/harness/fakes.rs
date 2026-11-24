@@ -230,13 +230,6 @@ pub(crate) async fn until_a_call_is_held() {
     let _ = held.wait_for(|held| !held.is_empty()).await;
 }
 
-/// Resolves once no fake call waits on a hold, as when its caller released or abandoned it
-pub(crate) async fn until_no_call_is_held() {
-    let _deadline = Deadline::arm("every held call to be released or abandoned");
-    let mut held = HELD_CALLS.subscribe();
-    let _ = held.wait_for(Vec::is_empty).await;
-}
-
 fn write_json(path: &PathBuf, value: &impl serde::Serialize) {
     // rename makes the write atomic, so a SIGKILL never leaves a torn file
     let temp = path.with_extension("tmp");

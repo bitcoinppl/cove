@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -7,8 +6,7 @@ use backon::{BackoffBuilder as _, FibonacciBuilder};
 use cove_cspp::backup_data::wallet_record_id;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
 use cove_device::keychain::Keychain;
-use futures::FutureExt as _;
-use futures::future::{self, Either};
+use futures::future;
 use tracing::warn;
 
 use super::blocking_cloud_error;
@@ -20,7 +18,7 @@ use crate::manager::cloud_backup_manager::owner::lifecycle::{
 };
 use crate::manager::cloud_backup_manager::turn_off::{
     DisableEvidence, EvidenceUnavailable, ListingEvidence, LocalEvidence, LocalWallet,
-    OtherBackupsCount, OwnSeedCoverage,
+    OtherBackups, OwnSeedCoverage,
 };
 use crate::manager::cloud_backup_manager::wallets::LocalSecret;
 use crate::manager::cloud_backup_manager::{
@@ -46,14 +44,14 @@ pub(crate) const DISABLE_EVIDENCE_DEADLINE: Duration = Duration::from_secs(20);
 
 impl RustCloudBackupManager {
     /// Fresh evidence for Turn Off's impact: the namespace's listing, this device's wallets with
-    /// the secrets each holds now, and the count of other backups
+    /// the secrets each holds now, and the other backups Turn Off deletes with it
     ///
     /// Silent: it lists and reads the keychain, and never decrypts a record, asks for a passkey
     /// or lets the provider ask for consent, so the review and the recheck never show a sheet. A
     /// listing that fails for any reason but the connection, or misses the deadline, still
     /// returns evidence, whose impact is then unknown, so Turn Off never blocks on what the
-    /// backup holds. The count never holds the stage: it is left out when it isn't in by the
-    /// time the listing is
+    /// backup holds. The other backups are listed beside it under the same deadline; a list that
+    /// fails or misses it leaves them unknown, and a commit on that evidence deletes none of them
     pub(crate) async fn gather_disable_evidence(
         &self,
     ) -> Result<DisableEvidence, EvidenceUnavailable> {
@@ -78,15 +76,24 @@ impl RustCloudBackupManager {
             }
         };
 
-        let (listing, counted) = {
-            let listing = pin!(listing);
-            let count = pin!(self.other_backups(&cloud, &namespace_id, BlockingCloudStep::Disable));
-
-            match future::select(listing, count).await {
-                Either::Left((listing, count)) => (listing, count.now_or_never()),
-                Either::Right((counted, listing)) => (listing.await, Some(counted)),
+        let other_backups = async {
+            let listed = self.other_backups(&cloud, &namespace_id, BlockingCloudStep::Disable);
+            match tokio::time::timeout(DISABLE_EVIDENCE_DEADLINE, listed).await {
+                Ok(Ok(backups)) => OtherBackups::Listed(
+                    backups.into_iter().map(|backup| backup.namespace_id).collect(),
+                ),
+                Ok(Err(error)) => {
+                    warn!("Turn Off could not list other backups: {error}");
+                    OtherBackups::Unknown
+                }
+                Err(_) => {
+                    warn!("Turn Off's list of other backups didn't answer before its deadline");
+                    OtherBackups::Unknown
+                }
             }
         };
+
+        let (listing, other_backups) = future::join(listing, other_backups).await;
 
         if listing == ListingEvidence::Failed(CloudStorageIssue::Offline) {
             return Err(EvidenceUnavailable::Offline);
@@ -95,18 +102,6 @@ impl RustCloudBackupManager {
         // read last, so the secrets the impact pairs with the listing are as close to a commit as
         // the evidence gets
         let local = self.read_local_wallets_for_disable();
-
-        // the other-passkey line in the dialog is information, so failing to count leaves it out
-        let other_backups = match counted {
-            Some(Ok(backups)) => {
-                OtherBackupsCount::Counted(u32::try_from(backups.len()).unwrap_or(u32::MAX))
-            }
-            Some(Err(error)) => {
-                warn!("Turn Off could not count other backups: {error}");
-                OtherBackupsCount::Unknown
-            }
-            None => OtherBackupsCount::Unknown,
-        };
 
         Ok(DisableEvidence { namespace_id, listing, local, other_backups })
     }
