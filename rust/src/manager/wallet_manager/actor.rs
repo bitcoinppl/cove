@@ -509,7 +509,7 @@ impl WalletActor {
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
             payjoin_phase: PayjoinPhase::default(),
-            payjoin_config: PayjoinConfig::default(),
+            payjoin_config: PayjoinConfig::for_app(),
             payjoin_store: PayjoinSessionPersister::new(db.clone()),
             db,
         }

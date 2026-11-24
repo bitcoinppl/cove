@@ -36,6 +36,21 @@ impl PayjoinConfig {
     }
 }
 
+impl PayjoinConfig {
+    /// The config a wallet's Payjoin sends run with
+    ///
+    /// Debug builds use the UI test host's relay instead of the built-in ones while
+    /// `COVE_UI_TEST_PAYJOIN_RELAY` names it, see [`super::ui_test_relay`]
+    pub(crate) fn for_app() -> Self {
+        #[cfg(debug_assertions)]
+        if let Some(relays) = super::ui_test_relay::relays() {
+            return Self { relays, ..Self::default() };
+        }
+
+        Self::default()
+    }
+}
+
 impl Default for PayjoinConfig {
     fn default() -> Self {
         Self { relays: OhttpRelays::default(), session_timeout: DEFAULT_SESSION_TIMEOUT }
@@ -45,8 +60,8 @@ impl Default for PayjoinConfig {
 /// A non-empty list of OHTTP relays that a Payjoin session's requests go through
 ///
 /// Every relay is an `https` URL, so the relay operator learns only the sender's IP and the
-/// directory sees only the relay. Plain `http` loopback relays exist only in tests, through
-/// `test_support`
+/// directory sees only the relay. Plain `http` loopback relays exist only in tests and debug
+/// builds, through [`loopback`]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OhttpRelays {
     relays: Vec<Url>,
@@ -132,13 +147,17 @@ impl Default for OhttpRelays {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod test_support {
+/// Relays that tests and the debug-only UI test seam run themselves
+///
+/// Plain `http` is allowed only for a loopback host, which never leaves the machine, so no
+/// release build and no relay off this machine can skip https
+#[cfg(any(test, debug_assertions))]
+pub(crate) mod loopback {
     use super::{OhttpRelays, OhttpRelaysError, RelayOrder, Url};
 
     impl OhttpRelays {
-        /// Relays for tests that run their own relay, which may be plain `http` only when it
-        /// listens on a loopback host
+        /// Relays for a test or UI test host that runs its own relay, which may be plain `http`
+        /// only when it listens on a loopback host
         pub(crate) fn loopback_for_test(
             relays: impl IntoIterator<Item = Url>,
         ) -> Result<Self, OhttpRelaysError> {
@@ -162,6 +181,7 @@ pub(crate) mod test_support {
 
         /// Tries the relays in the listed order instead of a random one, so a test controls
         /// which relay a session reaches first
+        #[cfg(test)]
         pub(crate) fn in_listed_order(self) -> Self {
             Self { order: RelayOrder::Listed, ..self }
         }
