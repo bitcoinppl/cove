@@ -361,10 +361,17 @@ fun UiDevice.scrollTo(
     val deadline = System.currentTimeMillis() + timeoutMs
 
     while (System.currentTimeMillis() < deadline) {
-        findObject(selector)?.let { node ->
-            if (isTappable(node)) {
-                settledObject(selector)?.takeIf { isTappable(it) }?.let { return it }
+        try {
+            findObject(selector)?.let { node ->
+                if (isTappable(node)) {
+                    settledObject(selector)?.takeIf { isTappable(it) }?.let { return it }
+                }
             }
+        } catch (_: StaleObjectException) {
+            // a recomposition replaced the node while its bounds were read, so find it again
+            // instead of scrolling, which could carry it past the screen
+            Thread.sleep(100)
+            continue
         }
 
         swipe(displayWidth / 2, displayHeight * 2 / 3, displayWidth / 2, displayHeight / 3, 20)
