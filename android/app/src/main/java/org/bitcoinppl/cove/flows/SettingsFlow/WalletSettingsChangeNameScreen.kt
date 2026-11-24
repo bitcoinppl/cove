@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -19,6 +20,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +42,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
@@ -53,6 +58,10 @@ fun WalletSettingsChangeNameScreen(
     val metadata = manager.walletMetadata
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val nameSavedMessage = stringResource(R.string.wallet_name_saved)
+    val savesAsYouTypeMessage = stringResource(R.string.wallet_name_saves_as_you_type)
 
     // show error if metadata is not available
     if (metadata == null) {
@@ -80,6 +89,25 @@ fun WalletSettingsChangeNameScreen(
         mutableStateOf(TextFieldValue(metadata.name, selection = TextRange(metadata.name.length)))
     }
     var isError by remember { mutableStateOf(false) }
+    var hasSavedChange by remember { mutableStateOf(false) }
+
+    fun applyName(newName: String) {
+        isError = newName.isBlank()
+        if (newName.isBlank()) return
+        manager.dispatch(WalletManagerAction.UpdateName(newName))
+        hasSavedChange = true
+    }
+
+    fun finishEditing() {
+        focusManager.clearFocus()
+        if (isError || name.text.isBlank()) return
+        scope.launch {
+            if (hasSavedChange) {
+                snackbarHostState.showSnackbar(nameSavedMessage)
+            }
+            app.popRoute()
+        }
+    }
 
     // auto-focus the text field when screen appears
     LaunchedEffect(Unit) {
@@ -91,11 +119,30 @@ fun WalletSettingsChangeNameScreen(
             modifier
                 .fillMaxSize()
                 .padding(WindowInsets.safeDrawing.asPaddingValues()),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             SettingsTopAppBar(
                 title = stringResource(R.string.label_wallet_name),
                 onBack = { app.popRoute() },
                 modifier = Modifier.height(56.dp),
+                actions = {
+                    IconButton(
+                        onClick = { finishEditing() },
+                        enabled = !isError && name.text.isNotBlank(),
+                        modifier = Modifier.testTag("walletSettings.changeName.done"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = stringResource(R.string.btn_done),
+                            tint =
+                                if (!isError && name.text.isNotBlank()) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                },
+                        )
+                    }
+                },
             )
         },
         content = { paddingValues ->
@@ -112,18 +159,18 @@ fun WalletSettingsChangeNameScreen(
                         val textChanged = newValue.text != name.text
                         name = newValue
                         if (!textChanged) return@OutlinedTextField
-
-                        val newName = newValue.text
-                        isError = newName.isBlank()
-                        // only dispatch if name is not blank
-                        if (newName.isNotBlank()) {
-                            manager.dispatch(WalletManagerAction.UpdateName(newName))
-                        }
+                        applyName(newValue.text)
                     },
                     label = { Text(stringResource(R.string.label_wallet_name)) },
                     trailingIcon = {
                         if (name.text.isNotEmpty()) {
-                            IconButton(onClick = { name = TextFieldValue("") }) {
+                            IconButton(
+                                onClick = {
+                                    name = TextFieldValue("")
+                                    applyName("")
+                                },
+                                modifier = Modifier.testTag("walletSettings.changeName.clear"),
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Clear,
                                     contentDescription = "Clear",
@@ -133,12 +180,13 @@ fun WalletSettingsChangeNameScreen(
                         }
                     },
                     isError = isError,
-                    supportingText =
+                    supportingText = {
                         if (isError) {
-                            { Text("Name cannot be empty") }
+                            Text("Name cannot be empty")
                         } else {
-                            null
-                        },
+                            Text(savesAsYouTypeMessage)
+                        }
+                    },
                     singleLine = true,
                     keyboardOptions =
                         KeyboardOptions(
@@ -146,9 +194,7 @@ fun WalletSettingsChangeNameScreen(
                         ),
                     keyboardActions =
                         KeyboardActions(
-                            onDone = {
-                                focusManager.clearFocus()
-                            },
+                            onDone = { finishEditing() },
                         ),
                     modifier =
                         Modifier

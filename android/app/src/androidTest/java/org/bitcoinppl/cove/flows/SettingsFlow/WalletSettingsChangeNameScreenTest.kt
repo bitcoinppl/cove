@@ -1,8 +1,13 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import org.bitcoinppl.cove.AppManager
@@ -53,5 +58,21 @@ class WalletSettingsChangeNameScreenTest {
         assertEquals(before.network, after.network)
         assertEquals(before.color, after.color)
         assertEquals(balanceBefore, manager.balance.spendable().asSats())
+    }
+
+    @Test
+    fun doneControlAndAutosaveHintAreVisible() {
+        compose.onNodeWithTag("walletSettings.changeName.done").assertIsDisplayed().assertIsEnabled()
+        compose
+            .onNodeWithText("Saved as you type. Tap Done when you are finished.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun clearingTheNameShowsAnErrorAndDisablesDone() {
+        compose.onNodeWithTag("walletSettings.changeName.clear").performClick()
+
+        compose.onNodeWithText("Name cannot be empty").assertIsDisplayed()
+        compose.onNodeWithTag("walletSettings.changeName.done").assertIsNotEnabled()
     }
 }
