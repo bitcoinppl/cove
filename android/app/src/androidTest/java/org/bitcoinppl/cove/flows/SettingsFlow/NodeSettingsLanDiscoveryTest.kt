@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -77,6 +78,21 @@ class NodeSettingsLanDiscoveryTest {
         compose.waitUntil(timeoutMillis = 30_000) { selectedNode().url == found.node.url }
 
         assertEquals(found.node, selectedNode())
+        compose.waitUntil(timeoutMillis = 5_000) { shownAsSelected(found.host) }
+    }
+
+    @Test
+    fun aSearchThatFindsNothingSaysSoAndSearchAgainSearchesAgain() {
+        val found = discoveredFakeNode()
+        showScreen { if (searches == 1) emptyList() else listOf(found) }
+
+        compose.onNodeWithText("Find Nodes on This Network").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { shown("No Electrum servers found on this network") }
+
+        compose.onNodeWithText("Search Again").performClick()
+        compose.waitUntil(timeoutMillis = 10_000) { shown(found.host) }
+        assertEquals(2, searches)
+        assertTrue("the empty search's message stayed", !shown("No Electrum servers found on this network"))
     }
 
     // one selection is checked at a time, so a slow check can't finish after a later pick and
@@ -200,6 +216,13 @@ class NodeSettingsLanDiscoveryTest {
         text: String,
         substring: Boolean = false,
     ) = compose.onAllNodes(hasText(text, substring = substring)).fetchSemanticsNodes().isNotEmpty()
+
+    // a found server's row merges its texts and its check mark, whose description is Selected
+    private fun shownAsSelected(host: String) =
+        compose
+            .onAllNodes(hasText(host) and hasContentDescription("Selected"))
+            .fetchSemanticsNodes()
+            .isNotEmpty()
 
     private fun selectedNode() = NodeSelector().use { selector -> selector.selectedNode().toNode() }
 
