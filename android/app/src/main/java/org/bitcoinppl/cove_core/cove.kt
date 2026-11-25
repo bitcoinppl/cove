@@ -1649,6 +1649,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_amount(
     ): Short
+    external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_entry_mode(
+    ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance(
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_amount_sats(
@@ -2869,6 +2871,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustsendflowmanager_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_rustsendflowmanager_amount_entry_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustsendflowmanager_amount_exceeds_balance(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustsendflowmanager_amount_sats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4819,6 +4823,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount() != 59577.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_entry_mode() != 60313.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance() != 53544.toShort()) {
@@ -23678,6 +23685,12 @@ public interface RustSendFlowManagerInterface {
 
     fun `amount`(): Amount
 
+    /**
+     * The unit amounts show in and the field the amount is typed in, for the screen's first
+     * render; changes arrive as `UpdateAmountEntryMode`
+     */
+    fun `amountEntryMode`(): SendFlowAmountEntryMode
+
     fun `amountExceedsBalance`(): kotlin.Boolean
 
     fun `amountSats`(): kotlin.ULong
@@ -23954,6 +23967,23 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The unit amounts show in and the field the amount is typed in, for the screen's first
+     * render; changes arrive as `UpdateAmountEntryMode`
+     */override fun `amountEntryMode`(): SendFlowAmountEntryMode {
+            return FfiConverterTypeSendFlowAmountEntryMode.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_amount_entry_mode(
         it,
         _status)
 }
@@ -37069,6 +37099,47 @@ public object FfiConverterTypeSendConfirmationLock: FfiConverterRustBuffer<SendC
 
     override fun write(value: SendConfirmationLock, buf: ByteBuffer) {
             FfiConverterULong.write(value.`id`, buf)
+    }
+}
+
+
+
+/**
+ * The unit bitcoin amounts are shown in and whether the amount is typed in fiat or bitcoin
+ */
+data class SendFlowAmountEntryMode (
+    var `unit`: BitcoinUnit
+    ,
+    var `fiatOrBtc`: FiatOrBtc
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendFlowAmountEntryMode: FfiConverterRustBuffer<SendFlowAmountEntryMode> {
+    override fun read(buf: ByteBuffer): SendFlowAmountEntryMode {
+        return SendFlowAmountEntryMode(
+            FfiConverterTypeBitcoinUnit.read(buf),
+            FfiConverterTypeFiatOrBtc.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SendFlowAmountEntryMode) = (
+            FfiConverterTypeBitcoinUnit.allocationSize(value.`unit`) +
+            FfiConverterTypeFiatOrBtc.allocationSize(value.`fiatOrBtc`)
+    )
+
+    override fun write(value: SendFlowAmountEntryMode, buf: ByteBuffer) {
+            FfiConverterTypeBitcoinUnit.write(value.`unit`, buf)
+            FfiConverterTypeFiatOrBtc.write(value.`fiatOrBtc`, buf)
     }
 }
 
@@ -63340,26 +63411,6 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
-    data class NotifySelectedUnitedChanged(
-        val `old`: org.bitcoinppl.cove_core.types.BitcoinUnit,
-        val `new`: org.bitcoinppl.cove_core.types.BitcoinUnit) : SendFlowManagerAction()
-
-    {
-
-
-        companion object
-    }
-
-    data class NotifyBtcOrFiatChanged(
-        val `old`: org.bitcoinppl.cove_core.FiatOrBtc,
-        val `new`: org.bitcoinppl.cove_core.FiatOrBtc) : SendFlowManagerAction()
-
-    {
-
-
-        companion object
-    }
-
     data class NotifyScanCodeChanged(
         val `old`: kotlin.String,
         val `new`: kotlin.String) : SendFlowManagerAction()
@@ -63511,22 +63562,6 @@ sealed class SendFlowManagerAction: Disposable  {
     )
 
             }
-            is SendFlowManagerAction.NotifySelectedUnitedChanged -> {
-
-    Disposable.destroy(
-        this.`old`,
-        this.`new`
-    )
-
-            }
-            is SendFlowManagerAction.NotifyBtcOrFiatChanged -> {
-
-    Disposable.destroy(
-        this.`old`,
-        this.`new`
-    )
-
-            }
             is SendFlowManagerAction.NotifyScanCodeChanged -> {
 
     Disposable.destroy(
@@ -63638,43 +63673,35 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             12 -> SendFlowManagerAction.NotifyEnteringAddressChanged(
                 FfiConverterString.read(buf),
                 )
-            13 -> SendFlowManagerAction.NotifySelectedUnitedChanged(
-                FfiConverterTypeBitcoinUnit.read(buf),
-                FfiConverterTypeBitcoinUnit.read(buf),
-                )
-            14 -> SendFlowManagerAction.NotifyBtcOrFiatChanged(
-                FfiConverterTypeFiatOrBtc.read(buf),
-                FfiConverterTypeFiatOrBtc.read(buf),
-                )
-            15 -> SendFlowManagerAction.NotifyScanCodeChanged(
+            13 -> SendFlowManagerAction.NotifyScanCodeChanged(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            16 -> SendFlowManagerAction.NotifyPricesChanged(
+            14 -> SendFlowManagerAction.NotifyPricesChanged(
                 FfiConverterTypePriceResponse.read(buf),
                 )
-            17 -> SendFlowManagerAction.NotifyFocusFieldChanged(
+            15 -> SendFlowManagerAction.NotifyFocusFieldChanged(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            18 -> SendFlowManagerAction.NotifyAddressChanged(
+            16 -> SendFlowManagerAction.NotifyAddressChanged(
                 FfiConverterTypeAddress.read(buf),
                 )
-            19 -> SendFlowManagerAction.NotifyAmountChanged(
+            17 -> SendFlowManagerAction.NotifyAmountChanged(
                 FfiConverterTypeAmount.read(buf),
                 )
-            20 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
+            18 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
                 FfiConverterTypeAmount.read(buf),
                 )
-            21 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
+            19 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                 FfiConverterString.read(buf),
                 FfiConverterBoolean.read(buf),
                 )
-            22 -> SendFlowManagerAction.ChangeFeeRateOptions(
+            20 -> SendFlowManagerAction.ChangeFeeRateOptions(
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
                 )
-            23 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
-            24 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
+            21 -> SendFlowManagerAction.FinalizeAndGoToNextScreen
+            22 -> SendFlowManagerAction.AcknowledgeWarningAndFinalize(
                 FfiConverterTypeSendFlowWarningKind.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -63759,22 +63786,6 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             (
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
-            )
-        }
-        is SendFlowManagerAction.NotifySelectedUnitedChanged -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeBitcoinUnit.allocationSize(value.`old`)
-                + FfiConverterTypeBitcoinUnit.allocationSize(value.`new`)
-            )
-        }
-        is SendFlowManagerAction.NotifyBtcOrFiatChanged -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeFiatOrBtc.allocationSize(value.`old`)
-                + FfiConverterTypeFiatOrBtc.allocationSize(value.`new`)
             )
         }
         is SendFlowManagerAction.NotifyScanCodeChanged -> {
@@ -63908,67 +63919,55 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerAction.NotifySelectedUnitedChanged -> {
-                buf.putInt(13)
-                FfiConverterTypeBitcoinUnit.write(value.`old`, buf)
-                FfiConverterTypeBitcoinUnit.write(value.`new`, buf)
-                Unit
-            }
-            is SendFlowManagerAction.NotifyBtcOrFiatChanged -> {
-                buf.putInt(14)
-                FfiConverterTypeFiatOrBtc.write(value.`old`, buf)
-                FfiConverterTypeFiatOrBtc.write(value.`new`, buf)
-                Unit
-            }
             is SendFlowManagerAction.NotifyScanCodeChanged -> {
-                buf.putInt(15)
+                buf.putInt(13)
                 FfiConverterString.write(value.`old`, buf)
                 FfiConverterString.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyPricesChanged -> {
-                buf.putInt(16)
+                buf.putInt(14)
                 FfiConverterTypePriceResponse.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyFocusFieldChanged -> {
-                buf.putInt(17)
+                buf.putInt(15)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`old`, buf)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.`new`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyAddressChanged -> {
-                buf.putInt(18)
+                buf.putInt(16)
                 FfiConverterTypeAddress.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyAmountChanged -> {
-                buf.putInt(19)
+                buf.putInt(17)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlAmountChanged -> {
-                buf.putInt(20)
+                buf.putInt(18)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
-                buf.putInt(21)
+                buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 FfiConverterBoolean.write(value.v2, buf)
                 Unit
             }
             is SendFlowManagerAction.ChangeFeeRateOptions -> {
-                buf.putInt(22)
+                buf.putInt(20)
                 FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.FinalizeAndGoToNextScreen -> {
-                buf.putInt(23)
+                buf.putInt(21)
                 Unit
             }
             is SendFlowManagerAction.AcknowledgeWarningAndFinalize -> {
-                buf.putInt(24)
+                buf.putInt(22)
                 FfiConverterTypeSendFlowWarningKind.write(value.v1, buf)
                 Unit
             }
@@ -64050,6 +64049,18 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
 
     data class UpdateFocusField(
         val v1: org.bitcoinppl.cove_core.SetAmountFocusField?) : SendFlowManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The unit or entry field changed, sent with any entered text rewritten for it
+     */
+    data class UpdateAmountEntryMode(
+        val v1: org.bitcoinppl.cove_core.SendFlowAmountEntryMode) : SendFlowManagerReconcileMessage()
 
     {
 
@@ -64144,6 +64155,13 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     )
 
             }
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
 
     Disposable.destroy(
@@ -64204,14 +64222,17 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             9 -> SendFlowManagerReconcileMessage.UpdateFocusField(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            10 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
+            10 -> SendFlowManagerReconcileMessage.UpdateAmountEntryMode(
+                FfiConverterTypeSendFlowAmountEntryMode.read(buf),
+                )
+            11 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
                 FfiConverterTypeFeeSelection.read(buf),
                 )
-            11 -> SendFlowManagerReconcileMessage.RefreshPresenters
-            12 -> SendFlowManagerReconcileMessage.SetAlert(
+            12 -> SendFlowManagerReconcileMessage.RefreshPresenters
+            13 -> SendFlowManagerReconcileMessage.SetAlert(
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
-            13 -> SendFlowManagerReconcileMessage.ClearAlert
+            14 -> SendFlowManagerReconcileMessage.ClearAlert
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -64277,6 +64298,13 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             (
                 4UL
                 + FfiConverterOptionalTypeSetAmountFocusField.allocationSize(value.v1)
+            )
+        }
+        is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSendFlowAmountEntryMode.allocationSize(value.v1)
             )
         }
         is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
@@ -64353,22 +64381,27 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> {
                 buf.putInt(10)
+                FfiConverterTypeSendFlowAmountEntryMode.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
+                buf.putInt(11)
                 FfiConverterTypeFeeSelection.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 Unit
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterTypeSendFlowAlertState.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

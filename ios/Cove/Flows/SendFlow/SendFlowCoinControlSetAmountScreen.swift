@@ -89,11 +89,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         sendFlowManager.feeRateOptions
     }
 
-    var offset: CGFloat {
-        if metadata.fiatOrBtc == .fiat { return 0 }
-        return metadata.selectedUnit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
-    }
-
     var body: some View {
         SendFlowCoinControlContent(
             utxos: utxos,
@@ -107,7 +102,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
         .padding(.top, 0)
         .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
         .onChange(of: app.prices, initial: true, pricesChanged)
         .task { await prepareScreen() }
         .onAppear(perform: screenAppeared)
@@ -145,11 +139,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     // MARK: OnChange Functions
-
-    private func selectedUnitChanged(oldUnit: Unit, newUnit: Unit) {
-        Log.debug("selectedUnitChanged \(oldUnit) -> \(newUnit)")
-        sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
-    }
 
     private func pricesChanged(_: PriceResponse?, _ newPrices: PriceResponse?) {
         guard let newPrices else { return }
@@ -259,10 +248,10 @@ private struct SendFlowCoinControlContent: View {
     }
 
     private var offset: CGFloat {
-        let metadata = manager.walletMetadata
-        if metadata.fiatOrBtc == .fiat { return 0 }
+        let entryMode = sendFlowManager.amountEntryMode
+        if entryMode.fiatOrBtc == .fiat { return 0 }
 
-        return metadata.selectedUnit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
+        return entryMode.unit == .btc ? screenWidth * 0.09 : screenWidth * 0.10
     }
 
     var body: some View {
@@ -277,7 +266,7 @@ private struct SendFlowCoinControlContent: View {
                         SendFlowCoinControlAmountSection(
                             totalSending: sendFlowManager.sendAmountBtc,
                             sendAmountFiat: sendFlowManager.sendAmountFiat,
-                            unit: manager.unit,
+                            unit: sendFlowManager.unit,
                             offset: offset,
                             showCustomAmount: showCustomAmount,
                             updateUnit: updateUnit

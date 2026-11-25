@@ -7,13 +7,22 @@ use tracing::{debug, warn};
 use crate::app::AppAction;
 use crate::manager::deferred_dispatch::DeferredDispatch;
 
-use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, validation};
+use super::{
+    AmountEntryMode, EnterMode, Message, RustSendFlowManager, SendFlowAlertState, validation,
+};
 
 #[uniffi::export(async_runtime = "tokio")]
 impl RustSendFlowManager {
     #[uniffi::method]
     pub fn wallet_id(&self) -> WalletId {
-        self.state.lock().metadata.id.clone()
+        self.state.lock().wallet.id.clone()
+    }
+
+    /// The unit amounts show in and the field the amount is typed in, for the screen's first
+    /// render; changes arrive as `UpdateAmountEntryMode`
+    #[uniffi::method]
+    pub fn amount_entry_mode(&self) -> AmountEntryMode {
+        self.state.lock().amount_entry.mode
     }
 
     #[uniffi::method]
@@ -23,7 +32,7 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn entering_fiat_amount(&self) -> String {
-        self.state.lock().entering_fiat_amount.clone()
+        self.state.lock().amount_entry.fiat_text.clone()
     }
 
     #[uniffi::method(name = "maxSendMinusFees")]
@@ -109,7 +118,7 @@ impl RustSendFlowManager {
 
     #[uniffi::method]
     pub fn send_amount_btc(&self) -> String {
-        let selected_unit = self.state.lock().metadata.selected_unit;
+        let selected_unit = self.state.lock().amount_entry.mode.unit;
         let send_amount = self.send_amount().unwrap_or(Amount::ZERO);
 
         match selected_unit {
@@ -147,7 +156,7 @@ impl RustSendFlowManager {
             return "---".to_string();
         };
 
-        match self.state.lock().metadata.selected_unit {
+        match self.state.lock().amount_entry.mode.unit {
             BitcoinUnit::Btc => format!("{} BTC", total_spent.as_btc().thousands()),
             BitcoinUnit::Sat => format!("{} sats", total_spent.as_sats().thousands_int()),
         }
@@ -176,7 +185,7 @@ impl RustSendFlowManager {
         let selected_fee_rate = self.selected_fee_rate()?;
         let total_fee = selected_fee_rate.total_fee()?;
 
-        let string = match self.state.lock().metadata.selected_unit {
+        let string = match self.state.lock().amount_entry.mode.unit {
             BitcoinUnit::Btc => format!("{} BTC", total_fee.as_btc().thousands()),
             BitcoinUnit::Sat => format!("{} sats", total_fee.as_sats().thousands_int()),
         };
@@ -186,11 +195,9 @@ impl RustSendFlowManager {
 
     #[uniffi::method(default(with_suffix = true))]
     pub fn display_fiat_amount(&self, amount: f64, with_suffix: bool) -> String {
-        {
-            let sensitive_visible = self.state.lock().metadata.sensitive_visible;
-            if !sensitive_visible {
-                return "**************".to_string();
-            }
+        // read live from the wallet, so the Send header's eye button hides amounts at once
+        if !self.wallet_manager.metadata.display_preferences().sensitive_visible {
+            return "**************".to_string();
         }
 
         let fiat = amount.thousands_fiat();

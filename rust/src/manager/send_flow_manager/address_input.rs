@@ -18,7 +18,7 @@ impl RustSendFlowManager {
 
         self.state.lock().entering_address = address.clone();
 
-        let network = self.state.lock().metadata.network;
+        let network = self.state.lock().wallet.network;
         let parsed = AddressWithNetwork::try_new(&address).ok();
         let parsed = parsed
             .filter(|address_with_network| address_with_network.is_valid_for_network(network));
@@ -136,7 +136,7 @@ impl RustSendFlowManager {
         debug!("handle_scan_code_changed: {} chars", new_value.len());
         let mut sender = self.reconciler.deferred_sender();
 
-        let network = self.state.lock().metadata.network;
+        let network = self.state.lock().wallet.network;
         let address_with_network = {
             let new_value_moved = new_value;
             match AddressWithNetwork::try_new(&new_value_moved) {
@@ -238,12 +238,10 @@ mod tests {
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
         test_support::hardware_signing::external_address,
-        wallet::{balance::Balance, metadata::WalletMetadata},
+        wallet::metadata::WalletMetadata,
     };
 
-    use super::super::{
-        Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
-    };
+    use super::super::{Action, Message, RustSendFlowManager};
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
     const AMOUNT_SATS: u64 = 50_000;
@@ -258,16 +256,8 @@ mod tests {
         metadata.network = network;
 
         let wallet_manager =
-            Arc::new(funded_preview_wallet_manager_with_metadata(metadata.clone(), &[100_000]));
-
-        let state = State::new(metadata, Arc::new(Balance::default()));
-        let manager = Arc::new(RustSendFlowManager {
-            app: App::global().clone(),
-            wallet_manager,
-            state: state.into_inner(),
-            reconciler: ReconcileChannel::new(100),
-            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
-        });
+            Arc::new(funded_preview_wallet_manager_with_metadata(metadata, &[100_000]));
+        let manager = RustSendFlowManager::with_wallet(wallet_manager, Arc::default());
 
         {
             let mut state = manager.state.lock();

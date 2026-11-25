@@ -114,7 +114,7 @@ impl RustSendFlowManager {
         // the text is raw user input and can hold a pasted PIN, so only its length is logged
         debug!("handle_coin_control_entered_amount_changed: {} chars", amount.len());
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
-        let unit = self.state.lock().metadata.selected_unit;
+        let unit = self.state.lock().amount_entry.mode.unit;
         let amount = match unit {
             BitcoinUnit::Sat => Amount::from_sat(amount.parse::<u64>().ok()?),
             BitcoinUnit::Btc => Amount::from_btc_str(&amount).ok()?,

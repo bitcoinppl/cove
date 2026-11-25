@@ -89,8 +89,12 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(SendFlowManager.self) private var manager
     @Environment(\.dismiss) private var dismiss
 
+    /// The wallet's metadata in the send flow's unit, so the typed amount is parsed, labelled and
+    /// shown in the unit Rust parses it in
     var metadata: WalletMetadata {
-        walletManager.walletMetadata
+        var metadata = walletManager.walletMetadata
+        metadata.selectedUnit = manager.amountEntryMode.unit
+        return metadata
     }
 
     let utxos: [Utxo]
@@ -188,7 +192,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 amountFromSliderValue(sliderState.amount)
             }
 
-        return walletManager.displayAmount(amount, showUnit: false)
+        return walletDisplayAmount(metadata: metadata, amount: amount, showUnit: false)
     }
 
     private var displayAmountBinding: Binding<String> {

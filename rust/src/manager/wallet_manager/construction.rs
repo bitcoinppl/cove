@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    Error, Message, ReconcileChannel, RustWalletManager, WalletActor,
+    Error, LiveWalletMetadata, Message, ReconcileChannel, RustWalletManager, WalletActor,
     WalletBootstrapUnsignedTransactions, WalletLedgerState, WalletManagerDatabaseCorruptionError,
     WalletScanStatus, WalletSnapshot, downgrade_and_notify_if_needed,
 };
@@ -100,7 +100,7 @@ impl RustWalletManager {
         }
 
         let id = metadata.id.clone();
-        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
+        let shared_metadata = Arc::new(LiveWalletMetadata::new(metadata.clone()));
 
         // read cached and send to UI immediately
         let cached_balance: Balance = wallet.balance();
@@ -161,7 +161,7 @@ impl RustWalletManager {
         let wallet = Wallet::try_new_persisted_from_xpub(xpub)?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
-        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
+        let shared_metadata = Arc::new(LiveWalletMetadata::new(metadata.clone()));
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 
@@ -217,7 +217,7 @@ impl RustWalletManager {
 
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
-        let shared_metadata = Arc::new(RwLock::new(metadata));
+        let shared_metadata = Arc::new(LiveWalletMetadata::new(metadata));
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 

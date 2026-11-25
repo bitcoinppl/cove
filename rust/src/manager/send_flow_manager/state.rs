@@ -3,8 +3,10 @@ use std::sync::Arc;
 use parking_lot::{Mutex, MutexGuard};
 
 use cove_types::{
+    Network, WalletId,
     amount::Amount,
     fees::{FeeRate, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+    unit::BitcoinUnit,
     utxo::UtxoList,
 };
 use tracing::warn;
@@ -14,7 +16,12 @@ use crate::{
     app::App,
     database::Database,
     fiat::FiatCurrency,
-    wallet::{Address, balance::Balance, metadata::WalletMetadata},
+    manager::wallet_manager::live_metadata::WalletDisplayPreferences,
+    wallet::{
+        Address,
+        balance::Balance,
+        metadata::{FiatOrBtc, WalletMetadata, WalletType},
+    },
 };
 
 #[derive(Debug, Clone, derive_more::Deref)]
@@ -23,7 +30,8 @@ pub struct State(Arc<Mutex<SendFlowManagerState>>);
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct SendFlowManagerState {
     // private
-    pub(crate) metadata: WalletMetadata,
+    pub(crate) wallet: SendFlowWallet,
+    pub(crate) amount_entry: AmountEntry,
     pub(crate) fee_rate_options_base: Option<Arc<FeeRateOptions>>,
     pub(crate) btc_price_in_fiat: Option<u64>,
     pub(crate) selected_fiat_currency: FiatCurrency,
@@ -43,8 +51,6 @@ pub struct SendFlowManagerState {
     pub(crate) amount_check_awaiting_fee: Option<u64>,
 
     // public
-    pub entering_btc_amount: String,
-    pub entering_fiat_amount: String,
     pub entering_address: String,
 
     pub amount_sats: Option<u64>,
@@ -58,6 +64,25 @@ pub struct SendFlowManagerState {
     pub fee_selection: Option<FeeSelection>,
 
     pub payjoin_endpoint: Option<String>,
+}
+
+/// The wallet a send flow spends from, fixed for the flow's lifetime
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SendFlowWallet {
+    pub id: WalletId,
+    pub network: Network,
+    pub wallet_type: WalletType,
+}
+
+/// The amount as the user enters it: the unit and field it is typed in, and the text in each field
+///
+/// Parsing and rendering both read it, and a display preference change rewrites the text in the
+/// same step as the mode, so the text is never parsed in a unit it was not written in
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AmountEntry {
+    pub mode: AmountEntryMode,
+    pub btc_text: String,
+    pub fiat_text: String,
 }
 
 /// A Max amount and the drain it was built from
@@ -84,6 +109,7 @@ pub struct FeeSelection {
 }
 
 // define types this way so uniffi generates unique named types but the rust code just uses the abbreviated name
+pub use internal::SendFlowAmountEntryMode as AmountEntryMode;
 pub use internal::SendFlowCoinControlMode as CoinControlMode;
 pub use internal::SendFlowEnterMode as EnterMode;
 
@@ -95,6 +121,13 @@ mod internal {
         #[default]
         SetAmount,
         CoinControl(SendFlowCoinControlMode),
+    }
+
+    /// The unit bitcoin amounts are shown in and whether the amount is typed in fiat or bitcoin
+    #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Record)]
+    pub struct SendFlowAmountEntryMode {
+        pub unit: BitcoinUnit,
+        pub fiat_or_btc: FiatOrBtc,
     }
 
     #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -111,6 +144,28 @@ impl EnterMode {
 
     pub const fn is_coin_control(&self) -> bool {
         matches!(self, Self::CoinControl(_))
+    }
+}
+
+impl From<WalletDisplayPreferences> for AmountEntryMode {
+    fn from(preferences: WalletDisplayPreferences) -> Self {
+        Self { unit: preferences.selected_unit, fiat_or_btc: preferences.fiat_or_btc }
+    }
+}
+
+impl From<&WalletMetadata> for SendFlowWallet {
+    fn from(metadata: &WalletMetadata) -> Self {
+        Self {
+            id: metadata.id.clone(),
+            network: metadata.network,
+            wallet_type: metadata.wallet_type,
+        }
+    }
+}
+
+impl AmountEntry {
+    fn new(mode: AmountEntryMode, fiat_text: String) -> Self {
+        Self { mode, btc_text: String::new(), fiat_text }
     }
 }
 
@@ -134,8 +189,8 @@ impl CoinControlMode {
 
 /// MARK: State
 impl State {
-    pub fn new(metadata: WalletMetadata, balance: Arc<Balance>) -> Self {
-        Self(Arc::new(Mutex::new(SendFlowManagerState::new(metadata, balance))))
+    pub fn new(wallet: SendFlowWallet, mode: AmountEntryMode, balance: Arc<Balance>) -> Self {
+        Self(Arc::new(Mutex::new(SendFlowManagerState::new(wallet, mode, balance))))
     }
 
     pub fn into_inner(self) -> Arc<Mutex<SendFlowManagerState>> {
@@ -149,16 +204,15 @@ impl State {
 
 /// MARK: SendFlowManagerState
 impl SendFlowManagerState {
-    pub fn new(metadata: WalletMetadata, balance: Arc<Balance>) -> Self {
+    pub fn new(wallet: SendFlowWallet, mode: AmountEntryMode, balance: Arc<Balance>) -> Self {
         let selected_fiat_currency = Database::global().global_config.selected_fiat_currency();
 
         let btc_price_in_fiat = App::global().prices().map(|prices| prices.get());
 
         Self {
-            metadata,
+            wallet,
+            amount_entry: AmountEntry::new(mode, selected_fiat_currency.symbol().to_string()),
             fee_rate_options_base: None,
-            entering_btc_amount: String::new(),
-            entering_fiat_amount: selected_fiat_currency.symbol().to_string(),
             entering_address: String::new(),
             mode: EnterMode::SetAmount,
             first_address: None,
@@ -188,7 +242,7 @@ impl SendFlowManagerState {
             .address
             .as_deref()
             .cloned()
-            .or_else(|| Address::from_string(&self.entering_address, self.metadata.network).ok())
+            .or_else(|| Address::from_string(&self.entering_address, self.wallet.network).ok())
             .or_else(|| self.first_address.as_deref().cloned())
             .ok_or_else(|| SendFlowError::InvalidAddress(self.entering_address.clone()))?;
 
@@ -303,7 +357,9 @@ mod tests {
             ..Default::default()
         }));
 
-        let state = SendFlowManagerState::new(metadata, balance);
+        let mode =
+            AmountEntryMode { unit: metadata.selected_unit, fiat_or_btc: metadata.fiat_or_btc };
+        let state = SendFlowManagerState::new(SendFlowWallet::from(&metadata), mode, balance);
 
         assert_eq!(state.unlocked_spendable_sats, None);
         assert!(!state.lock_state_load_failed);

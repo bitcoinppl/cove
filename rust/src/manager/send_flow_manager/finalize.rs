@@ -181,7 +181,7 @@ impl RustSendFlowManager {
 
         let (wallet_type, wallet_id) = {
             let state = self.state.lock();
-            (state.metadata.wallet_type, state.metadata.id.clone())
+            (state.wallet.wallet_type, state.wallet.id.clone())
         };
 
         let me = self.clone();
@@ -313,7 +313,7 @@ impl RustSendFlowManager {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
 
     use cove_types::fees::{
         FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
@@ -322,12 +322,11 @@ mod tests {
 
     use crate::{
         manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
-        wallet::{Address, balance::Balance, metadata::WalletMetadata},
+        wallet::Address,
     };
 
     use super::super::{
-        App, DebouncedTask, FeeSelection, ReconcileChannel, RustSendFlowManager,
-        SendFlowAlertState, SendFlowWarningKind,
+        FeeSelection, RustSendFlowManager, SendFlowAlertState, SendFlowWarningKind,
     };
     use super::*;
 
@@ -335,17 +334,8 @@ mod tests {
         crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
 
-        let balance = Arc::new(Balance::default());
-        let state = super::super::State::new(WalletMetadata::preview_new(), balance);
         let wallet_manager = Arc::new(RustWalletManager::preview_new_wallet());
-
-        Arc::new(RustSendFlowManager {
-            app: App::global().clone(),
-            wallet_manager,
-            state: state.into_inner(),
-            reconciler: ReconcileChannel::new(50),
-            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
-        })
+        RustSendFlowManager::with_wallet(wallet_manager, Arc::default())
     }
 
     fn selected_fee_without_total() -> FeeRateOptionWithTotalFee {

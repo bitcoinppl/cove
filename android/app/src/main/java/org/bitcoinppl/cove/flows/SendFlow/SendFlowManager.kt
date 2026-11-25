@@ -46,6 +46,24 @@ class SendFlowManager internal constructor(
 
     val id: WalletId = rust.walletId()
 
+    /**
+     * The unit and field the amount is entered in, which Rust keeps in step with the wallet's
+     * display preferences and rewrites the entered text for
+     */
+    var amountEntryMode by mutableStateOf(rust.amountEntryMode())
+        private set
+
+    val isFiatEntry: Boolean
+        get() = amountEntryMode.fiatOrBtc == FiatOrBtc.FIAT
+
+    /** The bitcoin unit label for this send, from the same owner as the entered text */
+    val unit: String
+        get() =
+            when (amountEntryMode.unit) {
+                BitcoinUnit.BTC -> "btc"
+                BitcoinUnit.SAT -> "sats"
+            }
+
     // user input state
     var enteringBtcAmount by mutableStateOf("")
         private set
@@ -291,6 +309,17 @@ class SendFlowManager internal constructor(
             getCustomFeeOption(feeRate, feeSpeed)
         }
 
+    /** Applies what the user is entering, and the unit and field it is entered in */
+    private fun applyEntry(message: SendFlowManagerReconcileMessage) {
+        when (message) {
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> amountEntryMode = message.v1
+            is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> enteringBtcAmount = message.v1
+            is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> enteringFiatAmount = message.v1
+            is SendFlowManagerReconcileMessage.UpdateEnteringAddress -> _enteringAddress = message.v1
+            else -> Unit
+        }
+    }
+
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {
             is SendFlowManagerReconcileMessage.UpdateAmountFiat -> {
@@ -311,16 +340,12 @@ class SendFlowManager internal constructor(
                 address = message.v1
             }
 
-            is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> {
-                enteringBtcAmount = message.v1
-            }
-
-            is SendFlowManagerReconcileMessage.UpdateEnteringAddress -> {
-                _enteringAddress = message.v1
-            }
-
-            is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> {
-                enteringFiatAmount = message.v1
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode,
+            is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount,
+            is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount,
+            is SendFlowManagerReconcileMessage.UpdateEnteringAddress,
+            -> {
+                applyEntry(message)
             }
 
             is SendFlowManagerReconcileMessage.UpdateFocusField -> {

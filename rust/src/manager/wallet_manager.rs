@@ -6,6 +6,7 @@ mod exports;
 #[cfg(test)]
 mod fake_node_tests;
 pub mod ledger_state;
+pub mod live_metadata;
 mod payjoin;
 pub mod receive_address;
 mod send_transactions;
@@ -21,6 +22,7 @@ pub use balance_presentation::BalancePresentation;
 use bdk_wallet::{AddUtxoError, error::CreateTxError};
 use futures::channel::oneshot;
 pub use ledger_state::WalletLedgerState;
+use live_metadata::LiveWalletMetadata;
 use parking_lot::RwLock;
 use receive_address::{ReceiveAddressPresentation, ReceiveAddressState};
 use tracing::{debug, error, warn};
@@ -273,10 +275,9 @@ pub struct RustWalletManager {
     pub id: WalletId,
     pub actor: Addr<WalletActor>,
 
-    // cache, metadata already exists in the database and in the actor state,  this cache makes it
-    // faster to access, but adds complexity to the code because we have to make sure its updated
-    // in all the places
-    pub metadata: Arc<RwLock<WalletMetadata>>,
+    // cache, metadata already exists in the database and in the actor state, this cache makes it
+    // faster to access; the actor is its only writer and publishes display preference changes
+    pub metadata: Arc<LiveWalletMetadata>,
     pub reconciler: ReconcileChannel<Message>,
     scan_status: Arc<RwLock<WalletScanStatus>>,
     wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
@@ -680,10 +681,7 @@ impl RustWalletManager {
     ) -> Result<Arc<RustSendFlowManager>, Error> {
         self.ensure_ledger_ready_for_spend()?;
 
-        let me = self.clone();
-        let metadata = self.current_metadata();
-
-        Ok(RustSendFlowManager::new(metadata, balance, me))
+        Ok(RustSendFlowManager::new(balance, self))
     }
 
     #[uniffi::method]
@@ -1249,7 +1247,7 @@ impl RustWalletManager {
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
+        let shared_metadata = Arc::new(LiveWalletMetadata::new(metadata.clone()));
         let wallet_actor = WalletActor::new_with_metadata_and_db(
             wallet,
             channel.sender().clone(),

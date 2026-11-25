@@ -57,7 +57,7 @@ use self::scan::{
     RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, ScanRequestOrder, WalletScanActor,
     WalletScanEvent, WalletScanEventKind, should_update_full_scan_metadata,
 };
-use super::WalletManagerReconcileMessage;
+use super::{WalletManagerReconcileMessage, live_metadata::LiveWalletMetadata};
 
 #[derive(Debug)]
 pub(crate) struct WalletActor {
@@ -68,7 +68,7 @@ pub(crate) struct WalletActor {
 
     pub db: WalletDataDb,
     pub state: ActorState,
-    pub metadata: Arc<RwLock<WalletMetadata>>,
+    pub metadata: Arc<LiveWalletMetadata>,
     pub receive_address: ReceiveAddressSession,
     pub scan_status: Arc<RwLock<WalletScanStatus>>,
     pub wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
@@ -348,7 +348,7 @@ impl WalletActor {
         };
 
         self.wallet.metadata = after.clone();
-        *self.metadata.write() = after.clone();
+        self.metadata.replace(after.clone());
         self.send_metadata_changed(&before, &after);
 
         if self.wallet.uses_persistent_storage() {
@@ -380,7 +380,7 @@ impl WalletActor {
         reconciler: MessageSender<WalletManagerReconcileMessage>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
-        metadata: Arc<RwLock<WalletMetadata>>,
+        metadata: Arc<LiveWalletMetadata>,
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
 
@@ -400,7 +400,7 @@ impl WalletActor {
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
         db: WalletDataDb,
-        metadata: Arc<RwLock<WalletMetadata>>,
+        metadata: Arc<LiveWalletMetadata>,
     ) -> Self {
         let seed = rand::rng().random();
         wallet.metadata = metadata.read().clone();
@@ -685,7 +685,7 @@ impl WalletActor {
 
         // publication already committed, so every live metadata owner must move forward
         self.wallet.metadata = target_metadata.clone();
-        *self.metadata.write() = target_metadata.clone();
+        self.metadata.replace(target_metadata.clone());
         self.send_metadata_changed(&previous_metadata, &target_metadata);
 
         let mut failures = Vec::new();
@@ -1683,7 +1683,7 @@ mod test_support {
             wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
             db: WalletDataDb,
         ) -> Self {
-            let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
+            let metadata = Arc::new(super::LiveWalletMetadata::new(wallet.metadata.clone()));
 
             Self::new_with_metadata_and_db(
                 wallet,
@@ -1944,7 +1944,7 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
 
         let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
+        let metadata = Arc::new(super::LiveWalletMetadata::new(wallet.metadata.clone()));
 
         super::WalletActor::new_with_metadata(
             wallet,

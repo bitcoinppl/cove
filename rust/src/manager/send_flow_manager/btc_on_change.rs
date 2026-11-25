@@ -1,15 +1,18 @@
 use std::sync::Arc;
 
-use crate::wallet::metadata::{FiatOrBtc, WalletMetadata};
+use crate::wallet::metadata::FiatOrBtc;
 use cove_types::{amount::Amount, unit::BitcoinUnit};
 use cove_util::format::{self, NumberFormatter as _};
 use tracing::debug;
 
-use super::{sanitize, state::State};
+use super::{
+    sanitize,
+    state::{AmountEntryMode, State},
+};
 
 #[derive(Debug, Clone)]
 pub struct BtcOnChangeHandler {
-    metadata: WalletMetadata,
+    mode: AmountEntryMode,
     max_selected: Option<Arc<Amount>>,
     btc_price_in_fiat: Option<u64>,
 }
@@ -27,18 +30,18 @@ impl BtcOnChangeHandler {
         let state = state.into();
         let state = state.lock();
 
-        let metadata = state.metadata.clone();
+        let mode = state.amount_entry.mode;
         let max_selected = state.max_selected.as_ref().map(|max| max.amount.clone());
         let btc_price_in_fiat = state.btc_price_in_fiat;
 
-        Self { metadata, max_selected, btc_price_in_fiat }
+        Self { mode, max_selected, btc_price_in_fiat }
     }
 
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Changeset {
         // ---------------------------------------------------------------------
         // 1. early exits and sanitization
         // ---------------------------------------------------------------------
-        if self.metadata.fiat_or_btc == FiatOrBtc::Fiat {
+        if self.mode.fiat_or_btc == FiatOrBtc::Fiat {
             return Changeset::default();
         }
 
@@ -79,7 +82,7 @@ impl BtcOnChangeHandler {
             };
         }
 
-        let unit = self.metadata.selected_unit;
+        let unit = self.mode.unit;
 
         // decimal points `.` count
         let number_of_periods = new.chars().filter(|c| *c == '.').count();
@@ -120,7 +123,7 @@ impl BtcOnChangeHandler {
         // 3. parse to `Amount`
         // ---------------------------------------------------------------------
 
-        let amount = match self.metadata.selected_unit {
+        let amount = match unit {
             BitcoinUnit::Sat => unformatted.parse::<u64>().ok().map(Amount::from_sat),
             BitcoinUnit::Btc => {
                 unformatted.parse::<f64>().ok().and_then(|v| Amount::from_btc(v).ok())
@@ -158,7 +161,7 @@ impl BtcOnChangeHandler {
             changeset.amount_fiat = Some(amount.as_btc() * (price as f64));
         }
 
-        let entering_amount_btc = match self.metadata.selected_unit {
+        let entering_amount_btc = match unit {
             BitcoinUnit::Sat => Some(amount.as_sats().thousands_int()),
             BitcoinUnit::Btc => format::btc_typing(&unformatted),
         };

@@ -257,18 +257,40 @@ internal class AndroidManagerCache(
         return installedManager
     }
 
+    /**
+     * The send session for the wallet, or null when no send route for it is on the stack
+     *
+     * A screen whose route is already gone, such as one still running its setup while it leaves,
+     * must not create a session that the next send would reuse
+     */
     internal fun getSendFlowManager(
         wm: WalletManager,
         presenter: SendFlowPresenter,
-    ): SendFlowManager {
-        sendFlowManager?.let {
-            if (it.id == wm.id) {
-                Log.d(tag, "found and using sendflow manager for ${wm.id}")
-                it.presenter = presenter
-                return it
+        router: RouterManager,
+    ): SendFlowManager? {
+        val existing = sendFlowManager
+
+        return when {
+            !routeStackContainsSendWallet(router.default, router.routes, wm.id) -> {
+                Log.d(tag, "no send route for ${wm.id}, not creating a SendFlowManager")
+                null
             }
 
-            // close old manager before replacing
+            existing?.id == wm.id -> {
+                Log.d(tag, "found and using sendflow manager for ${wm.id}")
+                existing.also { it.presenter = presenter }
+            }
+
+            else -> replaceSendFlowManager(wm, presenter)
+        }
+    }
+
+    private fun replaceSendFlowManager(
+        wm: WalletManager,
+        presenter: SendFlowPresenter,
+    ): SendFlowManager {
+        // close the old wallet's manager before replacing it
+        sendFlowManager?.let {
             Log.d(tag, "closing old sendflow manager for ${it.id}")
             clearSendFlowManager()
         }

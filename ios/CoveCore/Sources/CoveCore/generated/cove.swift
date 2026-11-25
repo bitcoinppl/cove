@@ -10151,6 +10151,12 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
 
     func amount()  -> Amount
 
+    /**
+     * The unit amounts show in and the field the amount is typed in, for the screen's first
+     * render; changes arrive as `UpdateAmountEntryMode`
+     */
+    func amountEntryMode()  -> SendFlowAmountEntryMode
+
     func amountExceedsBalance()  -> Bool
 
     func amountSats()  -> UInt64
@@ -10342,6 +10348,19 @@ open func amount() -> Amount  {
     return try!  FfiConverterTypeAmount_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustsendflowmanager_amount(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The unit amounts show in and the field the amount is typed in, for the screen's first
+     * render; changes arrive as `UpdateAmountEntryMode`
+     */
+open func amountEntryMode() -> SendFlowAmountEntryMode  {
+    return try!  FfiConverterTypeSendFlowAmountEntryMode_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustsendflowmanager_amount_entry_mode(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -21286,6 +21305,63 @@ public func FfiConverterTypeSendConfirmationLock_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeSendConfirmationLock_lower(_ value: SendConfirmationLock) -> RustBuffer {
     return FfiConverterTypeSendConfirmationLock.lower(value)
+}
+
+
+/**
+ * The unit bitcoin amounts are shown in and whether the amount is typed in fiat or bitcoin
+ */
+public struct SendFlowAmountEntryMode: Equatable, Hashable {
+    public var unit: BitcoinUnit
+    public var fiatOrBtc: FiatOrBtc
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(unit: BitcoinUnit, fiatOrBtc: FiatOrBtc) {
+        self.unit = unit
+        self.fiatOrBtc = fiatOrBtc
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SendFlowAmountEntryMode: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendFlowAmountEntryMode: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendFlowAmountEntryMode {
+        return
+            try SendFlowAmountEntryMode(
+                unit: FfiConverterTypeBitcoinUnit.read(from: &buf),
+                fiatOrBtc: FfiConverterTypeFiatOrBtc.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendFlowAmountEntryMode, into buf: inout [UInt8]) {
+        FfiConverterTypeBitcoinUnit.write(value.unit, into: &buf)
+        FfiConverterTypeFiatOrBtc.write(value.fiatOrBtc, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowAmountEntryMode_lift(_ buf: RustBuffer) throws -> SendFlowAmountEntryMode {
+    return try FfiConverterTypeSendFlowAmountEntryMode.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendFlowAmountEntryMode_lower(_ value: SendFlowAmountEntryMode) -> RustBuffer {
+    return FfiConverterTypeSendFlowAmountEntryMode.lower(value)
 }
 
 
@@ -43549,10 +43625,6 @@ public enum SendFlowManagerAction {
     )
     case notifyEnteringAddressChanged(String
     )
-    case notifySelectedUnitedChanged(old: BitcoinUnit, new: BitcoinUnit
-    )
-    case notifyBtcOrFiatChanged(old: FiatOrBtc, new: FiatOrBtc
-    )
     case notifyScanCodeChanged(old: String, new: String
     )
     case notifyPricesChanged(PriceResponse
@@ -43624,39 +43696,33 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 12: return .notifyEnteringAddressChanged(try FfiConverterString.read(from: &buf)
         )
 
-        case 13: return .notifySelectedUnitedChanged(old: try FfiConverterTypeBitcoinUnit.read(from: &buf), new: try FfiConverterTypeBitcoinUnit.read(from: &buf)
+        case 13: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
         )
 
-        case 14: return .notifyBtcOrFiatChanged(old: try FfiConverterTypeFiatOrBtc.read(from: &buf), new: try FfiConverterTypeFiatOrBtc.read(from: &buf)
+        case 14: return .notifyPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
         )
 
-        case 15: return .notifyScanCodeChanged(old: try FfiConverterString.read(from: &buf), new: try FfiConverterString.read(from: &buf)
+        case 15: return .notifyFocusFieldChanged(old: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), new: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
 
-        case 16: return .notifyPricesChanged(try FfiConverterTypePriceResponse.read(from: &buf)
+        case 16: return .notifyAddressChanged(try FfiConverterTypeAddress.read(from: &buf)
         )
 
-        case 17: return .notifyFocusFieldChanged(old: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf), new: try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
+        case 17: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 18: return .notifyAddressChanged(try FfiConverterTypeAddress.read(from: &buf)
+        case 18: return .notifyCoinControlAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 19: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
+        case 19: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
         )
 
-        case 20: return .notifyCoinControlAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
+        case 20: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
         )
 
-        case 21: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
-        )
+        case 21: return .finalizeAndGoToNextScreen
 
-        case 22: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
-        )
-
-        case 23: return .finalizeAndGoToNextScreen
-
-        case 24: return .acknowledgeWarningAndFinalize(try FfiConverterTypeSendFlowWarningKind.read(from: &buf)
+        case 22: return .acknowledgeWarningAndFinalize(try FfiConverterTypeSendFlowWarningKind.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -43722,67 +43788,55 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .notifySelectedUnitedChanged(old,new):
-            writeInt(&buf, Int32(13))
-            FfiConverterTypeBitcoinUnit.write(old, into: &buf)
-            FfiConverterTypeBitcoinUnit.write(new, into: &buf)
-
-
-        case let .notifyBtcOrFiatChanged(old,new):
-            writeInt(&buf, Int32(14))
-            FfiConverterTypeFiatOrBtc.write(old, into: &buf)
-            FfiConverterTypeFiatOrBtc.write(new, into: &buf)
-
-
         case let .notifyScanCodeChanged(old,new):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(old, into: &buf)
             FfiConverterString.write(new, into: &buf)
 
 
         case let .notifyPricesChanged(v1):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(14))
             FfiConverterTypePriceResponse.write(v1, into: &buf)
 
 
         case let .notifyFocusFieldChanged(old,new):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(15))
             FfiConverterOptionTypeSetAmountFocusField.write(old, into: &buf)
             FfiConverterOptionTypeSetAmountFocusField.write(new, into: &buf)
 
 
         case let .notifyAddressChanged(v1):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeAddress.write(v1, into: &buf)
 
 
         case let .notifyAmountChanged(v1):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(17))
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
         case let .notifyCoinControlAmountChanged(v1):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(18))
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
         case let .notifyCoinControlEnteredAmountChanged(v1,v2):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(v1, into: &buf)
             FfiConverterBool.write(v2, into: &buf)
 
 
         case let .changeFeeRateOptions(v1):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(20))
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(v1, into: &buf)
 
 
         case .finalizeAndGoToNextScreen:
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(21))
 
 
         case let .acknowledgeWarningAndFinalize(v1):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(22))
             FfiConverterTypeSendFlowWarningKind.write(v1, into: &buf)
 
         }
@@ -43825,6 +43879,11 @@ public enum SendFlowManagerReconcileMessage {
     case updateAmountFiat(Double
     )
     case updateFocusField(SetAmountFocusField?
+    )
+    /**
+     * The unit or entry field changed, sent with any entered text rewritten for it
+     */
+    case updateAmountEntryMode(SendFlowAmountEntryMode
     )
     case updateFeeSelection(FeeSelection
     )
@@ -43879,15 +43938,18 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 9: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
 
-        case 10: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
+        case 10: return .updateAmountEntryMode(try FfiConverterTypeSendFlowAmountEntryMode.read(from: &buf)
         )
 
-        case 11: return .refreshPresenters
-
-        case 12: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        case 11: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
         )
 
-        case 13: return .clearAlert
+        case 12: return .refreshPresenters
+
+        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        )
+
+        case 14: return .clearAlert
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -43941,22 +44003,27 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
 
 
-        case let .updateFeeSelection(v1):
+        case let .updateAmountEntryMode(v1):
             writeInt(&buf, Int32(10))
+            FfiConverterTypeSendFlowAmountEntryMode.write(v1, into: &buf)
+
+
+        case let .updateFeeSelection(v1):
+            writeInt(&buf, Int32(11))
             FfiConverterTypeFeeSelection.write(v1, into: &buf)
 
 
         case .refreshPresenters:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
 
 
         case let .setAlert(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
 
 
         case .clearAlert:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
 
         }
     }
@@ -56094,6 +56161,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount() != 59577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_amount_entry_mode() != 60313) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_amount_exceeds_balance() != 53544) {

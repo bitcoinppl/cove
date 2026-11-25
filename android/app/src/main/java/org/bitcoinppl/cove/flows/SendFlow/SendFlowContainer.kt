@@ -80,7 +80,11 @@ fun SendFlowContainer(
 
             val wm = app.getWalletManagerLoaded(walletId)
             val presenter = SendFlowPresenter(app, wm)
-            val sfm = app.getSendFlowManager(wm, presenter)
+            val sfm =
+                app.getSendFlowManager(wm, presenter) ?: run {
+                    Log.d(tag, "send route for $walletId is gone, not starting a send session")
+                    return@LaunchedEffect
+                }
 
             // pre-populate address/amount based on route type
             when (sendRoute) {
@@ -167,28 +171,6 @@ fun SendFlowContainer(
                 ) {
                     presenter.alertState = TaggedItem(SendFlowAlertState.Error(SendFlowException.NoBalance()))
                 }
-            }
-
-            // observe unit changes and notify send flow manager
-            var previousUnit by remember { mutableStateOf(wm.walletMetadata?.selectedUnit) }
-            LaunchedEffect(wm.walletMetadata?.selectedUnit) {
-                val currentUnit = wm.walletMetadata?.selectedUnit
-                val oldUnit = previousUnit
-                if (oldUnit != null && currentUnit != null && oldUnit != currentUnit) {
-                    sfm.dispatch(SendFlowManagerAction.NotifySelectedUnitedChanged(oldUnit, currentUnit))
-                }
-                previousUnit = currentUnit
-            }
-
-            // observe fiatOrBtc changes and notify send flow manager
-            var previousFiatOrBtc by remember { mutableStateOf(wm.walletMetadata?.fiatOrBtc) }
-            LaunchedEffect(wm.walletMetadata?.fiatOrBtc) {
-                val currentFiatOrBtc = wm.walletMetadata?.fiatOrBtc
-                val oldFiatOrBtc = previousFiatOrBtc
-                if (oldFiatOrBtc != null && currentFiatOrBtc != null && oldFiatOrBtc != currentFiatOrBtc) {
-                    sfm.dispatch(SendFlowManagerAction.NotifyBtcOrFiatChanged(oldFiatOrBtc, currentFiatOrBtc))
-                }
-                previousFiatOrBtc = currentFiatOrBtc
             }
 
             // observe app prices changes and notify send flow manager
@@ -413,7 +395,7 @@ private fun SendFlowRouteToScreen(
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
                 sendingAmount = sendFlowManager.sendAmountBtc,
-                sendingDenomination = walletManager.unit,
+                sendingDenomination = sendFlowManager.unit,
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
                 initialAddress = sendFlowManager.enteringAddress,
                 feeEta =

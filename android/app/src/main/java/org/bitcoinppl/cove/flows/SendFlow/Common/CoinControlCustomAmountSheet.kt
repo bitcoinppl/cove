@@ -169,7 +169,9 @@ fun CoinControlCustomAmountSheet(
     fun coinControlAmountChanged(value: Double): SendFlowManagerAction =
         SendFlowManagerAction.NotifyCoinControlAmountChanged(amountFromSliderValue(value))
 
-    fun displayAmount(): String = walletManager.amountFmt(amountFromSliderValue(sliderState.amount))
+    // the send flow's unit, which Rust parses the typed amount in
+    fun displayAmount(): String =
+        amountFromSliderValue(sliderState.amount).fmtString(sendFlowManager.amountEntryMode.unit)
 
     fun handleSliderChange(raw: Double) {
         isEditing = true
@@ -310,7 +312,7 @@ fun CoinControlCustomAmountSheet(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            walletManager.unit.uppercase(),
+                            sendFlowManager.unit.uppercase(),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,

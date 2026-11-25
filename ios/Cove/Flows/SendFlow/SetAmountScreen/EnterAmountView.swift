@@ -28,19 +28,20 @@ struct EnterAmountView: View {
     }
 
     private var enteringAmount: Binding<String> {
-        switch metadata.fiatOrBtc {
+        switch entryMode.fiatOrBtc {
         case .btc: $enteringBtcAmount
         case .fiat: $enteringFiatAmount
         }
     }
 
-    var metadata: WalletMetadata {
-        manager.walletMetadata
+    /// The unit and field come from the send flow, which owns the entered text they describe
+    var entryMode: SendFlowAmountEntryMode {
+        sendFlowManager.amountEntryMode
     }
 
     var offset: CGFloat {
-        if metadata.fiatOrBtc == .fiat { return 0 }
-        return metadata.selectedUnit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
+        if entryMode.fiatOrBtc == .fiat { return 0 }
+        return entryMode.unit == .btc ? screenWidth * 0.10 : screenWidth * 0.11
     }
 
     var sendAmountFiat: String {
@@ -127,20 +128,20 @@ struct EnterAmountView: View {
     }
 
     private func toggleSecondaryAmount() {
-        if metadata.fiatOrBtc == .btc, app.prices == nil { return }
+        if entryMode.fiatOrBtc == .btc, app.prices == nil { return }
         manager.dispatch(action: .toggleFiatOrBtc)
     }
 
     var body: some View {
         VStack(spacing: 8) {
             EnterAmountPrimaryRow(
-                fiatOrBtc: metadata.fiatOrBtc,
+                fiatOrBtc: entryMode.fiatOrBtc,
                 enteringBtcAmount: $enteringBtcAmount,
                 enteringFiatAmount: $enteringFiatAmount,
                 amountTextColor: amountTextColor,
                 offset: offset,
                 focusField: $focusField,
-                unit: manager.unit,
+                unit: sendFlowManager.unit,
                 showingMenu: $showingMenu,
                 selectSats: selectSats,
                 selectBtc: selectBtc
@@ -163,9 +164,9 @@ struct EnterAmountView: View {
             .onChange(of: exceedsBalance, exceedsBalanceChanged)
 
             EnterAmountSecondaryAmountRow(
-                amount: metadata.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc,
-                unit: manager.unit,
-                showsUnit: metadata.fiatOrBtc == .fiat,
+                amount: entryMode.fiatOrBtc == .btc ? sendAmountFiat : sendAmountBtc,
+                unit: sendFlowManager.unit,
+                showsUnit: entryMode.fiatOrBtc == .fiat,
                 toggleAmountUnit: toggleSecondaryAmount
             )
         }

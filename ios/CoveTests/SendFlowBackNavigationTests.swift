@@ -116,6 +116,7 @@ private final class LayoutOnlySendManager: SendFlowRustManaging {
 
     init(walletId: WalletId) { id = walletId }
     func walletId() -> WalletId { id }
+    func amountEntryMode() -> SendFlowAmountEntryMode { SendFlowAmountEntryMode(unit: .btc, fiatOrBtc: .btc) }
     func enteringFiatAmount() -> String { "" }
     func sendAmountFiat() -> String { "" }
     func sendAmountBtc() -> String { "" }

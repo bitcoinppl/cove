@@ -29,7 +29,7 @@ impl RustSendFlowManager {
 
         // update the state
         let mut sender = self.reconciler.deferred_sender();
-        self.state.lock().entering_btc_amount = new.clone();
+        self.state.lock().amount_entry.btc_text = new.clone();
 
         let state: State = self.state.clone().into();
         let me = self.clone();
@@ -98,7 +98,7 @@ impl RustSendFlowManager {
         let mut sender = self.reconciler.deferred_sender();
 
         // update the state
-        self.state.lock().entering_fiat_amount = new_value.clone();
+        self.state.lock().amount_entry.fiat_text = new_value.clone();
 
         let prices = self.app.prices()?;
         let selected_currency = self.state.lock().selected_fiat_currency;
@@ -118,7 +118,7 @@ impl RustSendFlowManager {
         } = result;
 
         if let Some(entering_fiat_amount) = entering_fiat_amount {
-            self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
+            self.state.lock().amount_entry.fiat_text = entering_fiat_amount.clone();
             sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
         }
 
@@ -229,11 +229,11 @@ impl RustSendFlowManager {
                 let currency = self.state.lock().selected_fiat_currency;
                 let entering_fiat_amount = fiat_entry_text(amount_fiat, currency);
 
-                self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
+                self.state.lock().amount_entry.fiat_text = entering_fiat_amount.clone();
                 sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
             }
 
-            let unit = self.state.lock().metadata.selected_unit;
+            let unit = self.state.lock().amount_entry.mode.unit;
             match (amount, unit) {
                 (Some(amount), BitcoinUnit::Sat) => {
                     let entering_btc_amount = amount.as_sats().thousands_int();
@@ -390,72 +390,6 @@ impl RustSendFlowManager {
         commit
     }
 
-    pub(crate) fn handle_selected_unit_changed(
-        self: &Arc<Self>,
-        old: BitcoinUnit,
-        new: BitcoinUnit,
-    ) {
-        let mut sender = self.reconciler.deferred_sender();
-        self.state.lock().metadata.selected_unit = new;
-
-        sender.queue(Message::RefreshPresenters);
-
-        if old == new {
-            return;
-        }
-
-        // if its already empty clear everything
-        let nothing_entered = {
-            let state = self.state.lock();
-            state.amount_sats.is_none() || state.entering_btc_amount.is_empty()
-        };
-        if nothing_entered {
-            return self.clear_send_amount();
-        }
-
-        // if we are entering fiat, then we don't need to update the entering field
-        if self.state.lock().metadata.fiat_or_btc == FiatOrBtc::Fiat {
-            return;
-        }
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        let entering_btc_amount = btc_entry_text(Amount::from_sat(amount_sats), new);
-        self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-    }
-
-    pub(crate) fn handle_btc_or_fiat_changed(
-        self: &Arc<Self>,
-        _old_value: FiatOrBtc,
-        new_value: FiatOrBtc,
-    ) {
-        let mut sender = self.reconciler.deferred_sender();
-        self.state.lock().metadata.fiat_or_btc = new_value;
-
-        sender.queue(Message::RefreshPresenters);
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        match new_value {
-            FiatOrBtc::Btc => {
-                let unit = self.state.lock().metadata.selected_unit;
-                let entering_btc_amount = btc_entry_text(Amount::from_sat(amount_sats), unit);
-                self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-            }
-
-            FiatOrBtc::Fiat => {
-                let currency = self.state.lock().selected_fiat_currency;
-                let fiat_amount = self.state.lock().amount_fiat.unwrap_or_default();
-                let entering_fiat_amount = fiat_entry_text(fiat_amount, currency);
-                self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
-            }
-        }
-    }
-
     pub(crate) fn handle_prices_changed(self: &Arc<Self>, prices: Arc<PriceResponse>) {
         let selected_currency = self.state.lock().selected_fiat_currency;
         let btc_price_in_fiat = prices.get_for_currency(selected_currency);
@@ -526,7 +460,7 @@ fn apply_amount(
     sender: &mut DeferredSender,
 ) -> bool {
     let btc_price_in_fiat = state.btc_price_in_fiat;
-    match state.metadata.fiat_or_btc {
+    match state.amount_entry.mode.fiat_or_btc {
         FiatOrBtc::Fiat => {
             if let Some(price) = btc_price_in_fiat {
                 let text = fiat_entry_text(fiat_value(amount, price), state.selected_fiat_currency);
@@ -535,7 +469,7 @@ fn apply_amount(
         }
 
         FiatOrBtc::Btc => {
-            let text = btc_entry_text(amount, state.metadata.selected_unit);
+            let text = btc_entry_text(amount, state.amount_entry.mode.unit);
             set_entering_btc_amount(state, text, sender);
         }
     }
@@ -562,8 +496,8 @@ fn set_entering_btc_amount(
     entering_btc_amount: String,
     sender: &mut DeferredSender,
 ) {
-    if state.entering_btc_amount != entering_btc_amount {
-        state.entering_btc_amount = entering_btc_amount.clone();
+    if state.amount_entry.btc_text != entering_btc_amount {
+        state.amount_entry.btc_text = entering_btc_amount.clone();
         sender.queue(Message::UpdateEnteringBtcAmount(entering_btc_amount));
     }
 }
@@ -573,14 +507,14 @@ fn set_entering_fiat_amount(
     entering_fiat_amount: String,
     sender: &mut DeferredSender,
 ) {
-    if state.entering_fiat_amount != entering_fiat_amount {
-        state.entering_fiat_amount = entering_fiat_amount.clone();
+    if state.amount_entry.fiat_text != entering_fiat_amount {
+        state.amount_entry.fiat_text = entering_fiat_amount.clone();
         sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
     }
 }
 
 /// The text shown in the bitcoin amount field for a committed amount in the selected unit
-fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
+pub(crate) fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
     match unit {
         BitcoinUnit::Btc => amount.btc_string(),
         BitcoinUnit::Sat => amount.as_sats().thousands_int(),
@@ -588,7 +522,7 @@ fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
 }
 
 /// The text shown in the fiat amount field, symbol first
-fn fiat_entry_text(amount_fiat: f64, currency: FiatCurrency) -> String {
+pub(crate) fn fiat_entry_text(amount_fiat: f64, currency: FiatCurrency) -> String {
     format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat())
 }
 

@@ -4,6 +4,7 @@ mod amount_input;
 pub mod amount_or_max;
 pub mod btc_on_change;
 mod coin_control;
+mod display_preferences;
 pub mod error;
 mod fee_selection;
 pub mod fiat_on_change;
@@ -16,20 +17,21 @@ mod validation;
 
 #[cfg(test)]
 mod coin_control_lock_tests;
+#[cfg(test)]
+mod test_support;
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
-use cove_tokio::DebouncedTask;
+use cove_tokio::{AbortableTask, DebouncedTask};
 
 use crate::{
     app::App,
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::client::PriceResponse,
-    wallet::{
-        Address,
-        balance::Balance,
-        metadata::{FiatOrBtc, WalletMetadata},
-    },
+    wallet::{Address, balance::Balance, metadata::FiatOrBtc},
 };
 use act_zero::WeakAddr;
 use alert_state::{SendFlowAlertState, SendFlowWarningKind};
@@ -40,13 +42,15 @@ use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
-    unit::BitcoinUnit,
     utxo::Utxo,
 };
 use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::Mutex;
-use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
+use state::{
+    AmountEntryMode, CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState,
+    SendFlowWallet, State,
+};
 use tracing::{debug, error, trace, warn};
 use validation::AmountAlert;
 
@@ -107,6 +111,9 @@ pub struct RustSendFlowManager {
     reconciler: ReconcileChannel<Message>,
 
     fee_check_task: DebouncedTask<()>,
+
+    /// Follows the wallet's display preferences, aborted when the send flow is dropped
+    display_preferences_task: OnceLock<AbortableTask<()>>,
 }
 
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
@@ -124,6 +131,9 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateAmountFiat(f64),
 
     UpdateFocusField(Option<SetAmountFocusField>),
+
+    /// The unit or entry field changed, sent with any entered text rewritten for it
+    UpdateAmountEntryMode(AmountEntryMode),
 
     UpdateFeeSelection(FeeSelection),
 
@@ -156,8 +166,6 @@ pub enum SendFlowManagerAction {
     NotifyEnteringAddressChanged(String),
 
     // front end lets the one of the values were changed
-    NotifySelectedUnitedChanged { old: BitcoinUnit, new: BitcoinUnit },
-    NotifyBtcOrFiatChanged { old: FiatOrBtc, new: FiatOrBtc },
     NotifyScanCodeChanged { old: String, new: String },
     NotifyPricesChanged(Arc<PriceResponse>),
     NotifyFocusFieldChanged { old: Option<SetAmountFocusField>, new: Option<SetAmountFocusField> },
@@ -178,12 +186,8 @@ pub enum SendFlowManagerAction {
 }
 
 impl RustSendFlowManager {
-    pub fn new(
-        metadata: WalletMetadata,
-        balance: Arc<Balance>,
-        wallet_manager: Arc<RustWalletManager>,
-    ) -> Arc<Self> {
-        let state = State::new(metadata, balance);
+    pub fn new(balance: Arc<Balance>, wallet_manager: Arc<RustWalletManager>) -> Arc<Self> {
+        let me = Self::with_wallet(wallet_manager, balance);
 
         // immediately populate cached values if available
         let has_base_fees =
@@ -192,10 +196,10 @@ impl RustSendFlowManager {
                 let selected = Arc::new(fee_options.medium);
                 let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
 
-                let mut state_guard = state.lock();
-                state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-                state_guard.fee_selection = Some(fee_selection);
-                state_guard.has_base_fees = true;
+                let mut state = me.state.lock();
+                state.fee_rate_options_base = Some(Arc::new(base_options));
+                state.fee_selection = Some(fee_selection);
+                state.has_base_fees = true;
                 true
             } else {
                 false
@@ -204,20 +208,40 @@ impl RustSendFlowManager {
         debug!(
             "SendFlowManager::new - has_base_fees: {}, balance: {:?}",
             has_base_fees,
-            state.lock().wallet_balance
+            me.state.lock().wallet_balance
         );
 
-        let me: Arc<Self> = Self {
+        // run all init tasks in background (parallel)
+        me.background_init_tasks();
+        me
+    }
+
+    /// A send flow over the wallet, following its display preferences, with no fees or balance
+    /// loaded yet
+    ///
+    /// The flow subscribes before it reads the starting preferences, so no change can land
+    /// between the two and be missed
+    pub(crate) fn with_wallet(
+        wallet_manager: Arc<RustWalletManager>,
+        balance: Arc<Balance>,
+    ) -> Arc<Self> {
+        let mut display_preferences = wallet_manager.metadata.subscribe_display_preferences();
+        let mode = AmountEntryMode::from(*display_preferences.borrow_and_update());
+        let wallet = SendFlowWallet::from(&*wallet_manager.metadata.read());
+        let state = State::new(wallet, mode, balance);
+
+        let me = Arc::new(Self {
             app: App::global().clone(),
             state: state.into_inner(),
             wallet_manager,
             reconciler: ReconcileChannel::new(50),
             fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
-        }
-        .into();
+            display_preferences_task: OnceLock::new(),
+        });
 
-        // run all init tasks in background (parallel)
-        me.background_init_tasks();
+        // spawned once the manager exists, so the task can always reach it while it lives
+        let follow = Self::follow_display_preferences(Arc::downgrade(&me), display_preferences);
+        let _ = me.display_preferences_task.set(AbortableTask::spawn(follow));
         me
     }
 
@@ -524,12 +548,12 @@ impl RustSendFlowManager {
 
         match action {
             Action::NotifyEnteringBtcAmountChanged(string) => {
-                let old_value = self.state.lock().entering_btc_amount.clone();
+                let old_value = self.state.lock().amount_entry.btc_text.clone();
                 self.handle_btc_field_changed(old_value, string);
             }
 
             Action::NotifyEnteringFiatAmountChanged(string) => {
-                let old_value = self.state.lock().entering_fiat_amount.clone();
+                let old_value = self.state.lock().amount_entry.fiat_text.clone();
                 self.handle_fiat_field_changed(old_value, string);
             }
 
@@ -560,16 +584,8 @@ impl RustSendFlowManager {
                 });
             }
 
-            Action::NotifySelectedUnitedChanged { old, new } => {
-                self.handle_selected_unit_changed(old, new);
-            }
-
             Action::NotifyScanCodeChanged { old, new } => {
                 self.handle_scan_code_changed(old, new);
-            }
-
-            Action::NotifyBtcOrFiatChanged { old, new } => {
-                self.handle_btc_or_fiat_changed(old, new);
             }
 
             Action::NotifyPricesChanged(prices) => self.handle_prices_changed(prices),
@@ -772,6 +788,7 @@ mod tests {
             FeeRate, FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions,
             FeeRateOptionsWithTotalFee, FeeSpeed,
         },
+        unit::BitcoinUnit,
         utxo::{UtxoList, ffi_preview::preview_new_utxo_list},
     };
 
@@ -780,8 +797,10 @@ mod tests {
             deferred_sender::SingleOrMany,
             wallet_manager::{RustWalletManager, test_support::funded_preview_wallet_manager},
         },
-        wallet::{Address, balance::Balance, metadata::WalletMetadata},
+        wallet::Address,
     };
+
+    use super::test_support::show_bitcoin_unit;
 
     fn manager_for_validation() -> Arc<super::RustSendFlowManager> {
         crate::test_support::ensure_tokio_runtime();
@@ -800,20 +819,7 @@ mod tests {
     }
 
     fn manager_with_wallet(wallet_manager: RustWalletManager) -> Arc<super::RustSendFlowManager> {
-        let balance = Arc::new(Balance::default());
-        let state = super::State::new(WalletMetadata::preview_new(), balance);
-        let wallet_manager = Arc::new(wallet_manager);
-
-        Arc::new(super::RustSendFlowManager {
-            app: super::App::global().clone(),
-            wallet_manager,
-            state: state.into_inner(),
-            reconciler: super::ReconcileChannel::new(50),
-            fee_check_task: super::DebouncedTask::new(
-                "fee_check",
-                super::Duration::from_millis(200),
-            ),
-        })
+        super::RustSendFlowManager::with_wallet(Arc::new(wallet_manager), Arc::default())
     }
 
     fn custom_fee_speed() -> FeeSpeed {
@@ -871,23 +877,23 @@ mod tests {
         let manager = manager_for_validation();
         set_valid_amount_and_address(&manager, 150_000);
         set_selected_fee_total(&manager, 1_234);
-        manager.state.lock().entering_btc_amount = "150,000".to_string();
-        manager.state.lock().metadata.selected_unit = super::BitcoinUnit::Sat;
+        show_bitcoin_unit(&manager, BitcoinUnit::Sat);
 
+        assert_eq!(manager.state.lock().amount_entry.btc_text, "150,000");
         assert_eq!(manager.send_amount_btc(), "150,000");
         assert_eq!(manager.total_fee_string().as_deref(), Some("1,234 sats"));
 
-        manager.handle_selected_unit_changed(super::BitcoinUnit::Sat, super::BitcoinUnit::Btc);
+        show_bitcoin_unit(&manager, BitcoinUnit::Btc);
 
         assert_eq!(manager.amount_sats(), 150_000);
-        assert_eq!(manager.state.lock().entering_btc_amount, "0.0015");
+        assert_eq!(manager.state.lock().amount_entry.btc_text, "0.0015");
         assert_eq!(manager.send_amount_btc(), "0.0015");
         assert_eq!(manager.total_fee_string().as_deref(), Some("0.00001234 BTC"));
 
-        manager.handle_selected_unit_changed(super::BitcoinUnit::Btc, super::BitcoinUnit::Sat);
+        show_bitcoin_unit(&manager, BitcoinUnit::Sat);
 
         assert_eq!(manager.amount_sats(), 150_000);
-        assert_eq!(manager.state.lock().entering_btc_amount, "150,000");
+        assert_eq!(manager.state.lock().amount_entry.btc_text, "150,000");
         assert_eq!(manager.send_amount_btc(), "150,000");
         assert_eq!(manager.total_fee_string().as_deref(), Some("1,234 sats"));
     }
@@ -897,9 +903,8 @@ mod tests {
         utxos[0].amount = Arc::new(super::Amount::from_sat(total_sats));
         let utxo_list = Arc::new(UtxoList::from(utxos));
 
-        let mut state = manager.state.lock();
-        state.metadata.selected_unit = super::BitcoinUnit::Sat;
-        state.mode = super::EnterMode::coin_control_max(utxo_list);
+        show_bitcoin_unit(manager, BitcoinUnit::Sat);
+        manager.state.lock().mode = super::EnterMode::coin_control_max(utxo_list);
     }
 
     fn set_coin_control_mode(manager: &super::RustSendFlowManager) {
@@ -993,7 +998,7 @@ mod tests {
     fn coin_control_amount_change_accepts_typed_amount_in_btc_mode() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 435_558);
-        manager.state.lock().metadata.selected_unit = super::BitcoinUnit::Btc;
+        show_bitcoin_unit(&manager, BitcoinUnit::Btc);
 
         let amount = super::Amount::from_sat(117_716);
         assert!(manager.handle_coin_control_amount_changed(amount).is_some());
@@ -1041,7 +1046,7 @@ mod tests {
     fn coin_control_entered_btc_text_parses_exactly_to_sats() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 435_558);
-        manager.state.lock().metadata.selected_unit = super::BitcoinUnit::Btc;
+        show_bitcoin_unit(&manager, BitcoinUnit::Btc);
 
         assert!(
             manager
@@ -1072,7 +1077,7 @@ mod tests {
     fn coin_control_entered_btc_text_rejects_over_precision() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 435_558);
-        manager.state.lock().metadata.selected_unit = super::BitcoinUnit::Btc;
+        show_bitcoin_unit(&manager, BitcoinUnit::Btc);
         assert!(
             manager.handle_coin_control_amount_changed(super::Amount::from_sat(100_000)).is_some()
         );
@@ -2096,7 +2101,7 @@ mod tests {
         let manager = manager_for_spending(&[50_000, 80_000]);
         clear_routes();
 
-        let network = manager.state.lock().metadata.network;
+        let network = manager.state.lock().wallet.network;
         let unspent = act_zero::call!(manager.wallet_manager.actor.list_unspent())
             .await
             .expect("wallet actor responds")
@@ -2289,9 +2294,9 @@ mod tests {
         {
             let mut state = manager.state.lock();
             state.address = Some(Arc::new(Address::preview_new()));
-            state.metadata.selected_unit = super::BitcoinUnit::Sat;
-            state.metadata.fiat_or_btc = super::FiatOrBtc::Btc;
         }
+
+        show_bitcoin_unit(&manager, BitcoinUnit::Sat);
 
         manager.get_wallet_balance().await;
         manager.get_or_update_fee_rate_options().await;

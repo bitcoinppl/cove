@@ -362,6 +362,8 @@ SwiftUI and Compose have different APIs for lifecycle events and side effects. T
 
 ### Manager Cleanup
 
+Both platforms create the send session only while the router holds a send route for its wallet: iOS `ensureSendFlowManager` and Android `AndroidManagerCache.getSendFlowManager` return nothing otherwise, and route changes release a session whose route is gone. The session follows the wallet's unit, fiat mode and visibility from Rust, so neither platform forwards those changes to it.
+
 Route-level `DisposableEffect` cleanup should only close objects owned by that route instance. Do not close or clear managers obtained from an app-level cache such as `app.getWalletManager()` or `app.getSendFlowManager()` from route disposal. Navigation transitions can overlap old and new route entries, so an outgoing route can dispose after the incoming route has already reused the same generated UniFFI handle.
 
 For cached managers, put cleanup at the owner/session boundary instead: clear the manager when the app route stack no longer contains the owning flow or wallet. Keep generated `manager.rust.*` calls behind platform manager wrapper methods so post-close calls become guarded no-ops or controlled failures instead of destroyed-handle crashes.
