@@ -280,7 +280,7 @@ private fun CloudBackupTurnOffFailure.message(): String =
         CloudBackupTurnOffFailure.OFFLINE -> "Cove can't reach $PROVIDER right now."
         CloudBackupTurnOffFailure.AUTHORIZATION_REQUIRED -> "Cove needs access to $PROVIDER to finish."
         CloudBackupTurnOffFailure.ACCOUNT_UNAVAILABLE ->
-            "The Google account with your backups isn't signed in on this device, so Cove can't delete them. Add that account back and try again, or stop using Cloud Backup on this device."
+            "The Google account with your backups isn't signed in on this device, so Cove can't delete them. Add that account back and tap Try Again. If it still fails, you can stop using Cloud Backup on this device."
         CloudBackupTurnOffFailure.PROVIDER_UNAVAILABLE -> "$PROVIDER isn't available right now."
         CloudBackupTurnOffFailure.OTHER -> "Something went wrong while deleting your backups."
     }

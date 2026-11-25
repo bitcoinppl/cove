@@ -650,9 +650,8 @@ Turn Off can't delete backups it can't reach. One that stops on a gone account
 before starting leaves Cloud Backup on and says so: signing the account back in
 lets Turn Off delete its backups, and switching accounts keeps backing up but
 leaves them. A committed Turn Off can't switch accounts, so one that stops on it
-asks the user to add the account back and try again, or to stop using Cloud
-Backup on this device, and offers Try Again and Stop Using on This Device
-without Reconnect.
+asks the user to add the account back and tap Try Again, and offers Try Again
+and, once a Try Again has failed, Stop Using on This Device, without Reconnect.
 
 Each listed backup folder is classified once, by `CloudFolders` (`cloud_folders.rs`),
 without asking for a passkey: its master key is readable, missing, still uploading,
