@@ -21,6 +21,24 @@ final class WalletTransitionTests: XCTestCase {
         return (walletManager, sendFlowManager)
     }
 
+    private func makeSendFlowManagerCache() -> ManagerCache {
+        ManagerCache(
+            backgroundScanTaskHandler: BackgroundScanTaskHandler(),
+            makeSendFlowManager: { walletManager, presenter in
+                SendFlowManager(
+                    TestSendFlowRustManager(walletId: walletManager.id),
+                    presenter: presenter
+                )
+            }
+        )
+    }
+
+    private func router(sendingFrom ids: WalletId...) -> Router {
+        var router = AppManager.shared.router
+        router.routes = ids.map { .send(.setAmount(id: $0, address: nil, amount: nil)) }
+        return router
+    }
+
     private func drainMainQueue() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
@@ -496,19 +514,13 @@ final class WalletTransitionTests: XCTestCase {
         let (walletManager, retainedManager) = try makeSendFlowManager()
         defer { walletManager.close() }
 
-        let cache = ManagerCache(
-            backgroundScanTaskHandler: BackgroundScanTaskHandler(),
-            makeSendFlowManager: { walletManager, presenter in
-                SendFlowManager(
-                    TestSendFlowRustManager(walletId: walletManager.id),
-                    presenter: presenter
-                )
-            }
-        )
-        let cachedManager = try cache.ensureSendFlowManager(
+        let cache = makeSendFlowManagerCache()
+        let router = router(sendingFrom: walletManager.id)
+        let cachedManager = try XCTUnwrap(cache.ensureSendFlowManager(
             walletManager,
-            presenter: retainedManager.presenter
-        )
+            presenter: retainedManager.presenter,
+            router: router
+        ))
 
         retainedManager.close()
         XCTAssertFalse(retainedManager.canApplyReconcileMessages)
@@ -521,14 +533,54 @@ final class WalletTransitionTests: XCTestCase {
         XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
         XCTAssertFalse(cachedManager.canApplyReconcileMessages)
 
-        let replacement = try cache.ensureSendFlowManager(
+        let replacement = try XCTUnwrap(cache.ensureSendFlowManager(
             walletManager,
-            presenter: retainedManager.presenter
-        )
+            presenter: retainedManager.presenter,
+            router: router
+        ))
         cache.clearWalletManager()
 
         XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
         XCTAssertFalse(replacement.canApplyReconcileMessages)
+    }
+
+    /// A send screen animating out after its route is gone must not leave a manager behind, since
+    /// the next send screen reused it with the unit the wallet had when it was made
+    @MainActor
+    func testSendFlowManagerLivesOnlyWhileItsSendRouteIs() throws {
+        let (walletManager, sendFlowManager) = try makeSendFlowManager()
+        defer { walletManager.close() }
+        defer { sendFlowManager.close() }
+
+        let cache = makeSendFlowManagerCache()
+        let presenter = sendFlowManager.presenter
+
+        let noSendRoute = router()
+        XCTAssertNil(try cache.ensureSendFlowManager(walletManager, presenter: presenter, router: noSendRoute))
+        XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
+
+        let sending = router(sendingFrom: walletManager.id)
+        let manager = try XCTUnwrap(cache.ensureSendFlowManager(walletManager, presenter: presenter, router: sending))
+
+        cache.reconcileRouteOwnedManagers(router: sending)
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === manager)
+        XCTAssertTrue(manager.canApplyReconcileMessages)
+
+        // back from the coin control send to its utxo list keeps the recipient and fee
+        var coinControlList = router()
+        coinControlList.routes = [.coinControl(.list(walletManager.id))]
+        cache.reconcileRouteOwnedManagers(router: coinControlList)
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === manager)
+        XCTAssertTrue(manager.canApplyReconcileMessages)
+
+        // but a screen there can't start a send flow of its own
+        cache.clearSendFlowManager()
+        XCTAssertNil(try cache.ensureSendFlowManager(walletManager, presenter: presenter, router: coinControlList))
+
+        let resumed = try XCTUnwrap(cache.ensureSendFlowManager(walletManager, presenter: presenter, router: sending))
+        cache.reconcileRouteOwnedManagers(router: router(sendingFrom: "different-wallet"))
+        XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
+        XCTAssertFalse(resumed.canApplyReconcileMessages)
     }
 }
 

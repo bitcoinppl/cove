@@ -315,6 +315,8 @@ private struct EnterAmountUnitSelector: View {
                         .padding(.leading, 4)
                 }
                 .foregroundStyle(.primary)
+                .accessibilityLabel(unit)
+                .accessibilityIdentifier("sendFlow.unit")
             }
         }
         .popover(isPresented: $isPresented) {
@@ -340,6 +342,7 @@ private struct EnterAmountUnitPopoverContent: View {
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
+            .accessibilityIdentifier("sendFlow.unit.sats")
 
             Divider()
 
@@ -351,6 +354,7 @@ private struct EnterAmountUnitPopoverContent: View {
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
+            .accessibilityIdentifier("sendFlow.unit.btc")
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)

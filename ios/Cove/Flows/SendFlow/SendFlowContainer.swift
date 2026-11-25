@@ -91,13 +91,16 @@ private struct SendFlowLoadedView: View {
         if initializedSendFlowManager != nil { return }
 
         let presenter = SendFlowPresenter(app: app, manager: manager)
-        let sendFlowManager: SendFlowManager
+        let ensuredSendFlowManager: SendFlowManager?
         do {
-            sendFlowManager = try app.ensureSendFlowManager(manager, presenter: presenter)
+            ensuredSendFlowManager = try app.ensureSendFlowManager(manager, presenter: presenter)
         } catch {
             handleSendFlowManagerError(error)
             return
         }
+
+        // nil once the router dropped this send route, while the screen animates out
+        guard let sendFlowManager = ensuredSendFlowManager else { return }
         let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
 
         initializedSendFlowManagerId = nil
