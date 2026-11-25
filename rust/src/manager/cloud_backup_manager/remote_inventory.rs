@@ -49,7 +49,9 @@ impl RustCloudBackupManager {
                     let record_id = wallet_record_id(wallet.id.as_ref());
                     let reader =
                         WalletBackupReader::new(cloud, namespace, Zeroizing::new(critical_key));
-                    let result = reader.summary(&record_id).await;
+                    // a local wallet may never have been uploaded; presence-first avoids iOS
+                    // SyncPending when the consent-allowed client waits for a missing record
+                    let result = reader.summary_if_present(&record_id).await;
                     (record_id, result)
                 }
             })

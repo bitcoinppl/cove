@@ -6,7 +6,9 @@
 
 use std::collections::HashSet;
 
-use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry};
+use cove_cspp::backup_data::{
+    EncryptedMasterKeyBackup, MASTER_KEY_RECORD_ID, MasterKeyBackupVersion, WalletEntry,
+};
 use cove_cspp::master_key::MasterKey;
 
 use crate::database::Database;
@@ -15,7 +17,9 @@ use crate::manager::cloud_backup_manager::actors::{
     CloudBackupWriteClient, CloudBackupWriteCompletion, OwnedKeychainWrite,
 };
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
+use cove_device::cloud_storage::{
+    CloudBackupUploadStatus, CloudStorage, CloudStorageClient, CloudStorageError,
+};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use futures::stream::{self, StreamExt as _};
@@ -556,6 +560,27 @@ impl VerificationSession {
     }
 
     async fn load_encrypted_master_key(&self) -> Result<EncryptedMasterKeyStep, CloudBackupError> {
+        // presence-first: consent-allowed download of a missing wrapper waits then SyncPending,
+        // which blocks the local-key repair path that needs NotFound / Missing
+        match self
+            .cloud
+            .is_current_backup_uploaded(self.namespace.clone(), MASTER_KEY_RECORD_ID.to_string())
+            .await
+        {
+            Ok(CloudBackupUploadStatus::NotFound) => {
+                return self.missing_master_key_step();
+            }
+            Ok(CloudBackupUploadStatus::Uploaded | CloudBackupUploadStatus::Pending) => {}
+            Err(CloudStorageError::NotFound(_)) => {
+                return self.missing_master_key_step();
+            }
+            Err(error) => {
+                return Ok(EncryptedMasterKeyStep::Finished(
+                    self.cloud_storage_retry_result("failed to check master key backup", error),
+                ));
+            }
+        }
+
         match self.cloud.download_master_key_backup(self.namespace.clone()).await {
             Ok(json) => {
                 let encrypted: EncryptedMasterKeyBackup =
@@ -588,21 +613,23 @@ impl VerificationSession {
                 Ok(EncryptedMasterKeyStep::Loaded { encrypted, revision_hash })
             }
 
-            Err(CloudStorageError::NotFound(_)) => {
-                if self.local_master_key.is_some() {
-                    info!("Verify: master key backup missing from cloud, repairing from local key");
-                    return Ok(EncryptedMasterKeyStep::Missing);
-                }
-
-                Ok(EncryptedMasterKeyStep::Finished(
-                    self.reinitialize_result("master key backup missing and no local master key"),
-                ))
-            }
+            Err(CloudStorageError::NotFound(_)) => self.missing_master_key_step(),
 
             Err(error) => Ok(EncryptedMasterKeyStep::Finished(
                 self.cloud_storage_retry_result("failed to download master key backup", error),
             )),
         }
+    }
+
+    fn missing_master_key_step(&self) -> Result<EncryptedMasterKeyStep, CloudBackupError> {
+        if self.local_master_key.is_some() {
+            info!("Verify: master key backup missing from cloud, repairing from local key");
+            return Ok(EncryptedMasterKeyStep::Missing);
+        }
+
+        Ok(EncryptedMasterKeyStep::Finished(
+            self.reinitialize_result("master key backup missing and no local master key"),
+        ))
     }
 
     async fn resolve_master_key_step(
@@ -1062,7 +1089,9 @@ impl VerificationSession {
                 let reader = reader.clone();
 
                 async move {
-                    let lookup = reader.lookup_entry(&record_id).await;
+                    // unlisted local wallets often have no cloud record yet; presence-first
+                    // returns NotFound on iOS instead of SyncPending after a 60s wait
+                    let lookup = reader.lookup_entry_if_present(&record_id).await;
                     (record_id, lookup)
                 }
             })

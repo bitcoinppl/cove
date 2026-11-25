@@ -8,10 +8,12 @@ mod wrapper_repair;
 use crate::manager::cloud_backup_manager::actors::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use act_zero::send;
-use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion};
+use cove_cspp::backup_data::{
+    EncryptedMasterKeyBackup, MASTER_KEY_RECORD_ID, MasterKeyBackupVersion,
+};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
+use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
 
@@ -415,6 +417,25 @@ impl RustCloudBackupManager {
     ) -> Result<MasterKey, CloudBackupError> {
         let keychain = Keychain::global();
         let passkey = PasskeyAccess::global();
+
+        // presence-first so a consent-allowed client on iOS returns NotFound instead of waiting
+        // for a missing wrapper and failing with SyncPending
+        match cloud
+            .is_current_backup_uploaded(namespace.to_string(), MASTER_KEY_RECORD_ID.to_string())
+            .await
+        {
+            Ok(CloudBackupUploadStatus::NotFound) | Err(CloudStorageError::NotFound(_)) => {
+                warn!("Master key recovery needs a new backup: no master key backup in cloud");
+                return Err(CloudBackupError::RecoveryRequired(recovery_message.into()));
+            }
+            Ok(CloudBackupUploadStatus::Uploaded | CloudBackupUploadStatus::Pending) => {}
+            Err(error) => {
+                return Err(CloudBackupError::cloud_storage_context(
+                    "check master key backup",
+                    error,
+                ));
+            }
+        }
 
         let master_json = match cloud.download_master_key_backup(namespace.to_string()).await {
             Ok(json) => json,

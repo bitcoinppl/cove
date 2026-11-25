@@ -142,15 +142,7 @@ impl WalletBackupReader {
         &self,
         record_id: &str,
     ) -> Result<WalletBackupLookup<RemoteWalletBackupSummary>, CloudBackupError> {
-        let presence = self
-            .cloud()?
-            .is_backup_uploaded(self.namespace.clone(), record_id.to_owned())
-            .await
-            .map_err(|source| {
-                CloudBackupError::cloud_storage_context("check wallet backup", source)
-            })?;
-
-        match presence {
+        match self.presence(record_id).await? {
             CloudBackupUploadStatus::NotFound => Ok(WalletBackupLookup::NotFound),
             CloudBackupUploadStatus::Uploaded | CloudBackupUploadStatus::Pending => {
                 self.summary(record_id).await
@@ -163,6 +155,32 @@ impl WalletBackupReader {
         record_id: &str,
     ) -> Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError> {
         Ok(self.read(record_id).await?)
+    }
+
+    /// [`Self::lookup_entry`] for a record that may never have existed
+    ///
+    /// Same presence-first rule as [`Self::summary_if_present`]: a consent-allowed download of a
+    /// missing iCloud record waits and ends in `SyncPending`, so deep verify and similar paths
+    /// ask the provider whether it holds the record before reading it
+    pub(crate) async fn lookup_entry_if_present(
+        &self,
+        record_id: &str,
+    ) -> Result<WalletBackupLookup<WalletEntry>, CloudBackupError> {
+        match self.presence(record_id).await? {
+            CloudBackupUploadStatus::NotFound => Ok(WalletBackupLookup::NotFound),
+            CloudBackupUploadStatus::Uploaded | CloudBackupUploadStatus::Pending => {
+                self.lookup_entry(record_id).await
+            }
+        }
+    }
+
+    async fn presence(&self, record_id: &str) -> Result<CloudBackupUploadStatus, CloudBackupError> {
+        self.cloud()?
+            .is_backup_uploaded(self.namespace.clone(), record_id.to_owned())
+            .await
+            .map_err(|source| {
+                CloudBackupError::cloud_storage_context("check wallet backup", source)
+            })
     }
 
     /// Reads a record, keeping which stage failed so a listing can say why a record is unreadable
