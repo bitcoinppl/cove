@@ -793,7 +793,7 @@ mod tests {
             assert!(join_frames(first).is_err(), "`{bad}` joined as the first part");
 
             let mut last = frames.clone();
-            last.push(bad.clone());
+            last.push(bad);
             let error = join_frames(last).unwrap_err();
             assert!(format!("{error:#}").contains(after_completion), "{error:#}");
         }
@@ -859,7 +859,7 @@ mod tests {
             first.extend(frames.iter().cloned());
 
             let mut last = frames.clone();
-            last.push(bad.clone());
+            last.push(bad);
 
             for order in [first, last] {
                 let error = join_frames(order).unwrap_err();
