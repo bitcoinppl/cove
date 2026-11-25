@@ -47,7 +47,7 @@ private struct CloudBackupHeaderIcon: View {
         case .failed:
             image
                 .foregroundColor(.statusError)
-        case .authorizationRequired, .noFiles, .unavailable:
+        case .authorizationRequired, .accountUnavailable, .noFiles, .unavailable:
             image
                 .foregroundColor(.statusWarning)
         }
@@ -71,7 +71,7 @@ private struct CloudBackupSyncHealthLabel: View {
             ProbedLabel("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
-        case .authorizationRequired:
+        case .authorizationRequired, .accountUnavailable:
             ProbedLabel("iCloud Drive access needs to be reconnected", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
@@ -110,7 +110,7 @@ private func cloudBackupDetailHeaderTitle(syncHealth: CloudSyncHealth) -> String
         "Cloud Backup Syncing"
     case .unknown:
         "Checking Cloud Backup"
-    case .noFiles, .authorizationRequired, .unavailable, .failed:
+    case .noFiles, .authorizationRequired, .accountUnavailable, .unavailable, .failed:
         "Cloud Backup Needs Attention"
     }
 }
@@ -125,7 +125,7 @@ private func cloudBackupDetailHeaderIconName(syncHealth: CloudSyncHealth) -> Str
         "icloud"
     case .noFiles:
         "icloud.slash"
-    case .authorizationRequired, .unavailable, .failed:
+    case .authorizationRequired, .accountUnavailable, .unavailable, .failed:
         "exclamationmark.icloud.fill"
     }
 }

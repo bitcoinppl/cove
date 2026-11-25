@@ -285,6 +285,7 @@ impl CloudBackupInventoryControl {
         match self {
             Self::CheckAgain => CloudBackupScreenAction::RefreshDetail,
             Self::ReconnectDrive => CloudBackupScreenAction::ReconnectDrive,
+            Self::SwitchDriveAccount => CloudBackupScreenAction::SwitchDriveAccount,
         }
     }
 }
@@ -299,6 +300,7 @@ impl CloudBackupVerificationControl {
             }
             Self::RetryUpload => CloudBackupScreenAction::SyncUnsynced,
             Self::ReconnectDrive => CloudBackupScreenAction::ReconnectDrive,
+            Self::SwitchDriveAccount => CloudBackupScreenAction::SwitchDriveAccount,
         }
     }
 }

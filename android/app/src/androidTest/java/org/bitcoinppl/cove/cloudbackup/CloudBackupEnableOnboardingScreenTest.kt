@@ -34,6 +34,7 @@ class CloudBackupEnableOnboardingScreenTest {
                             onBack = {},
                             onRecreate = {},
                             onReinitialize = {},
+                            onSwitchAccount = {},
                         ),
                 )
             }
@@ -62,6 +63,7 @@ class CloudBackupEnableOnboardingScreenTest {
                             onBack = {},
                             onRecreate = {},
                             onReinitialize = {},
+                            onSwitchAccount = {},
                         ),
                 )
             }

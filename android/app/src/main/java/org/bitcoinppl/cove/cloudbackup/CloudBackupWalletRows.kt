@@ -149,6 +149,7 @@ internal fun CloudBackupHeaderSection(
             is CloudSyncHealth.Failed -> Triple(Icons.Default.WarningAmber, colors.danger, "Sync error: ${syncHealth.v1}")
             is CloudSyncHealth.NoFiles -> Triple(Icons.Default.CloudOff, colors.secondaryText, "No cloud backup files uploaded yet")
             is CloudSyncHealth.AuthorizationRequired -> Triple(Icons.Default.WarningAmber, colors.danger, "Google Drive access needs to be reconnected: ${syncHealth.v1}")
+            is CloudSyncHealth.AccountUnavailable -> Triple(Icons.Default.WarningAmber, colors.danger, syncHealth.v1)
             is CloudSyncHealth.Unavailable -> Triple(Icons.Default.CloudOff, colors.secondaryText, "Google Drive is unavailable")
         }
 
@@ -230,6 +231,7 @@ internal fun cloudBackupHeaderTitle(syncHealth: CloudSyncHealth): String =
         is CloudSyncHealth.Unknown -> "Checking Cloud Backup"
         is CloudSyncHealth.NoFiles,
         is CloudSyncHealth.AuthorizationRequired,
+        is CloudSyncHealth.AccountUnavailable,
         is CloudSyncHealth.Unavailable,
         is CloudSyncHealth.Failed,
         -> "Cloud Backup Needs Attention"

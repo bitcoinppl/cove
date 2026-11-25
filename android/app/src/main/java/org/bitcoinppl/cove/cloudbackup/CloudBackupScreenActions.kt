@@ -4,5 +4,5 @@ internal data class CloudBackupScreenActions(
     val onBack: () -> Unit,
     val onRecreate: () -> Unit,
     val onReinitialize: () -> Unit,
-    val onSwitchAccount: () -> Unit = {},
+    val onSwitchAccount: () -> Unit,
 )

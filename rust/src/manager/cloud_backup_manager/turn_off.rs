@@ -857,6 +857,7 @@ impl From<CloudStorageIssue> for CloudBackupTurnOffFailure {
         match issue {
             CloudStorageIssue::Offline => Self::Offline,
             CloudStorageIssue::AuthorizationRequired => Self::AuthorizationRequired,
+            CloudStorageIssue::AccountUnavailable => Self::AccountUnavailable,
             CloudStorageIssue::Unavailable
             | CloudStorageIssue::SyncPending
             | CloudStorageIssue::QuotaExceeded => Self::ProviderUnavailable,

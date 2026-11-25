@@ -26,6 +26,8 @@ pub(crate) const CLOUD_BACKUP_REINITIALIZE_MESSAGE: &str =
     "Cove couldn't verify the key needed to unlock this cloud backup.";
 const CLOUD_BACKUP_AUTHORIZATION_MESSAGE: &str =
     "Cove couldn't access your cloud backup. Reconnect your cloud account, then try again.";
+pub(crate) const CLOUD_BACKUP_ACCOUNT_UNAVAILABLE_MESSAGE: &str =
+    "The account Cove backs up to is no longer on this device. Switch accounts to keep backing up.";
 const CLOUD_BACKUP_OFFLINE_MESSAGE: &str =
     "Cove couldn't reach your cloud backup. Reconnect to the internet, then try again.";
 const CLOUD_BACKUP_SYNC_PENDING_MESSAGE: &str =
@@ -238,6 +240,7 @@ pub(crate) fn is_provider_wide_interruption(issue: impl Into<CloudStorageIssue>)
     matches!(
         issue.into(),
         CloudStorageIssue::AuthorizationRequired
+            | CloudStorageIssue::AccountUnavailable
             | CloudStorageIssue::Offline
             | CloudStorageIssue::SyncPending
             | CloudStorageIssue::Unavailable
@@ -301,6 +304,7 @@ impl From<&CloudStorageError> for CloudStorageIssue {
     fn from(error: &CloudStorageError) -> Self {
         match error {
             CloudStorageError::AuthorizationRequired(_) => Self::AuthorizationRequired,
+            CloudStorageError::AccountUnavailable(_) => Self::AccountUnavailable,
             CloudStorageError::Offline(_) => Self::Offline,
             CloudStorageError::SyncPending(_) => Self::SyncPending,
             CloudStorageError::NotAvailable(_) => Self::Unavailable,
@@ -651,6 +655,7 @@ impl CloudBackupError {
 fn cloud_storage_reader_message(error: &CloudStorageError) -> &'static str {
     match CloudStorageIssue::from(error) {
         CloudStorageIssue::AuthorizationRequired => CLOUD_BACKUP_AUTHORIZATION_MESSAGE,
+        CloudStorageIssue::AccountUnavailable => CLOUD_BACKUP_ACCOUNT_UNAVAILABLE_MESSAGE,
         CloudStorageIssue::Offline => CLOUD_BACKUP_OFFLINE_MESSAGE,
         CloudStorageIssue::SyncPending => CLOUD_BACKUP_SYNC_PENDING_MESSAGE,
         CloudStorageIssue::Unavailable => CLOUD_BACKUP_UNAVAILABLE_MESSAGE,
@@ -724,6 +729,7 @@ mod tests {
     fn provider_wide_interruption_covers_access_and_provider_availability() {
         for issue in [
             CloudStorageIssue::AuthorizationRequired,
+            CloudStorageIssue::AccountUnavailable,
             CloudStorageIssue::Offline,
             CloudStorageIssue::Unavailable,
         ] {
@@ -841,6 +847,10 @@ mod tests {
             (
                 CloudStorageError::AuthorizationRequired("raw account".into()),
                 CLOUD_BACKUP_AUTHORIZATION_MESSAGE,
+            ),
+            (
+                CloudStorageError::AccountUnavailable("removed@example.com".into()),
+                CLOUD_BACKUP_ACCOUNT_UNAVAILABLE_MESSAGE,
             ),
             (CloudStorageError::Offline("localized".into()), CLOUD_BACKUP_OFFLINE_MESSAGE),
             (CloudStorageError::NotAvailable("localized".into()), CLOUD_BACKUP_UNAVAILABLE_MESSAGE),

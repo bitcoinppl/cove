@@ -117,6 +117,8 @@ private fun cloudBackupSettingsSubtitle(manager: CloudBackupManager): String =
             stringResource(R.string.cloud_backup_status_recovery_required)
         is CloudBackupSettingsRowStatus.AuthorizationRequired ->
             stringResource(R.string.cloud_backup_status_drive_authorization_required, status.v1)
+        is CloudBackupSettingsRowStatus.AccountUnavailable ->
+            stringResource(R.string.cloud_backup_status_drive_account_unavailable)
         is CloudBackupSettingsRowStatus.Error -> stringResource(R.string.cloud_backup_status_error, status.v1)
     }
 

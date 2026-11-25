@@ -51,8 +51,7 @@ import org.bitcoinppl.cove_core.CloudBackupWalletsSection
 internal fun CloudBackupDetailContent(
     manager: CloudBackupManager,
     configured: CloudBackupConfiguredScreen,
-    onRecreate: () -> Unit,
-    onReinitialize: () -> Unit,
+    actions: CloudBackupScreenActions,
 ) {
     val screen = manager.screen
     val rowDialogs = rememberCloudBackupRowDialogs()
@@ -75,8 +74,7 @@ internal fun CloudBackupDetailContent(
                 configured = configured,
                 section = section,
                 rowDialogs = rowDialogs,
-                onRecreate = onRecreate,
-                onReinitialize = onReinitialize,
+                actions = actions,
             )
         }
     }
@@ -92,20 +90,18 @@ private fun CloudBackupSectionContent(
     configured: CloudBackupConfiguredScreen,
     section: CloudBackupSection,
     rowDialogs: CloudBackupRowDialogs,
-    onRecreate: () -> Unit,
-    onReinitialize: () -> Unit,
+    actions: CloudBackupScreenActions,
 ) {
     when (section) {
         is CloudBackupSection.PasskeyUnlock -> PasskeyUnlockBanner(section.v1)
         is CloudBackupSection.PasskeyCard -> PasskeyCardSection(manager, screen, section.v1, configured.passkeyHint)
-        is CloudBackupSection.Progress -> ProgressSection(manager, screen, section.v1)
+        is CloudBackupSection.Progress -> ProgressSection(manager, screen, section.v1, actions.onSwitchAccount)
         is CloudBackupSection.Verification ->
             VerificationSection(
                 manager = manager,
                 screen = screen,
                 section = section.v1,
-                onRecreate = onRecreate,
-                onReinitialize = onReinitialize,
+                actions = actions,
             )
         is CloudBackupSection.Wallets -> WalletsSection(manager, screen, configured, section.v1)
         is CloudBackupSection.NotOnDevice -> NotOnDeviceSection(manager, screen, section.v1, rowDialogs)
@@ -260,6 +256,7 @@ private fun ProgressSection(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
     progress: CloudBackupProgressSection,
+    onSwitchAccount: () -> Unit,
 ) {
     when (progress) {
         CloudBackupProgressSection.InventoryChecking ->
@@ -270,7 +267,7 @@ private fun ProgressSection(
                 )
             }
         is CloudBackupProgressSection.InventoryIncomplete ->
-            InventoryIncompleteSection(manager, screen, progress.reason, progress.controls)
+            InventoryIncompleteSection(manager, screen, progress.reason, progress.controls, onSwitchAccount)
     }
 }
 
@@ -280,6 +277,7 @@ private fun InventoryIncompleteSection(
     screen: CloudBackupScreen,
     reason: CloudBackupInventoryIncompleteReason,
     controls: List<CloudBackupInventoryControl>,
+    onSwitchAccount: () -> Unit,
 ) {
     Column(
         modifier =
@@ -308,6 +306,16 @@ private fun InventoryIncompleteSection(
                         onDispatch = manager::dispatch,
                         onClick = { manager.dispatch(CloudBackupManagerAction.RefreshDetail) },
                     )
+                // opens the same confirmation as the menu's Switch Google Account, which warns
+                // that the switch replaces the Cove backup in the chosen account
+                CloudBackupInventoryControl.SWITCH_DRIVE_ACCOUNT ->
+                    CloudBackupActionButton(
+                        screen = screen,
+                        action = CloudBackupScreenAction.SWITCH_DRIVE_ACCOUNT,
+                        title = "Switch Google Account",
+                        onDispatch = manager::dispatch,
+                        onClick = onSwitchAccount,
+                    )
             }
         }
     }
@@ -321,6 +329,8 @@ internal fun cloudBackupInventoryIncompleteMessage(reason: CloudBackupInventoryI
             "This device is offline. Connect to the internet, then check Google Drive again."
         CloudBackupInventoryIncompleteReason.AUTHORIZATION_REQUIRED ->
             "Cove cannot access Google Drive. Reconnect Google Drive, then check again."
+        CloudBackupInventoryIncompleteReason.ACCOUNT_UNAVAILABLE ->
+            "The Google account Cove backs up to is no longer on this device. Switch Google accounts to keep backing up."
         CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE ->
             "Google Drive is not available now. Try again later."
         CloudBackupInventoryIncompleteReason.UNKNOWN ->

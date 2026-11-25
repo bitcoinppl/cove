@@ -269,7 +269,7 @@ fn misplaced_configured_controls(
                 misplaced.extend(misplaced_verification_controls(verification, configured));
             }
             CloudBackupSection::Wallets(wallets) => {
-                misplaced.extend(misplaced_wallets_controls(wallets));
+                misplaced.extend(misplaced_wallets_controls(wallets, configured));
             }
             CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete {
                 reason,
@@ -292,28 +292,35 @@ fn misplaced_configured_controls(
     misplaced
 }
 
-/// Reconnect belongs with an inventory that stopped because Drive asked to be authorized again
+/// Reconnect belongs with an inventory that stopped because Drive asked to be authorized again,
+/// and Switch with one whose bound account is gone, where neither Reconnect nor Check Again can
+/// succeed
 fn misplaced_inventory_controls(
     reason: CloudBackupInventoryIncompleteReason,
     controls: &[CloudBackupInventoryControl],
     configured: &CloudBackupConfiguredScreen,
 ) -> Vec<CloudBackupDrawnControl> {
-    let reconnect = reason == CloudBackupInventoryIncompleteReason::AuthorizationRequired
-        || drive_authorization_required(configured);
+    let account_gone = reason == CloudBackupInventoryIncompleteReason::AccountUnavailable
+        || drive_account_unavailable(configured);
+    let reconnect = !account_gone
+        && (reason == CloudBackupInventoryIncompleteReason::AuthorizationRequired
+            || drive_authorization_required(configured));
 
     controls
         .iter()
         .filter(|control| match control {
-            CloudBackupInventoryControl::CheckAgain => false,
+            CloudBackupInventoryControl::CheckAgain => account_gone,
             CloudBackupInventoryControl::ReconnectDrive => !reconnect,
+            CloudBackupInventoryControl::SwitchDriveAccount => !account_gone,
         })
         .map(|control| drawn(CloudBackupControlSurface::InventoryIncomplete, control.action()))
         .collect()
 }
 
 /// Each verification control belongs with the state that offers it: a rebuild with the failure
-/// that names it, the undecryptable cleanup with a report that counts some, and the upload
-/// controls with an upload waiting to be confirmed
+/// that names it, the undecryptable cleanup with a report that counts some, the upload controls
+/// with an upload waiting to be confirmed, and the switch in place of Verify after a failure
+/// caused by a gone account
 fn misplaced_verification_controls(
     section: &CloudBackupVerificationSection,
     configured: &CloudBackupConfiguredScreen,
@@ -322,13 +329,16 @@ fn misplaced_verification_controls(
     use CloudBackupVerificationState as S;
 
     let state = &section.view.state;
+    let retry_failure = matches!(state, S::Failed(DeepVerificationFailure::Retry { .. }));
     let allowed = |control: &C| match control {
-        C::Verify => !matches!(
-            state,
-            S::Running
-                | S::AwaitingUploadConfirmation
-                | S::Failed(DeepVerificationFailure::UnsupportedVersion { .. })
-        ),
+        C::Verify => {
+            !matches!(
+                state,
+                S::Running
+                    | S::AwaitingUploadConfirmation
+                    | S::Failed(DeepVerificationFailure::UnsupportedVersion { .. })
+            ) && !(retry_failure && drive_account_unavailable(configured))
+        }
         C::Recover { kind: CloudBackupRecoveryKind::RecreateManifest } => {
             matches!(state, S::Failed(DeepVerificationFailure::RecreateManifest { .. }))
         }
@@ -346,6 +356,10 @@ fn misplaced_verification_controls(
             matches!(state, S::AwaitingUploadConfirmation)
                 && drive_authorization_required(configured)
         }
+        C::SwitchDriveAccount => {
+            (matches!(state, S::AwaitingUploadConfirmation) || retry_failure)
+                && drive_account_unavailable(configured)
+        }
     };
 
     section
@@ -356,13 +370,19 @@ fn misplaced_verification_controls(
         .collect()
 }
 
-/// Sync Now sits under the wallets that need it, so it needs at least one
-fn misplaced_wallets_controls(section: &CloudBackupWalletsSection) -> Vec<CloudBackupDrawnControl> {
+/// Sync Now sits under the wallets that need it, so it needs at least one, and an account that is
+/// still on this device to upload to
+fn misplaced_wallets_controls(
+    section: &CloudBackupWalletsSection,
+    configured: &CloudBackupConfiguredScreen,
+) -> Vec<CloudBackupDrawnControl> {
     section
         .controls
         .iter()
         .filter(|control| match control {
-            CloudBackupWalletsControl::SyncNow => section.needs_sync.is_empty(),
+            CloudBackupWalletsControl::SyncNow => {
+                section.needs_sync.is_empty() || drive_account_unavailable(configured)
+            }
         })
         .map(|control| drawn(CloudBackupControlSurface::Wallets, control.action()))
         .collect()
@@ -379,7 +399,12 @@ fn misplaced_other_backups_controls(
         &section.state,
         CloudBackupOtherBackupsState::Loaded { summary } if summary.namespace_count > 0
     );
-    let check_failed = matches!(section.state, CloudBackupOtherBackupsState::LoadFailed { .. });
+    // a check that failed on a gone account can't succeed again, so it has no Check Again
+    let check_failed = matches!(
+        section.state,
+        CloudBackupOtherBackupsState::LoadFailed { reason }
+            if reason != CloudBackupInventoryIncompleteReason::AccountUnavailable
+    );
 
     section
         .controls
@@ -404,6 +429,10 @@ fn upload_failed(configured: &CloudBackupConfiguredScreen) -> bool {
 
 fn drive_authorization_required(configured: &CloudBackupConfiguredScreen) -> bool {
     matches!(configured.sync_health, CloudSyncHealth::AuthorizationRequired(_))
+}
+
+fn drive_account_unavailable(configured: &CloudBackupConfiguredScreen) -> bool {
+    matches!(configured.sync_health, CloudSyncHealth::AccountUnavailable(_))
 }
 
 fn drawn(

@@ -185,11 +185,15 @@ private fun ApiException.isMissingMatchingCredential(): Boolean =
     statusCode == CommonStatusCodes.CANCELED &&
         message?.contains("matching credential", ignoreCase = true) == true
 
-private fun ApiException.authorizationRequiredMessage(): String =
+// Google answers a request for the bound account with CANCELED and no consent UI once that
+// account is gone from the device, so asking again can't help and only a switch can
+internal fun ApiException.canceledAuthorizationError(): CloudStorageException =
     if (isMissingMatchingCredential()) {
-        "the selected Google account is no longer available; switch Google accounts to continue"
+        CloudStorageException.AccountUnavailable(
+            "the selected Google account is no longer on this device",
+        )
     } else {
-        "google drive authorization was cancelled"
+        CloudStorageException.AuthorizationRequired("google drive authorization was cancelled")
     }
 
 private fun driveIdentityLookupFailedMessage(error: Throwable): String =
@@ -269,7 +273,7 @@ internal fun mapDriveUploadError(error: Throwable, target: String): CloudStorage
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
             if (error.statusCode == CommonStatusCodes.CANCELED) {
-                CloudStorageException.AuthorizationRequired(error.authorizationRequiredMessage())
+                error.canceledAuthorizationError()
             } else {
                 CloudStorageException.NotAvailable(error.cloudStorageMessage("google drive is unavailable"))
             }
@@ -312,7 +316,7 @@ internal fun mapDriveListError(error: Throwable): CloudStorageException =
             CloudStorageException.AuthorizationRequired(error.cloudStorageMessage())
         is ApiException ->
             if (error.statusCode == CommonStatusCodes.CANCELED) {
-                CloudStorageException.AuthorizationRequired(error.authorizationRequiredMessage())
+                error.canceledAuthorizationError()
             } else {
                 CloudStorageException.NotAvailable(error.cloudStorageMessage("google drive is unavailable"))
             }

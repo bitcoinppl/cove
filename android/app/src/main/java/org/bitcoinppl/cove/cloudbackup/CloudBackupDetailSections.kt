@@ -12,6 +12,8 @@ internal fun cloudBackupOtherBackupsFailureMessage(
             "Cove could not check for backup sets made with another backup key because this device is offline."
         CloudBackupInventoryIncompleteReason.AUTHORIZATION_REQUIRED ->
             "Cove cannot check for backup sets made with another backup key. Reconnect Google Drive, then check again."
+        CloudBackupInventoryIncompleteReason.ACCOUNT_UNAVAILABLE ->
+            "Cove cannot check for backup sets made with another backup key because the Google account Cove backs up to is no longer on this device."
         CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE ->
             "Cove cannot check for backup sets made with another backup key because Google Drive is not available now."
         CloudBackupInventoryIncompleteReason.UNKNOWN ->

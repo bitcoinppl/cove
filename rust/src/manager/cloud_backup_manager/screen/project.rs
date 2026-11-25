@@ -372,7 +372,11 @@ fn configured_screen(
     }
 }
 
-/// The inventory's loading or failed section, with Reconnect where Drive access is what failed
+/// The inventory's loading or failed section, with the account action Drive access needs when
+/// that is what failed
+///
+/// A bound account that is gone offers only Switch: Reconnect and Check Again would ask Google
+/// for the same missing account and fail again at once
 fn inventory_progress(
     progress: InventoryProgress,
     configured: &CloudBackupConfiguredState,
@@ -384,10 +388,11 @@ fn inventory_progress(
         InventoryProgress::Incomplete(reason) => reason,
     };
 
-    let reconnect = reason == CloudBackupInventoryIncompleteReason::AuthorizationRequired
-        || drive_authorization_required(configured);
-    let controls =
-        if reconnect { vec![C::ReconnectDrive, C::CheckAgain] } else { vec![C::CheckAgain] };
+    let controls = match DriveAccountAction::for_inventory(reason, &configured.sync_health) {
+        Some(DriveAccountAction::Switch) => vec![C::SwitchDriveAccount],
+        Some(DriveAccountAction::Reconnect) => vec![C::ReconnectDrive, C::CheckAgain],
+        None => vec![C::CheckAgain],
+    };
 
     CloudBackupProgressSection::InventoryIncomplete { reason, controls }
 }
@@ -419,14 +424,26 @@ fn verification_controls(
         // the wait for the upload's confirmation offers what unblocks it, if anything does
         S::AwaitingUploadConfirmation => {
             let retry = matches!(configured.sync, CloudBackupSyncState::Failed(_));
-            let reconnect = drive_authorization_required(configured);
-            [(retry, C::RetryUpload), (reconnect, C::ReconnectDrive)]
-                .into_iter()
-                .filter_map(|(drawn, control)| drawn.then_some(control))
-                .collect()
+            let account = DriveAccountAction::for_sync_health(&configured.sync_health);
+            let reconnect = account == Some(DriveAccountAction::Reconnect);
+            let switch = account == Some(DriveAccountAction::Switch);
+            [
+                (retry, C::RetryUpload),
+                (reconnect, C::ReconnectDrive),
+                (switch, C::SwitchDriveAccount),
+            ]
+            .into_iter()
+            .filter_map(|(drawn, control)| drawn.then_some(control))
+            .collect()
         }
         S::Failed(failure) => match failure {
-            DeepVerificationFailure::Retry { .. } => vec![C::Verify],
+            // verifying again reads the same gone account, so it offers the switch instead
+            DeepVerificationFailure::Retry { .. } => {
+                match DriveAccountAction::for_sync_health(&configured.sync_health) {
+                    Some(DriveAccountAction::Switch) => vec![C::SwitchDriveAccount],
+                    _ => vec![C::Verify],
+                }
+            }
             DeepVerificationFailure::RecreateManifest { .. } => {
                 vec![C::Recover { kind: CloudBackupRecoveryKind::RecreateManifest }]
             }
@@ -439,9 +456,42 @@ fn verification_controls(
     }
 }
 
-/// Whether Google Drive has asked to be authorized again; the iCloud provider never reports it
-fn drive_authorization_required(configured: &CloudBackupConfiguredState) -> bool {
-    matches!(configured.sync_health, CloudSyncHealth::AuthorizationRequired(_))
+/// What Google Drive needs from the user before it can be read again; the iCloud provider never
+/// reports either
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DriveAccountAction {
+    /// Authorize the bound account again
+    Reconnect,
+    /// The bound account is no longer on this device, so only another account can be used
+    Switch,
+}
+
+impl DriveAccountAction {
+    fn for_sync_health(sync_health: &CloudSyncHealth) -> Option<Self> {
+        match sync_health {
+            CloudSyncHealth::AuthorizationRequired(_) => Some(Self::Reconnect),
+            CloudSyncHealth::AccountUnavailable(_) => Some(Self::Switch),
+            _ => None,
+        }
+    }
+
+    /// A gone account from either the listing or sync health outranks a Reconnect from the
+    /// other, since Reconnect can't succeed while the account is gone
+    fn for_inventory(
+        reason: CloudBackupInventoryIncompleteReason,
+        sync_health: &CloudSyncHealth,
+    ) -> Option<Self> {
+        let from_reason = match reason {
+            CloudBackupInventoryIncompleteReason::AuthorizationRequired => Some(Self::Reconnect),
+            CloudBackupInventoryIncompleteReason::AccountUnavailable => Some(Self::Switch),
+            _ => None,
+        };
+
+        [from_reason, Self::for_sync_health(sync_health)]
+            .into_iter()
+            .flatten()
+            .max_by_key(|action| *action == Self::Switch)
+    }
 }
 
 /// Recover and Delete while there are other backups to act on, and Check Again after a check
@@ -455,6 +505,11 @@ fn other_backups_controls(
         CloudBackupOtherBackupsState::Loaded { summary } if summary.namespace_count > 0 => {
             vec![C::Recover, C::Delete]
         }
+        // checking again would ask Google for the same missing account; the inventory's section
+        // offers the switch that fixes both
+        CloudBackupOtherBackupsState::LoadFailed {
+            reason: CloudBackupInventoryIncompleteReason::AccountUnavailable,
+        } => Vec::new(),
         CloudBackupOtherBackupsState::LoadFailed { .. } => vec![C::CheckAgain],
         CloudBackupOtherBackupsState::NotChecked
         | CloudBackupOtherBackupsState::Checking
@@ -486,8 +541,11 @@ fn push_inventory_sections(
         .map(|listed| listed_row(listed, rows.copy_has_current_backup(listed), admission, consents))
         .partition(|row| matches!(row.record, CloudBackupListedRecord::ExtraCopy { .. }));
 
-    // the list of wallets waiting to upload offers to upload them
-    let controls = if rows.needs_sync.is_empty() {
+    // the list of wallets waiting to upload offers to upload them, unless the bound account is
+    // gone, where an upload can't start and the switch is the way forward
+    let account_gone = DriveAccountAction::for_sync_health(&configured.sync_health)
+        == Some(DriveAccountAction::Switch);
+    let controls = if rows.needs_sync.is_empty() || account_gone {
         Vec::new()
     } else {
         vec![CloudBackupWalletsControl::SyncNow]

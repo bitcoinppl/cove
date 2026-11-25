@@ -167,7 +167,7 @@ class CloudBackupAccessibilityTest {
             CoveTheme(dynamicColor = false) {
                 CloudBackupScreenFrame(
                     manager = CloudBackupManager(screen),
-                    actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}),
+                    actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}, onSwitchAccount = {}),
                 )
             }
         }

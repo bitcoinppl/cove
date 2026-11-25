@@ -259,7 +259,8 @@ extension CloudBackupDisableNotStartedReason {
         switch self {
         case .offline:
             "Cove can't reach iCloud right now."
-        case .authorizationRequired:
+        // only Google Drive loses its bound account; iCloud's nearest case is signing in again
+        case .authorizationRequired, .accountUnavailable:
             "Turn on iCloud Drive for Cove, then try again."
         case .providerUnavailable:
             "iCloud Drive isn't available right now."
@@ -279,7 +280,7 @@ extension CloudBackupInventoryIncompleteReason {
             "iCloud Drive is still loading Cove backup files. Keep Cove open, then check again."
         case .offline:
             "This device is offline. Connect to the internet, then check iCloud Drive again."
-        case .authorizationRequired:
+        case .authorizationRequired, .accountUnavailable:
             "Cove cannot access iCloud Drive. Turn on iCloud Drive for Cove, then check again."
         case .providerUnavailable:
             "iCloud Drive is not available now. Try again later."
@@ -295,7 +296,7 @@ extension CloudBackupInventoryIncompleteReason {
             "Cove could not check for backups with another key because iCloud Drive is still syncing. Check again when syncing is complete."
         case .offline:
             "Cove could not check for backups with another key because this device is offline. Connect to the internet, then check again."
-        case .authorizationRequired:
+        case .authorizationRequired, .accountUnavailable:
             "Cove cannot check for backups with another key. Turn on iCloud Drive for Cove, then check again."
         case .providerUnavailable:
             "Cove cannot check for backups with another key because iCloud Drive is not available now. Try again later."

@@ -26370,6 +26370,10 @@ public enum CloudBackupDisableNotStartedReason: Equatable, Hashable {
 
     case offline
     case authorizationRequired
+    /**
+     * The bound Google account is no longer on this device
+     */
+    case accountUnavailable
     case providerUnavailable
     /**
      * The writes in flight did not drain
@@ -26404,11 +26408,13 @@ public struct FfiConverterTypeCloudBackupDisableNotStartedReason: FfiConverterRu
 
         case 2: return .authorizationRequired
 
-        case 3: return .providerUnavailable
+        case 3: return .accountUnavailable
 
-        case 4: return .writesDidNotDrain
+        case 4: return .providerUnavailable
 
-        case 5: return .saveFailed
+        case 5: return .writesDidNotDrain
+
+        case 6: return .saveFailed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26426,16 +26432,20 @@ public struct FfiConverterTypeCloudBackupDisableNotStartedReason: FfiConverterRu
             writeInt(&buf, Int32(2))
 
 
-        case .providerUnavailable:
+        case .accountUnavailable:
             writeInt(&buf, Int32(3))
 
 
-        case .writesDidNotDrain:
+        case .providerUnavailable:
             writeInt(&buf, Int32(4))
 
 
-        case .saveFailed:
+        case .writesDidNotDrain:
             writeInt(&buf, Int32(5))
+
+
+        case .saveFailed:
+            writeInt(&buf, Int32(6))
 
         }
     }
@@ -27263,6 +27273,11 @@ public enum CloudBackupInventoryControl: Equatable, Hashable {
      * Android only: Google Drive needs authorizing before the inventory can load
      */
     case reconnectDrive
+    /**
+     * Android only: the bound Google account is no longer on this device, so authorizing it
+     * again can't load the inventory; switching to another account is the only way on
+     */
+    case switchDriveAccount
 
 
 
@@ -27288,6 +27303,8 @@ public struct FfiConverterTypeCloudBackupInventoryControl: FfiConverterRustBuffe
 
         case 2: return .reconnectDrive
 
+        case 3: return .switchDriveAccount
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -27302,6 +27319,10 @@ public struct FfiConverterTypeCloudBackupInventoryControl: FfiConverterRustBuffe
 
         case .reconnectDrive:
             writeInt(&buf, Int32(2))
+
+
+        case .switchDriveAccount:
+            writeInt(&buf, Int32(3))
 
         }
     }
@@ -27331,6 +27352,10 @@ public func FfiConverterTypeCloudBackupInventoryControl_lower(_ value: CloudBack
 public enum CloudBackupInventoryIncompleteReason: Equatable, Hashable {
 
     case authorizationRequired
+    /**
+     * The bound Google account is no longer on this device
+     */
+    case accountUnavailable
     case offline
     case providerSyncPending
     case providerUnavailable
@@ -27358,13 +27383,15 @@ public struct FfiConverterTypeCloudBackupInventoryIncompleteReason: FfiConverter
 
         case 1: return .authorizationRequired
 
-        case 2: return .offline
+        case 2: return .accountUnavailable
 
-        case 3: return .providerSyncPending
+        case 3: return .offline
 
-        case 4: return .providerUnavailable
+        case 4: return .providerSyncPending
 
-        case 5: return .unknown
+        case 5: return .providerUnavailable
+
+        case 6: return .unknown
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -27378,20 +27405,24 @@ public struct FfiConverterTypeCloudBackupInventoryIncompleteReason: FfiConverter
             writeInt(&buf, Int32(1))
 
 
-        case .offline:
+        case .accountUnavailable:
             writeInt(&buf, Int32(2))
 
 
-        case .providerSyncPending:
+        case .offline:
             writeInt(&buf, Int32(3))
 
 
-        case .providerUnavailable:
+        case .providerSyncPending:
             writeInt(&buf, Int32(4))
 
 
-        case .unknown:
+        case .providerUnavailable:
             writeInt(&buf, Int32(5))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(6))
 
         }
     }
@@ -31304,6 +31335,12 @@ public enum CloudBackupSettingsRowStatus: Equatable, Hashable {
     case authorizationRequired(String
     )
     /**
+     * The bound provider account is no longer on this device; the row opens the detail screen,
+     * which offers switching accounts
+     */
+    case accountUnavailable(String
+    )
+    /**
      * A committed Turn Off has not finished; the row opens the detail screen to finish it
      */
     case turnOffIncomplete
@@ -31368,9 +31405,12 @@ public struct FfiConverterTypeCloudBackupSettingsRowStatus: FfiConverterRustBuff
         case 17: return .authorizationRequired(try FfiConverterString.read(from: &buf)
         )
 
-        case 18: return .turnOffIncomplete
+        case 18: return .accountUnavailable(try FfiConverterString.read(from: &buf)
+        )
 
-        case 19: return .turnedOnAgain
+        case 19: return .turnOffIncomplete
+
+        case 20: return .turnedOnAgain
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -31450,12 +31490,17 @@ public struct FfiConverterTypeCloudBackupSettingsRowStatus: FfiConverterRustBuff
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .turnOffIncomplete:
+        case let .accountUnavailable(v1):
             writeInt(&buf, Int32(18))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .turnOffIncomplete:
+            writeInt(&buf, Int32(19))
 
 
         case .turnedOnAgain:
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(20))
 
         }
     }
@@ -31578,6 +31623,10 @@ public enum CloudBackupTurnOffFailure: Equatable, Hashable {
      * Google Drive needs Reconnect, or iCloud Drive is off for Cove
      */
     case authorizationRequired
+    /**
+     * The bound Google account is no longer on this device, so Reconnect can't help
+     */
+    case accountUnavailable
     case providerUnavailable
     case other
 
@@ -31605,9 +31654,11 @@ public struct FfiConverterTypeCloudBackupTurnOffFailure: FfiConverterRustBuffer 
 
         case 2: return .authorizationRequired
 
-        case 3: return .providerUnavailable
+        case 3: return .accountUnavailable
 
-        case 4: return .other
+        case 4: return .providerUnavailable
+
+        case 5: return .other
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -31625,12 +31676,16 @@ public struct FfiConverterTypeCloudBackupTurnOffFailure: FfiConverterRustBuffer 
             writeInt(&buf, Int32(2))
 
 
-        case .providerUnavailable:
+        case .accountUnavailable:
             writeInt(&buf, Int32(3))
 
 
-        case .other:
+        case .providerUnavailable:
             writeInt(&buf, Int32(4))
+
+
+        case .other:
+            writeInt(&buf, Int32(5))
 
         }
     }
@@ -32146,6 +32201,11 @@ public enum CloudBackupVerificationControl: Equatable, Hashable {
      * Android only: the latest upload waits on Google Drive access
      */
     case reconnectDrive
+    /**
+     * Android only: the latest upload, or a verification that failed, waits on a Google account
+     * that is no longer on this device
+     */
+    case switchDriveAccount
 
 
 
@@ -32179,6 +32239,8 @@ public struct FfiConverterTypeCloudBackupVerificationControl: FfiConverterRustBu
 
         case 5: return .reconnectDrive
 
+        case 6: return .switchDriveAccount
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -32207,6 +32269,10 @@ public struct FfiConverterTypeCloudBackupVerificationControl: FfiConverterRustBu
 
         case .reconnectDrive:
             writeInt(&buf, Int32(5))
+
+
+        case .switchDriveAccount:
+            writeInt(&buf, Int32(6))
 
         }
     }

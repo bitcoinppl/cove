@@ -37,12 +37,14 @@ use crate::manager::cloud_backup_manager::pending_enable::{
     PendingEnableJournal, PendingEnableJournalPhase, PendingEnableNamespaceOwnership,
 };
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupActionAvailability, CloudBackupDriveAccountSwitchStage, CloudBackupRejection,
-    CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle, CloudBackupScreenAction as A,
-    CloudBackupScreenBody,
+    CloudBackupActionAvailability, CloudBackupDriveAccountSwitchStage, CloudBackupInventoryControl,
+    CloudBackupProgressSection, CloudBackupRejection, CloudBackupSavedPasskeyControl,
+    CloudBackupSavedPasskeyLifecycle, CloudBackupScreenAction as A, CloudBackupScreenBody,
+    CloudBackupSection, CloudBackupVerificationControl, CloudBackupWalletsControl,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupExclusiveOperation as Op, CloudBackupManagerAction, CloudBackupResetPermit,
+    CloudBackupExclusiveOperation as Op, CloudBackupInventoryIncompleteReason,
+    CloudBackupManagerAction, CloudBackupResetPermit, CloudBackupVerificationSource,
     DriveAccountSwitchPlatformResult as Platform, DriveAccountSwitchPlatformState,
     PendingEnableLocalMetadataSnapshot, RequestedDriveAccountSwitchStep as Step_,
     VerificationState,
@@ -98,6 +100,96 @@ fn switch_to_a_new_account(app: &mut TestApp) -> u64 {
 
     platform_reports(app, Platform::AccountSelected(transition_id)).then_cannot(&[N::Enable]);
     transition_id
+}
+
+/// The Google account the backup is bound to is removed from the device, so every Drive call
+/// fails at once, whether or not it may ask for consent. The screen offers Switch Google Account
+/// alone: Reconnect and Check Again would ask Google for the same missing account and land back
+/// on the same card, while the switch asks the platform to choose another account
+#[test]
+fn a_removed_drive_account_offers_only_the_switch() {
+    let test = concat!(module_path!(), "::a_removed_drive_account_offers_only_the_switch");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 1).seed(&app);
+        app.cloud.remove_account();
+
+        app.event("launch discovery", |app| app.manager().start_background_inventory_discovery())
+            .then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+
+        let screen = app.manager().published_screen();
+        let CloudBackupScreenBody::Configured(configured) = &screen.body else {
+            panic!("the backup is still configured\n{}", app.describe());
+        };
+
+        let progress = configured.sections.iter().find_map(|section| match section {
+            CloudBackupSection::Progress(progress) => Some(progress.clone()),
+            _ => None,
+        });
+        assert_eq!(
+            progress,
+            Some(CloudBackupProgressSection::InventoryIncomplete {
+                reason: CloudBackupInventoryIncompleteReason::AccountUnavailable,
+                controls: vec![CloudBackupInventoryControl::SwitchDriveAccount],
+            }),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(availability(&app, A::ReconnectDrive), None, "{}", app.describe());
+        assert_eq!(availability(&app, A::RefreshDetail), None, "{}", app.describe());
+        assert_eq!(
+            availability(&app, A::SwitchDriveAccount),
+            Some(CloudBackupActionAvailability::Available),
+            "{}",
+            app.describe()
+        );
+
+        // a verification that fails on the gone account offers the switch, not another try
+        let source = CloudBackupVerificationSource::CloudBackupDetail;
+        app.dispatch(CloudBackupManagerAction::StartVerification(source)).then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_cannot(&[N::Enable]);
+        let (verification, wallets) = verification_and_wallets_controls(&app);
+        assert_eq!(
+            verification,
+            vec![CloudBackupVerificationControl::SwitchDriveAccount],
+            "{}",
+            app.describe()
+        );
+        assert_eq!(wallets, Vec::new(), "{}", app.describe());
+        assert_eq!(availability(&app, A::Verify), None, "{}", app.describe());
+
+        app.dispatch(CloudBackupManagerAction::SwitchDriveAccount).then_cannot(&[N::Enable]);
+        let transition_id = persisted()
+            .drive_account_switch()
+            .expect("the switch is recorded")
+            .transition_id
+            .value();
+        assert_eq!(requested_steps(&app), vec![Step_::SelectAccount(transition_id)]);
+        assert_eq!(switch_stage(&app), Some(CloudBackupDriveAccountSwitchStage::Switching));
+    });
+}
+
+/// The controls the verification and wallets sections draw
+fn verification_and_wallets_controls(
+    app: &TestApp,
+) -> (Vec<CloudBackupVerificationControl>, Vec<CloudBackupWalletsControl>) {
+    let screen = app.manager().published_screen();
+    let CloudBackupScreenBody::Configured(configured) = &screen.body else {
+        panic!("the backup is still configured\n{}", app.describe());
+    };
+
+    let mut verification = Vec::new();
+    let mut wallets = Vec::new();
+    for section in &configured.sections {
+        match section {
+            CloudBackupSection::Verification(section) => verification.clone_from(&section.controls),
+            CloudBackupSection::Wallets(section) => wallets.clone_from(&section.controls),
+            _ => {}
+        }
+    }
+
+    (verification, wallets)
 }
 
 /// The launch integrity check reads, uploads and reads again under the one configuration it

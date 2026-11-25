@@ -175,7 +175,7 @@ impl PendingSourceDeletes<'_> {
                     );
                     return SourceDeleteStep::Pending;
                 }
-                Err(CloudStorageError::AuthorizationRequired(_)) => {
+                Err(error) if error.requires_account_action() => {
                     return SourceDeleteStep::AuthorizationRequired;
                 }
                 Err(error) => {
@@ -207,7 +207,7 @@ impl PendingSourceDeletes<'_> {
                 return SourceDeleteStep::Settled;
             }
 
-            Err(CloudStorageError::AuthorizationRequired(_)) => {
+            Err(error) if error.requires_account_action() => {
                 return SourceDeleteStep::AuthorizationRequired;
             }
 

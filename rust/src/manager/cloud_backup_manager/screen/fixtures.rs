@@ -90,6 +90,7 @@ mod debug {
             fixture("configured-verification-prompt", verification_prompt()),
             fixture("configured-verification-prompt-busy", verification_prompt_busy()),
             fixture("configured-inventory-incomplete", inventory_incomplete()),
+            fixture("configured-inventory-account-unavailable", inventory_account_unavailable()),
             fixture("configured-other-backups", other_backups()),
             fixture("configured-other-backups-check-failed", other_backups_check_failed()),
             fixture("configured-verifying-inventory-incomplete", verifying_inventory_incomplete()),
@@ -749,6 +750,34 @@ mod debug {
             );
         }
 
+        screen
+    }
+
+    /// The Google account the backup is bound to is gone from this device, so the inventory's
+    /// section offers only Switch Google Account
+    fn inventory_account_unavailable() -> CloudBackupScreen {
+        let message = "The account Cove backs up to is no longer on this device.";
+        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        screen.settings_row = CloudBackupSettingsRowStatus::AccountUnavailable(message.into());
+        if let CloudBackupScreenBody::Configured(configured) = &mut screen.body {
+            configured.sync_health = CloudSyncHealth::AccountUnavailable(message.into());
+            configured.sections.insert(
+                0,
+                CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete {
+                    reason: CloudBackupInventoryIncompleteReason::AccountUnavailable,
+                    controls: vec![CloudBackupInventoryControl::SwitchDriveAccount],
+                }),
+            );
+
+            // an upload can't start on the gone account, so the wallets section has no Sync Now
+            for section in &mut configured.sections {
+                if let CloudBackupSection::Wallets(wallets) = section {
+                    wallets.controls.clear();
+                }
+            }
+        }
+
+        screen.actions.entries.retain(|entry| entry.action != A::SyncUnsynced);
         screen
     }
 

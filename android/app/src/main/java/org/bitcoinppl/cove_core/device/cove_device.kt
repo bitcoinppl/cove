@@ -3342,6 +3342,18 @@ sealed class CloudStorageException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The provider account Cloud Backup is bound to is no longer on this device, such as a
+     * Google account the user removed; authorizing it again can't succeed, only switching can
+     */
+    class AccountUnavailable(
+
+        val v1: kotlin.String
+        ) : CloudStorageException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class NotAvailable(
 
         val v1: kotlin.String
@@ -3435,26 +3447,29 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
             1 -> CloudStorageException.AuthorizationRequired(
                 FfiConverterString.read(buf),
                 )
-            2 -> CloudStorageException.NotAvailable(
+            2 -> CloudStorageException.AccountUnavailable(
                 FfiConverterString.read(buf),
                 )
-            3 -> CloudStorageException.Offline(
+            3 -> CloudStorageException.NotAvailable(
                 FfiConverterString.read(buf),
                 )
-            4 -> CloudStorageException.SyncPending(
+            4 -> CloudStorageException.Offline(
                 FfiConverterString.read(buf),
                 )
-            5 -> CloudStorageException.UploadFailed(
+            5 -> CloudStorageException.SyncPending(
                 FfiConverterString.read(buf),
                 )
-            6 -> CloudStorageException.DownloadFailed(
+            6 -> CloudStorageException.UploadFailed(
                 FfiConverterString.read(buf),
                 )
-            7 -> CloudStorageException.NotFound(
+            7 -> CloudStorageException.DownloadFailed(
                 FfiConverterString.read(buf),
                 )
-            8 -> CloudStorageException.QuotaExceeded()
-            9 -> CloudStorageException.InvalidNamespace(
+            8 -> CloudStorageException.NotFound(
+                FfiConverterString.read(buf),
+                )
+            9 -> CloudStorageException.QuotaExceeded()
+            10 -> CloudStorageException.InvalidNamespace(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -3464,6 +3479,11 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
     override fun allocationSize(value: CloudStorageException): ULong {
         return when(value) {
             is CloudStorageException.AuthorizationRequired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is CloudStorageException.AccountUnavailable -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -3517,42 +3537,47 @@ public object FfiConverterTypeCloudStorageError : FfiConverterRustBuffer<CloudSt
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.NotAvailable -> {
+            is CloudStorageException.AccountUnavailable -> {
                 buf.putInt(2)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.Offline -> {
+            is CloudStorageException.NotAvailable -> {
                 buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.SyncPending -> {
+            is CloudStorageException.Offline -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.UploadFailed -> {
+            is CloudStorageException.SyncPending -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.DownloadFailed -> {
+            is CloudStorageException.UploadFailed -> {
                 buf.putInt(6)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.NotFound -> {
+            is CloudStorageException.DownloadFailed -> {
                 buf.putInt(7)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudStorageException.QuotaExceeded -> {
+            is CloudStorageException.NotFound -> {
                 buf.putInt(8)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudStorageException.QuotaExceeded -> {
+                buf.putInt(9)
                 Unit
             }
             is CloudStorageException.InvalidNamespace -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -3595,6 +3620,18 @@ sealed class CloudSyncHealth {
         companion object
     }
 
+    /**
+     * The bound provider account is no longer on this device; only switching accounts fixes it
+     */
+    data class AccountUnavailable(
+        val v1: kotlin.String) : CloudSyncHealth()
+
+    {
+
+
+        companion object
+    }
+
     object Unavailable : CloudSyncHealth()
 
 
@@ -3624,7 +3661,10 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
             6 -> CloudSyncHealth.AuthorizationRequired(
                 FfiConverterString.read(buf),
                 )
-            7 -> CloudSyncHealth.Unavailable
+            7 -> CloudSyncHealth.AccountUnavailable(
+                FfiConverterString.read(buf),
+                )
+            8 -> CloudSyncHealth.Unavailable
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -3668,6 +3708,13 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
                 + FfiConverterString.allocationSize(value.v1)
             )
         }
+        is CloudSyncHealth.AccountUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
         is CloudSyncHealth.Unavailable -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -3704,8 +3751,13 @@ public object FfiConverterTypeCloudSyncHealth : FfiConverterRustBuffer<CloudSync
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudSyncHealth.Unavailable -> {
+            is CloudSyncHealth.AccountUnavailable -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudSyncHealth.Unavailable -> {
+                buf.putInt(8)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

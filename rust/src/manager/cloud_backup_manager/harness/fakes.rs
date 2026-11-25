@@ -308,6 +308,10 @@ enum ProviderAuthorization {
     /// The user removed Cove's access: a silent call fails with `AuthorizationRequired`, and a
     /// call that may ask for consent shows the provider's sheet, which the user accepts
     Revoked,
+    /// The user removed the bound account from the device: every call fails with
+    /// `AccountUnavailable` at once, consent or not, as Google's authorization does when asked
+    /// for an account the device no longer has
+    AccountRemoved,
 }
 
 fn label_hold(id: CallId<CloudCall>, fault: &CloudFault) {
@@ -399,6 +403,11 @@ impl HarnessCloud {
         self.calls.lock().authorization = ProviderAuthorization::Revoked;
     }
 
+    /// The user removes the bound account from the device, so no call reaches the provider
+    pub(crate) fn remove_account(&self) {
+        self.calls.lock().authorization = ProviderAuthorization::AccountRemoved;
+    }
+
     /// How many times the provider asked the user for consent
     pub(crate) fn consent_sheets(&self) -> usize {
         self.calls.lock().consent_sheets
@@ -417,6 +426,12 @@ impl HarnessCloud {
             let id = CallId::new(kind, *nth);
             calls.log.push((id, namespace.map(str::to_string)));
             calls.policies.insert(id, policy);
+
+            if calls.authorization == ProviderAuthorization::AccountRemoved {
+                return Err(CloudStorageError::AccountUnavailable(
+                    "the bound account is no longer on this device".into(),
+                ));
+            }
 
             if calls.authorization == ProviderAuthorization::Revoked {
                 match policy {

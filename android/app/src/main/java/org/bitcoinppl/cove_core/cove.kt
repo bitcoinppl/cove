@@ -42948,6 +42948,10 @@ enum class CloudBackupDisableNotStartedReason {
 
     OFFLINE,
     AUTHORIZATION_REQUIRED,
+    /**
+     * The bound Google account is no longer on this device
+     */
+    ACCOUNT_UNAVAILABLE,
     PROVIDER_UNAVAILABLE,
     /**
      * The writes in flight did not drain
@@ -43905,7 +43909,12 @@ enum class CloudBackupInventoryControl {
     /**
      * Android only: Google Drive needs authorizing before the inventory can load
      */
-    RECONNECT_DRIVE;
+    RECONNECT_DRIVE,
+    /**
+     * Android only: the bound Google account is no longer on this device, so authorizing it
+     * again can't load the inventory; switching to another account is the only way on
+     */
+    SWITCH_DRIVE_ACCOUNT;
 
 
 
@@ -43942,6 +43951,10 @@ public object FfiConverterTypeCloudBackupInventoryControl: FfiConverterRustBuffe
 enum class CloudBackupInventoryIncompleteReason {
 
     AUTHORIZATION_REQUIRED,
+    /**
+     * The bound Google account is no longer on this device
+     */
+    ACCOUNT_UNAVAILABLE,
     OFFLINE,
     PROVIDER_SYNC_PENDING,
     PROVIDER_UNAVAILABLE,
@@ -48222,6 +48235,19 @@ sealed class CloudBackupSettingsRowStatus {
     }
 
     /**
+     * The bound provider account is no longer on this device; the row opens the detail screen,
+     * which offers switching accounts
+     */
+    data class AccountUnavailable(
+        val v1: kotlin.String) : CloudBackupSettingsRowStatus()
+
+    {
+
+
+        companion object
+    }
+
+    /**
      * A committed Turn Off has not finished; the row opens the detail screen to finish it
      */
     object TurnOffIncomplete : CloudBackupSettingsRowStatus()
@@ -48270,8 +48296,11 @@ public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuf
             17 -> CloudBackupSettingsRowStatus.AuthorizationRequired(
                 FfiConverterString.read(buf),
                 )
-            18 -> CloudBackupSettingsRowStatus.TurnOffIncomplete
-            19 -> CloudBackupSettingsRowStatus.TurnedOnAgain
+            18 -> CloudBackupSettingsRowStatus.AccountUnavailable(
+                FfiConverterString.read(buf),
+                )
+            19 -> CloudBackupSettingsRowStatus.TurnOffIncomplete
+            20 -> CloudBackupSettingsRowStatus.TurnedOnAgain
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -48381,6 +48410,13 @@ public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuf
                 + FfiConverterString.allocationSize(value.v1)
             )
         }
+        is CloudBackupSettingsRowStatus.AccountUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
         is CloudBackupSettingsRowStatus.TurnOffIncomplete -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -48467,12 +48503,17 @@ public object FfiConverterTypeCloudBackupSettingsRowStatus : FfiConverterRustBuf
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupSettingsRowStatus.TurnOffIncomplete -> {
+            is CloudBackupSettingsRowStatus.AccountUnavailable -> {
                 buf.putInt(18)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is CloudBackupSettingsRowStatus.TurnOffIncomplete -> {
+                buf.putInt(19)
                 Unit
             }
             is CloudBackupSettingsRowStatus.TurnedOnAgain -> {
-                buf.putInt(19)
+                buf.putInt(20)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -48608,6 +48649,10 @@ enum class CloudBackupTurnOffFailure {
      * Google Drive needs Reconnect, or iCloud Drive is off for Cove
      */
     AUTHORIZATION_REQUIRED,
+    /**
+     * The bound Google account is no longer on this device, so Reconnect can't help
+     */
+    ACCOUNT_UNAVAILABLE,
     PROVIDER_UNAVAILABLE,
     OTHER;
 
@@ -49364,6 +49409,13 @@ sealed class CloudBackupVerificationControl {
     object ReconnectDrive : CloudBackupVerificationControl()
 
 
+    /**
+     * Android only: the latest upload, or a verification that failed, waits on a Google account
+     * that is no longer on this device
+     */
+    object SwitchDriveAccount : CloudBackupVerificationControl()
+
+
 
 
 
@@ -49389,6 +49441,7 @@ public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustB
                 )
             4 -> CloudBackupVerificationControl.RetryUpload
             5 -> CloudBackupVerificationControl.ReconnectDrive
+            6 -> CloudBackupVerificationControl.SwitchDriveAccount
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -49426,6 +49479,12 @@ public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustB
                 4UL
             )
         }
+        is CloudBackupVerificationControl.SwitchDriveAccount -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: CloudBackupVerificationControl, buf: ByteBuffer) {
@@ -49450,6 +49509,10 @@ public object FfiConverterTypeCloudBackupVerificationControl : FfiConverterRustB
             }
             is CloudBackupVerificationControl.ReconnectDrive -> {
                 buf.putInt(5)
+                Unit
+            }
+            is CloudBackupVerificationControl.SwitchDriveAccount -> {
+                buf.putInt(6)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

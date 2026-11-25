@@ -155,8 +155,8 @@ every screen to it. In particular:
   that verifies offers neither: Android's menu no longer lists them on a healthy
   backup and holds only Switch Google Account.
 - `SyncUnsynced` is Sync Now under the wallets waiting to upload, or the Try
-  Again of an upload confirmation that failed. With every wallet up to date it
-  isn't offered.
+  Again of an upload confirmation that failed. With every wallet up to date, or
+  with the bound Google account gone from the device, Sync Now isn't offered.
 - `DeleteUnreadableBackups` is offered with a verification report that counts
   backups this key can't decrypt and once the cloud-only records are listed, and
   its control carries the batch's consent.
@@ -164,7 +164,13 @@ every screen to it. In particular:
 - `RefreshDetail` is offered only with the Check Again of the incomplete
   inventory section or of an other-backups check that failed. Opening detail is
   `EnterDetail`, which loads inventory without a control, and a row's Check
-  Again is a row action.
+  Again is a row action. Neither section offers it once the bound Google account
+  is gone, since another check would fail the same way.
+- `SwitchDriveAccount` is always Android's menu entry. Once the bound Google
+  account is no longer on the device, it is also the only control of an
+  incomplete inventory, takes the place of Verify after a verification that
+  failed, and joins an upload confirmation waiting on that account, where Try
+  Again may sit beside it. Each opens the same confirmation as the menu.
 - `DiscardPendingEnable` is the Cancel of the force-new and passkey-choice
   prompts and of the saved-passkey confirmation, where admission accepts it.
   Pending-enable recovery offers only its cleanup, when cleanup is available.
@@ -629,6 +635,23 @@ runtime. The listing that finishes a pending upload verification also lists
 silently, since the app resumes that verification at startup and on returning
 to the foreground. The refresh after a sync, restore, delete or passkey repair
 may ask, since each of those operations starts from a tap.
+
+A bound Google account the user removed from the device is not a consent
+problem. Google answers a request for it with `CANCELED` ("Cannot find a matching
+credential") at once and shows nothing, so Reconnect or Check Again would fail
+the same way. Android reports it as `CloudStorageError::AccountUnavailable`. It
+pauses work wherever `AuthorizationRequired` does
+(`CloudStorageError::requires_account_action`), but the screen offers Switch
+Google Account in place of Reconnect and Check Again. A live answer that the
+account needs the user outranks an older failed upload in sync health, so a
+row that once failed on a full Drive doesn't hide it.
+
+Turn Off can't delete backups it can't reach. One that stops on a gone account
+before starting leaves Cloud Backup on and says so: signing the account back in
+lets Turn Off delete its backups, and switching accounts keeps backing up but
+leaves them. A committed Turn Off can't switch accounts, so one that stops on it
+asks the user to add the account back and tap Try Again, and offers Try Again
+and, once a Try Again has failed, Stop Using on This Device, without Reconnect.
 
 Each listed backup folder is classified once, by `CloudFolders` (`cloud_folders.rs`),
 without asking for a passkey: its master key is readable, missing, still uploading,

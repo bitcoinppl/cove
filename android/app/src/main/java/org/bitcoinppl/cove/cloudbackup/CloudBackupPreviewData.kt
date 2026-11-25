@@ -85,6 +85,7 @@ internal fun CloudBackupScreenPreviewContent(darkTheme: Boolean = isSystemInDark
                     onBack = {},
                     onRecreate = {},
                     onReinitialize = {},
+                    onSwitchAccount = {},
                 ),
         )
     }

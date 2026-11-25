@@ -137,8 +137,7 @@ class CloudBackupVerificationSectionTest {
                     manager = CloudBackupManager(screen),
                     screen = screen,
                     section = screen.requireVerificationSection(),
-                    onRecreate = {},
-                    onReinitialize = {},
+                    actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}, onSwitchAccount = {}),
                 )
             }
         }

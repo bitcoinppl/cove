@@ -85,6 +85,8 @@ pub enum CloudBackupUndecryptableWalletDeletionState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupInventoryIncompleteReason {
     AuthorizationRequired,
+    /// The bound Google account is no longer on this device
+    AccountUnavailable,
     Offline,
     ProviderSyncPending,
     ProviderUnavailable,
@@ -95,6 +97,7 @@ impl From<CloudStorageIssue> for CloudBackupInventoryIncompleteReason {
     fn from(issue: CloudStorageIssue) -> Self {
         match issue {
             CloudStorageIssue::AuthorizationRequired => Self::AuthorizationRequired,
+            CloudStorageIssue::AccountUnavailable => Self::AccountUnavailable,
             CloudStorageIssue::Offline => Self::Offline,
             CloudStorageIssue::SyncPending => Self::ProviderSyncPending,
             CloudStorageIssue::Unavailable => Self::ProviderUnavailable,
