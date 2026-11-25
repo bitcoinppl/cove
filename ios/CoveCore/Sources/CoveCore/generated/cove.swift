@@ -32202,7 +32202,8 @@ public enum CloudBackupVerificationControl: Equatable, Hashable {
      */
     case reconnectDrive
     /**
-     * Android only: the latest upload waits on a Google account that is no longer on this device
+     * Android only: the latest upload, or a verification that failed, waits on a Google account
+     * that is no longer on this device
      */
     case switchDriveAccount
 
