@@ -315,9 +315,7 @@ private struct EnterAmountUnitSelector: View {
                         .padding(.leading, 4)
                 }
                 .foregroundStyle(.primary)
-                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(unit)
-                .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("sendFlow.unit")
             }
         }
