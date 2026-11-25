@@ -384,7 +384,6 @@ struct SelectedWalletScreen: View {
 
     private func prepareScroll(_ proxy: ScrollViewProxy) {
         UIRefreshControl.appearance().tintColor = refreshControlTintColor
-        app.clearSendFlowManager(id: manager.id)
         handleScrollToTransaction(proxy: proxy)
     }
 

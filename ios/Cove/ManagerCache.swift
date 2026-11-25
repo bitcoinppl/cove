@@ -350,10 +350,22 @@ struct WalletManagerCacheState: Equatable {
         return sendFlowManager
     }
 
+    /// Returns the wallet's send flow manager, creating it when the router shows a send route for
+    /// the wallet, or nil when none does
+    ///
+    /// A send screen that is animating out still runs its tasks after the router dropped its
+    /// route, and a manager it created there would outlive the flow with the unit and fiat mode
+    /// the wallet had then, which the next send screen reused
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
-        presenter: SendFlowPresenter
-    ) throws -> SendFlowManager {
+        presenter: SendFlowPresenter,
+        router: Router
+    ) throws -> SendFlowManager? {
+        guard router.containsSendRoute(for: walletManager.id) else {
+            logger.debug("no send route for \(walletManager.id), not creating a SendFlowManager")
+            return nil
+        }
+
         if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
             logger.debug("found and using sendflow manager for \(walletManager.id)")
             sendFlowManager.presenter = presenter
@@ -416,7 +428,15 @@ struct WalletManagerCacheState: Equatable {
         clearKeyTeleportManager()
     }
 
+    func reconcileSendFlowManagerOwnership(router: Router) {
+        guard let sendFlowManager else { return }
+        guard !router.containsSendRoute(for: sendFlowManager.id) else { return }
+
+        clearSendFlowManager()
+    }
+
     func reconcileRouteOwnedManagers(router: Router) {
+        reconcileSendFlowManagerOwnership(router: router)
         reconcileCoinControlManagerOwnership(router: router)
         reconcileKeyTeleportManagerOwnership(router: router)
     }
@@ -461,6 +481,10 @@ extension Router {
     var containsKeyTeleportRoute: Bool {
         self.default.isKeyTeleportRoute || routes.contains { $0.isKeyTeleportRoute }
     }
+
+    func containsSendRoute(for id: WalletId) -> Bool {
+        self.default.isSendRoute(for: id) || routes.contains { $0.isSendRoute(for: id) }
+    }
 }
 
 private extension Route {
@@ -474,5 +498,10 @@ private extension Route {
     var isKeyTeleportRoute: Bool {
         if case .keyTeleport = self { return true }
         return false
+    }
+
+    func isSendRoute(for id: WalletId) -> Bool {
+        guard case let .send(sendRoute) = self else { return false }
+        return sendRoute.id() == id
     }
 }
