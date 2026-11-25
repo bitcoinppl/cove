@@ -642,11 +642,17 @@ credential") at once and shows nothing, so Reconnect or Check Again would fail
 the same way. Android reports it as `CloudStorageError::AccountUnavailable`. It
 pauses work wherever `AuthorizationRequired` does
 (`CloudStorageError::requires_account_action`), but the screen offers Switch
-Google Account in place of Reconnect and Check Again. Turn Off can't delete
-backups it can't reach, so a Turn Off that stops on it before starting leaves
-Cloud Backup on and tells the user to switch accounts. A committed Turn Off
-that stops on it says the same and offers Try Again and Stop Using on This
-Device, without Reconnect.
+Google Account in place of Reconnect and Check Again. A live answer that the
+account needs the user outranks an older failed upload in sync health, so a
+row that once failed on a full Drive doesn't hide it.
+
+Turn Off can't delete backups it can't reach. One that stops on a gone account
+before starting leaves Cloud Backup on and says so: signing the account back in
+lets Turn Off delete its backups, and switching accounts keeps backing up but
+leaves them. A committed Turn Off can't switch accounts, so one that stops on it
+asks the user to add the account back and try again, or to stop using Cloud
+Backup on this device, and offers Try Again and Stop Using on This Device
+without Reconnect.
 
 Each listed backup folder is classified once, by `CloudFolders` (`cloud_folders.rs`),
 without asking for a passkey: its master key is readable, missing, still uploading,

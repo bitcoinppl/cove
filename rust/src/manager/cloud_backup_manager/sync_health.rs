@@ -159,6 +159,11 @@ impl RustCloudBackupManager {
             Ok(CloudBackupUploadStatus::NotFound) | Err(CloudStorageError::NotFound(_)) => {
                 Some(MasterKeyIssue::Missing)
             }
+            // the account the failed rows would retry on needs the user now, so a live answer
+            // that says so outranks what an older upload failed on
+            Err(error) if error.requires_account_action() => {
+                return Self::sync_health_from_cloud_error(error).into();
+            }
             Err(error) => {
                 return local_failure
                     .unwrap_or_else(|| Self::sync_health_from_cloud_error(error))

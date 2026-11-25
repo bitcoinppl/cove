@@ -149,7 +149,7 @@ private fun CloudBackupDisableNotStartedReason.caption(): String =
         CloudBackupDisableNotStartedReason.AUTHORIZATION_REQUIRED ->
             "Cloud Backup is still on. Cove needs access to $PROVIDER."
         CloudBackupDisableNotStartedReason.ACCOUNT_UNAVAILABLE ->
-            "Cloud Backup is still on. Cove can't turn it off because the Google account with your backups isn't signed in on this device. Switch Google Account to continue."
+            "Cloud Backup is still on. Cove can't turn it off because the Google account with your backups isn't signed in on this device. Sign that account back in to turn it off, or switch Google Account to keep backing up."
         CloudBackupDisableNotStartedReason.PROVIDER_UNAVAILABLE ->
             "Cloud Backup is still on. $PROVIDER isn't available right now."
         CloudBackupDisableNotStartedReason.WRITES_DID_NOT_DRAIN ->

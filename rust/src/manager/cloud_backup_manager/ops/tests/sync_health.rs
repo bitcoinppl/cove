@@ -1,3 +1,5 @@
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
+
 use super::*;
 
 #[tokio::test(flavor = "current_thread")]
@@ -120,6 +122,41 @@ async fn sync_health_reports_authorization_required_for_persisted_auth_failures(
             "Cove couldn't access your cloud backup. Reconnect your cloud account, then try again."
                 .into(),
         ),
+    );
+
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}
+
+// a row that failed earlier, such as on a full Drive, must not hide that the account it would
+// retry on is gone now, or the screen keeps offering Sync Now and Verify that can only fail
+#[tokio::test(flavor = "current_thread")]
+async fn a_gone_account_outranks_an_older_failed_upload() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = global_manager();
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+    persist_failed_blob_state_with_issue(
+        metadata.id,
+        false,
+        Some(CloudStorageIssue::QuotaExceeded),
+    );
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.fail_backup_upload_state(
+        namespace.clone(),
+        MASTER_KEY_RECORD_ID.into(),
+        CloudStorageError::AccountUnavailable("the account was removed".into()),
+    );
+
+    let health = manager.compute_sync_health().await;
+    globals.cloud.restore_backup_upload_state(namespace, MASTER_KEY_RECORD_ID.into());
+    assert!(
+        matches!(health, CloudSyncHealth::AccountUnavailable(_)),
+        "a gone account reports as such, got {health:?}"
     );
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
