@@ -169,8 +169,9 @@ extension XCUIApplication {
         XCTAssertTrue(field.waitForExistence(timeout: 15))
 
         // the send screen can open with the amount focused, and the keyboard's toolbar then covers
-        // the address field
-        if !field.isHittable, keyboards.count > 0 {
+        // the address field; that keyboard can rise a moment after the field shows, so give it time
+        // to appear before checking whether the field is covered
+        if keyboards.firstMatch.waitForExistence(timeout: 3), !field.isHittable {
             buttons["Done"].firstMatch.tap()
         }
 
