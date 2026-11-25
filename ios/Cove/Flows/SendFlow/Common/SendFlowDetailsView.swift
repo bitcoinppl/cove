@@ -123,12 +123,14 @@ private struct SendFlowDetailsAmountRows: View {
                 .fontWeight(feePercentage > 20 ? .bold : .medium)
                 .foregroundStyle(feePercentage > 20 ? .red : .secondary)
                 .padding(.vertical, 10)
+                .accessibilityIdentifier("sendFlowConfirm.fee")
         }
 
         HStack {
             Text("They'll receive")
             Spacer()
             Text(receiveAmount)
+                .accessibilityIdentifier("sendFlowConfirm.receive")
         }
         .font(.footnote)
         .fontWeight(.semibold)
@@ -137,6 +139,7 @@ private struct SendFlowDetailsAmountRows: View {
             Text("You'll pay")
             Spacer()
             Text(spendingAmount)
+                .accessibilityIdentifier("sendFlowConfirm.total")
         }
         .font(.footnote)
         .fontWeight(.semibold)

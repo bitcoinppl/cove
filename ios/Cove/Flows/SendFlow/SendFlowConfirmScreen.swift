@@ -385,6 +385,7 @@ private struct SendFlowConfirmationAmount: View {
                     .minimumScaleFactor(0.01)
                     .lineLimit(1)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("sendFlowConfirm.amount")
 
                 SendFlowConfirmationUnitSelector(
                     unit: unit,
@@ -425,6 +426,7 @@ private struct SendFlowConfirmationUnitSelector: View {
         .foregroundStyle(.primary)
         .padding(.vertical, 10)
         .padding(.leading, 16)
+        .accessibilityIdentifier("sendFlowConfirm.unit")
         .popover(isPresented: $showingMenu) {
             SendFlowConfirmationUnitMenu(
                 selectSats: selectSats,
