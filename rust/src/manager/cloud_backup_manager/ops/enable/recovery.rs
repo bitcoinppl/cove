@@ -87,6 +87,17 @@ impl RustCloudBackupManager {
             &preparation.active_namespace_id,
             passkey.clone(),
         )?;
+
+        // the lane runs this enable's writes in order, so the namespace holds its key before any
+        // wallet lands there, even if the wrapper the passkey opened was a stale local copy;
+        // finalization records it for confirmation, as a fresh Enable does its new wrapper
+        let opened_wrapper =
+            &preparation.merge_namespaces[preparation.active_index].matched.opened_wrapper;
+        let wrapper_completion = writes
+            .write_back_opened_wrapper(&active_namespace_id, opened_wrapper)
+            .await
+            .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
+
         let active_critical_key = preparation.active_critical_key;
         let uploaded_wallets = CloudBackupStore::global()
             .upload_all_wallets_with_progress(
@@ -122,6 +133,7 @@ impl RustCloudBackupManager {
             namespace_id: active_namespace_id,
             passkey,
             active_critical_key,
+            wrapper_completion,
             uploaded_wallets,
             pending_uploads,
             cleanup_sources,

@@ -6,6 +6,7 @@ use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_types::network::Network;
 
 use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
+use crate::manager::cloud_backup_manager::cloud_folders::DownloadedWrapper;
 use crate::manager::cloud_backup_manager::{
     CloudBackupOnboardingCompletionReadiness, PendingEnableJournalPhase,
     PendingEnableLocalMetadataSnapshot, PendingWork, PromotionStartError,
@@ -113,6 +114,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
         prf_salt: [9; 32],
         credential_id: vec![1, 2, 3],
         provider_hint: None,
+        opened_wrapper: DownloadedWrapper::new(b"{}".to_vec()),
     };
 
     let preparation = manager
@@ -190,6 +192,63 @@ async fn fresh_enable_upload_progress_counts_master_and_wallets() {
     reset_cloud_backup_test_state(&manager, globals);
 }
 
+/// Use Existing writes the wrapper its passkey opened back to the namespace before any wallet,
+/// so a stale local copy of a deleted backup can't leave wallets there without their key
+#[tokio::test(flavor = "current_thread")]
+async fn enable_recovery_writes_back_the_opened_wrapper_before_any_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    persist_xpub_wallets(vec![xpub_only_wallet_metadata()]);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace_id = master_key.namespace_id();
+    let opened_wrapper = b"opened wrapper".to_vec();
+    let matched = NamespaceMatch {
+        namespace_id: namespace_id.clone(),
+        master_key,
+        prf_salt: [9; 32],
+        credential_id: vec![1, 2, 3],
+        provider_hint: None,
+        opened_wrapper: DownloadedWrapper::new(opened_wrapper.clone()),
+    };
+
+    let preparation = manager
+        .prepare_enable_recovery(CloudBackupEnableContext::settings_manual(), vec![matched])
+        .await
+        .unwrap();
+    manager
+        .pending_enable
+        .save_enable_recovery_master_key(
+            preparation.context,
+            &preparation.active_namespace_id,
+            &preparation.active_master_key,
+            preparation.recovered_passkey_metadata(),
+        )
+        .unwrap();
+    let (claim, writes) =
+        begin_operation_writes_for_test(&manager, CloudBackupExclusiveOperation::Enable).await;
+    manager.prepare_enable_recovery_completion(preparation, writes).await.unwrap();
+    finish_operation_for_test(&manager, claim).await;
+
+    let uploads = globals
+        .cloud
+        .uploads()
+        .into_iter()
+        .filter(|upload| upload.namespace == namespace_id)
+        .map(|upload| (upload.record_id == MASTER_KEY_RECORD_ID, upload.data))
+        .collect::<Vec<_>>();
+
+    assert_eq!(uploads.len(), 2, "one wrapper and one wallet");
+    assert_eq!(uploads[0], (true, opened_wrapper.clone()));
+    assert!(!uploads[1].0, "the wallet uploads after the wrapper");
+    assert_eq!(globals.cloud.master_key_backup_bytes(&namespace_id), Some(opened_wrapper));
+
+    manager.pending_enable.abort_recovered_existing_enable().unwrap();
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() {
     let _guard = async_test_lock().lock().await;
@@ -210,6 +269,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         prf_salt: [9; 32],
         credential_id: vec![1, 2, 3],
         provider_hint: None,
+        opened_wrapper: DownloadedWrapper::new(b"{}".to_vec()),
     };
 
     let preparation = manager

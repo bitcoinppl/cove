@@ -19,7 +19,10 @@ use super::{
     persisted, run_case, seed_an_uploaded_wallet, seed_legacy_stuck_disabling,
     seed_wallet_backup_elsewhere,
 };
-use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
+use crate::database::Database;
+use crate::database::cloud_backup::{
+    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedCloudBlobState,
+};
 use crate::manager::cloud_backup_manager::actors::write::Decision;
 use crate::manager::cloud_backup_manager::admission::{
     Admission, EnableIntent, Rejection, UserIntent,
@@ -38,7 +41,7 @@ use crate::manager::cloud_backup_manager::screen::{
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupEnablePromptChoice, CloudBackupEnableState,
     CloudBackupKeychain, CloudBackupManagerAction, CloudBackupRootPrompt, CloudBackupStatus,
-    SavedPasskeyConfirmationMode, VerificationState,
+    CloudBackupStore, SavedPasskeyConfirmationMode, VerificationState,
 };
 
 const NEW_CREDENTIAL: [u8; 3] = [4, 5, 6];
@@ -573,6 +576,139 @@ fn a_restore_waits_for_a_paused_enable_a_failed_reset_left() {
         assert_restored_backup_kept(&app, &restored);
         assert_eq!(pending_enable_journal(), None, "{}", app.describe());
         assert_eq!(app.passkey.inner.create_count(), 2);
+    });
+}
+
+/// A restore writes the master key wrapper its passkey opened back to the namespace it activates,
+/// before any wallet upload into that namespace runs
+///
+/// The incident: a fresh iPhone read a stale local copy of a backup deleted from iCloud, which
+/// the provider reported as uploaded. The passkey opened its wrapper, the restore activated the
+/// namespace and uploaded every wallet into it, and then iCloud synced the delete, taking the
+/// wrapper with it. The namespace held wallets no device could ever decrypt
+#[test]
+fn a_restore_writes_back_the_wrapper_it_opened_before_any_wallet_upload() {
+    let test = concat!(
+        module_path!(),
+        "::a_restore_writes_back_the_wrapper_it_opened_before_any_wallet_upload"
+    );
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let restored = a_backup_to_restore(&app);
+        let namespace = restored.namespace_id();
+        let opened_wrapper =
+            app.cloud.inner.master_key_backup_bytes(&namespace).expect("the seeded wrapper");
+
+        // the restore matches the wrapper, then holds on its first wallet download
+        let hold = Hold::default();
+        app.cloud.script_next(CloudCall::DownloadWallet, CloudFault::Hold(hold.clone()));
+        app.dispatch(CloudBackupManagerAction::RestoreFromCloudBackup).then_cannot(&[N::TurnOff]);
+        app.advance_clock(Duration::from_secs(15)).then_cannot(&[N::TurnOff]);
+        app.block_on("the restore's wallet download to be held", hold.entered());
+
+        // the copy the restore read was stale: the delete syncs, and the wrapper is gone
+        app.event("the provider syncs the delete of the wrapper", |app| {
+            app.cloud.inner.remove_master_key_backup(&namespace);
+            app.cloud.persist();
+        })
+        .then_cannot(&[N::TurnOff]);
+        app.event("the held download completes", |_| hold.release()).then_cannot(&[N::Enable]);
+        app.quiesce().then_can(&[N::TurnOff]).then_cannot(&[N::Enable]);
+        assert_restored_backup_kept(&app, &restored);
+
+        // the namespace holds the wallet backups and the key that decrypts them
+        assert_eq!(
+            app.cloud.inner.master_key_backup_bytes(&namespace),
+            Some(opened_wrapper),
+            "the namespace lost the wrapper the restore opened\n{}",
+            app.describe()
+        );
+        let writes = app
+            .cloud
+            .calls()
+            .into_iter()
+            .filter(|(call, written)| {
+                matches!(call.kind, CloudCall::UploadMasterKey | CloudCall::UploadWallet)
+                    && written.as_deref() == Some(namespace.as_str())
+            })
+            .map(|(call, _)| call.kind)
+            .collect::<Vec<_>>();
+
+        assert!(writes.contains(&CloudCall::UploadWallet), "no wallet upload: {writes:?}");
+        assert_eq!(
+            writes.first(),
+            Some(&CloudCall::UploadMasterKey),
+            "a wallet upload ran before the wrapper was written back: {writes:?}\n{}",
+            app.describe()
+        );
+
+        // the upload confirmation loop confirmed the written-back wrapper
+        let rows = Database::global().cloud_blob_sync_states.list().expect("read the upload rows");
+        let wrapper_row = rows
+            .iter()
+            .find(|row| row.is_master_key_wrapper() && row.namespace_id == namespace)
+            .unwrap_or_else(|| panic!("no wrapper row: {rows:#?}\n{}", app.describe()));
+
+        assert!(
+            matches!(wrapper_row.state, PersistedCloudBlobState::Confirmed(_)),
+            "{wrapper_row:#?}\n{}",
+            app.describe()
+        );
+    });
+}
+
+/// A restore that can't write back the wrapper it opened keeps the wallets but not the backup
+///
+/// Activating the namespace without its key would let the dirty wallet uploads land where no
+/// device can decrypt them, so the restore fails before it activates anything. The wallets it
+/// restored stay on the device, and a second restore activates the namespace with its key
+#[test]
+fn a_restore_that_cant_write_back_its_wrapper_leaves_backup_off() {
+    let test =
+        concat!(module_path!(), "::a_restore_that_cant_write_back_its_wrapper_leaves_backup_off");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let restored = a_backup_to_restore(&app);
+        let namespace = restored.namespace_id();
+        let namespace_writes = |app: &TestApp| {
+            app.cloud
+                .calls()
+                .into_iter()
+                .filter(|(call, written)| {
+                    matches!(call.kind, CloudCall::UploadMasterKey | CloudCall::UploadWallet)
+                        && written.as_deref() == Some(namespace.as_str())
+                })
+                .map(|(call, _)| call.kind)
+                .collect::<Vec<_>>()
+        };
+
+        let offline = CloudStorageError::NotAvailable("offline".into());
+        app.cloud.script_next(CloudCall::UploadMasterKey, CloudFault::Fail(offline));
+        app.dispatch(CloudBackupManagerAction::RestoreFromCloudBackup).then_cannot(&[N::TurnOff]);
+        app.quiesce().then_cannot(&[N::TurnOff]);
+
+        // the wallets were restored, but nothing was activated or uploaded
+        assert!(matches!(persisted(), PersistedCloudBackupState::Disabled), "{}", app.describe());
+        assert_eq!(CloudBackupStore::global().all_wallets().expect("read wallets").len(), 1);
+        assert_eq!(namespace_writes(&app), vec![CloudCall::UploadMasterKey], "{}", app.describe());
+
+        // a second restore finds only the wallets already here and activates the namespace
+        app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
+            prf_output: RESTORED_PRF.to_vec(),
+            credential_id: RESTORED_CREDENTIAL.to_vec(),
+        }));
+        app.dispatch(CloudBackupManagerAction::RestoreFromCloudBackup).then_cannot(&[N::Enable]);
+        app.quiesce().then_can(&[N::TurnOff]).then_cannot(&[N::Enable]);
+        assert_restored_backup_kept(&app, &restored);
+
+        let writes = namespace_writes(&app);
+        assert_eq!(
+            writes.get(..2),
+            Some(&[CloudCall::UploadMasterKey, CloudCall::UploadMasterKey][..]),
+            "a wallet upload ran before the wrapper was written back: {writes:?}\n{}",
+            app.describe()
+        );
+        assert!(writes.contains(&CloudCall::UploadWallet), "no wallet upload: {writes:?}");
     });
 }
 

@@ -1450,7 +1450,8 @@ impl CloudBackupSupervisor {
 
         let cancellation = self.restore_cancellation(claim);
         let authority = self.runtime.authority(claim);
-        let operation = RestoreOperation::new(claim, addr.clone(), cancellation, authority);
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let operation = RestoreOperation::new(claim, addr.clone(), writes, cancellation, authority);
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started");
             match operation.restore_from_cloud_backup(&manager).await {
@@ -1517,8 +1518,16 @@ impl CloudBackupSupervisor {
 
         let cancellation = self.restore_cancellation(claim);
         let authority = self.runtime.authority(claim);
-        let operation =
-            RestoreOperation::new_with_events(claim, addr.clone(), sender, cancellation, authority);
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let operation = RestoreOperation::new_with_events(
+            claim,
+            addr.clone(),
+            writes,
+            sender,
+            cancellation,
+            authority,
+        );
+
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started for onboarding");
             match operation.restore_from_cloud_backup(&manager).await {
@@ -2229,7 +2238,8 @@ pub(crate) mod test_support {
             let cancellation = self.restore_cancellation(claim);
             let ticket = dispatch_test_support::ticket(PermitIntent::RestoreFromCloudBackup);
             let authority = self.runtime.grant(claim, Some(ticket));
-            let operation = RestoreOperation::new(claim, addr, cancellation, authority);
+            let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+            let operation = RestoreOperation::new(claim, addr, writes, cancellation, authority);
             Produces::ok(operation)
         }
 

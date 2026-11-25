@@ -760,6 +760,57 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(status, .notFound)
     }
 
+    /// A stale local copy of a file iCloud deleted reports itself uploaded, as on the iPhone SE
+    /// that restored a turned-off backup, so a file the metadata index doesn't list stays pending
+    @MainActor
+    func testBackupUploadStatusKeepsLocalCopyMissingFromMetadataPending() async throws {
+        let fixture = makeICloudMetadataFixture(uploadStateReader: { _ in .uploaded })
+        defer { fixture.removeContainer() }
+
+        let location = try XCTUnwrap(backupLocations().first)
+        let localURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: location
+        )
+        try writeTestBackup(at: localURL)
+        try await seedFinishedGathering(fixture, [])
+
+        let status = try await fixture.helper.isBackupUploaded(
+            namespace: testNamespace,
+            recordId: "wallet-record",
+            locations: backupLocations()
+        )
+
+        XCTAssertEqual(status, .pending)
+    }
+
+    @MainActor
+    func testBackupUploadStatusReportsUploadedItemTheMetadataIndexLists() async throws {
+        let fixture = makeICloudMetadataFixture(uploadStateReader: { _ in .uploaded })
+        defer { fixture.removeContainer() }
+
+        let location = try XCTUnwrap(backupLocations().first)
+        let localURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: location
+        )
+        try writeTestBackup(at: localURL)
+        try await seedFinishedGathering(fixture, [
+            metadataRecord(
+                name: localURL.lastPathComponent,
+                parentPath: localURL.deletingLastPathComponent().path
+            ),
+        ])
+
+        let status = try await fixture.helper.isBackupUploaded(
+            namespace: testNamespace,
+            recordId: "wallet-record",
+            locations: backupLocations()
+        )
+
+        XCTAssertEqual(status, .uploaded)
+    }
+
     @MainActor
     func testBackupUploadStatusPropagatesMetadataStartupFailure() async throws {
         let fixture = makeICloudMetadataFixture(startResults: [false])
@@ -1045,6 +1096,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         coordinatedDeleter: @escaping @Sendable (URL, String) throws -> URL = { url, missingItemID in
             try ICloudDriveHelper.coordinatedDelete(at: url, missingItemID: missingItemID)
         },
+        uploadStateReader: (@Sendable (URL) -> ICloudDriveHelper.UploadState)? = nil,
         defaultTimeout: TimeInterval = 1,
         metadataListingTimeout: TimeInterval = 5
     ) -> ICloudMetadataFixture {
@@ -1061,6 +1113,7 @@ extension CloudBackupIOSSafetyHelpersTests {
             containerURLProvider: { containerURL },
             metadataIndexProvider: { index },
             coordinatedDeleter: coordinatedDeleter,
+            uploadStateReader: uploadStateReader,
             defaultTimeout: defaultTimeout,
             metadataListingTimeout: metadataListingTimeout
         )

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Fixed a cloud restore or Use Existing on iPhone trusting an old copy of a backup that was deleted from iCloud, which could leave a backup in iCloud that other devices couldn't restore because its key was missing
 - Fixed cloud restore skipping a wallet's seed when a watch-only or hardware copy of that wallet was already on the device
 - Fixed Recover Other Backups deleting the old backup before the cloud had the recovered wallets
 - Turning off Cloud Backup now also deletes backups made with another passkey, leaving a clean slate

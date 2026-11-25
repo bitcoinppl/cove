@@ -1052,10 +1052,16 @@ mod tests {
                 CommandClass::EnableDiscard(discard),
                 Decision::Run,
             ),
+            // a restore writes back the wrapper it opened through its claim, and pauses the rest
             (
                 policy(PolicyBody::Off { op: Some(OffWrites::Restore(enable)) }),
                 CommandClass::Operation(enable),
-                Decision::Stale,
+                Decision::Run,
+            ),
+            (
+                policy(PolicyBody::Off { op: Some(OffWrites::Restore(enable)) }),
+                ordinary.clone(),
+                Decision::Paused(PauseReason::BackupOff),
             ),
             // an account switch pauses background work and runs its own reinitialize
             (

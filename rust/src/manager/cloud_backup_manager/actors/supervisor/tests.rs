@@ -824,6 +824,12 @@ fn enable_recovery_completion_debug_redacts_nested_items() {
             provider_hint: None,
         },
         active_critical_key: zeroize::Zeroizing::new([0; 32]),
+        wrapper_completion: CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
+            "active-namespace-secret".into(),
+            CloudBackupRecordKey::MasterKeyWrapper,
+            "wrapper-revision".into(),
+            1,
+        ),
         uploaded_wallets: vec![CloudBackupUploadedWallet::new(
             WalletId::from("uploaded-wallet-id-secret".to_string()),
             "uploaded-wallet-record-secret".into(),

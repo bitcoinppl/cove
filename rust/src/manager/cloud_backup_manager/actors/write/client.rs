@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use act_zero::{Addr, call};
-use cove_device::cloud_storage::CloudStorageClient;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 
+use crate::database::cloud_backup::CloudBackupRecordKey;
 use crate::manager::cloud_backup_manager::CloudBackupError;
+use crate::manager::cloud_backup_manager::cloud_folders::DownloadedWrapper;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use crate::manager::cloud_backup_manager::owner::delete_authorization::DeleteAuthorization;
 
@@ -44,7 +46,7 @@ impl WriteOwner {
 /// Background producers use [`CloudBackupWriteClient::background`] with the generation they read
 /// before their configuration. Exclusive operations use [`CloudBackupWriteClient::for_operation`],
 /// so the lane runs their commands only while the operation runs
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct CloudBackupWriteClient {
     supervisor: Addr<CloudBackupWriteSupervisor>,
     owner: WriteOwner,
@@ -204,6 +206,35 @@ impl CloudBackupWriteClient {
         ))
         .await;
         self.await_done(receiver).await
+    }
+
+    /// Writes a master key wrapper a passkey opened back to the namespace it came from, and
+    /// returns the completion that records it for upload confirmation
+    ///
+    /// A provider can hand out a stale local copy of a namespace deleted elsewhere and report it
+    /// uploaded; once the delete syncs, the wrapper is gone, and wallets written there land in a
+    /// namespace no device can decrypt. Writing the opened bytes back before any wallet makes the
+    /// namespace hold its key again, and on a healthy provider rewrites the same bytes. The caller
+    /// applies the completion once the namespace it activates is committed, and the completion's
+    /// confirmation clock starts only after the write landed
+    pub(crate) async fn write_back_opened_wrapper(
+        &self,
+        namespace_id: &str,
+        wrapper: &DownloadedWrapper,
+    ) -> Result<CloudBackupWriteCompletion, CloudBackupError> {
+        self.upload_master_key_backup(
+            CloudStorage::global_explicit_client(),
+            namespace_id.to_owned(),
+            wrapper.json().to_vec(),
+        )
+        .await?;
+
+        Ok(CloudBackupWriteCompletion::mark_uploaded_pending_confirmation(
+            namespace_id.to_owned(),
+            CloudBackupRecordKey::MasterKeyWrapper,
+            wrapper.revision().to_owned(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
+        ))
     }
 
     pub(crate) async fn finalize_uploaded_wallets(

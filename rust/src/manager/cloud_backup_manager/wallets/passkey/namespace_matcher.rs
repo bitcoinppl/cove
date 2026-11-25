@@ -13,7 +13,7 @@ use super::authorization_retry::{
 };
 use super::prf_output_to_key;
 use crate::manager::cloud_backup_manager::cloud_folders::{
-    CloudFolder, CloudFolders, ListedBackups, ReadableFolder, WrapperRead,
+    CloudFolder, CloudFolders, DownloadedWrapper, ListedBackups, ReadableFolder, WrapperRead,
 };
 use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupPasskeyHint};
@@ -26,6 +26,9 @@ pub(crate) struct NamespaceMatch {
     pub(crate) credential_id: Vec<u8>,
     /// Where the matched passkey was created, from the wrapper it opened
     pub(crate) provider_hint: Option<PasskeyProviderHint>,
+    /// The wrapper the passkey opened, as downloaded, which a restore writes back to the
+    /// namespace it activates
+    pub(crate) opened_wrapper: DownloadedWrapper,
 }
 
 pub(crate) enum NamespaceMatchOutcome {
@@ -117,7 +120,7 @@ impl CandidateRevisionIdentity {
     fn of(folder: &ReadableFolder) -> Self {
         Self {
             namespace_id: folder.namespace_id.clone(),
-            wrapper_revision: folder.revision.clone(),
+            wrapper_revision: folder.wrapper.revision().to_owned(),
         }
     }
 }
@@ -439,6 +442,7 @@ impl NamespacePasskeyMatchSession {
                     master_key,
                     prf_salt: candidate.encrypted.prf_salt,
                     credential_id,
+                    opened_wrapper: candidate.wrapper.clone(),
                 });
             } else {
                 self.attempts.push(PasskeyAttempt::Mismatch);

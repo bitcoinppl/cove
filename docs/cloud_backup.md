@@ -866,6 +866,61 @@ around interactive passkey and Drive sheets; each platform bounds a passkey
 request at five minutes. Every request, and every automatic retry, needs the
 live permit of the tap that started the operation; see `docs/passkeys.md`.
 
+## Restore Activation
+
+A restore that brings back wallets from a namespace activates it: one commit
+saves the namespace, passkey and master key to the keychain, and, in one
+database transaction, the configured state and a `Dirty` upload row for every
+local wallet. Those wallets upload into the namespace once the restore ends.
+
+A restore whose passkey opened the namespace's master key wrapper first writes
+those exact bytes back to the namespace, through the write lane, before it
+activates anything. The provider may have handed the restore a stale local
+copy of a namespace deleted elsewhere and reported it uploaded. Once the delete
+syncs, the wrapper is gone, and wallets uploaded into the namespace could never
+be decrypted on another device. Writing the wrapper back makes every namespace
+a restore uploads wallets into hold the key that opens them. On a healthy
+provider it rewrites the same bytes.
+
+While a restore runs, the backup is off, so the lane pauses ordinary writes,
+wallet uploads included, and runs only the restore's own writes
+(`OffWrites::Restore`); the write-back is the only one. The restore waits for
+the write-back's answer before it commits the activation, so no dirty wallet
+row exists until the namespace holds its key again.
+
+A failed write-back fails the restore before the activation commits. The
+wallets it restored stay on the device and the backup stays off. Restoring
+again finds those wallets already here, activates the namespace, and writes the
+wrapper back first, as the first restore would have.
+
+After the activation commits, the restore marks the wrapper row
+`UploadedPendingConfirmation` with the revision it wrote, as a Verify repair
+does, so sync health reads the key as still uploading during its grace period,
+and the pending upload verifier confirms it against the provider. The grace
+period starts when the write landed. If that local record fails, the wrapper is
+already in the cloud; the restore logs it, and sync health asks the provider
+about the key as for any namespace. A restore that opened the namespace with
+the local master key, with no passkey match, read no wrapper, so it writes none
+back.
+
+Enable's Use Existing does the same for the namespace it adopts: its passkey
+opened that namespace's wrapper, and the Enable writes those bytes back through
+its own claim before it uploads any wallet. The lane runs one operation's
+writes in order, so the wrapper lands first. A failed write-back fails the
+Enable before any wallet is written. Restore and Use Existing share the write
+lane's `write_back_opened_wrapper`. The Enable's
+finalization then records the wrapper as uploaded and pending confirmation, as a
+fresh Enable records its new wrapper, so the Enable's upload verification waits
+for it with the wallets.
+
+The write-back puts back the wrapper as it was when the passkey read it. If
+another device replaced that wrapper in the minutes between the read and the
+write-back, as a passkey repair does, the older wrapper returns, and the other
+device's new passkey no longer opens the namespace; Verify on that device
+rebuilds the wrapper. Both devices still hold the master key, so no wallet
+becomes unreadable. Cove doesn't guard against this window, since the provider
+offers no conditional write.
+
 ## Restore All
 
 Restore All is not a second restore implementation. Individual restore and
@@ -1098,7 +1153,8 @@ blocked on authorization. For each entry:
   other row leaves the entry for a later pass. A confirmed row alone is not
   proof, since a listing or summary read can confirm an upload.
 - The provider must then report the current copy of every record uploaded
-  (`is_current_backup_uploaded`; on iOS `ubiquitousItemIsUploaded`, on Android
+  (`is_current_backup_uploaded`; on iOS `ubiquitousItemIsUploaded` of the item
+  the iCloud metadata index lists, on Android
   the file exists in Drive). The current copy is the one this build writes, or
   the legacy copy when nothing is at the written location, such as a master key
   wrapper an older build wrote. The written location is asked first because iOS
@@ -1158,7 +1214,7 @@ one of four:
 |---|---|---|---|
 | `Ordinary { generation }` | background uploads, batch backups, sync, integrity check | backup on with no Turn Off or reinitialize running | Turn Off, reinitialize, backup off, account switch, reset, a failed load |
 | `SourceCleanup { generation }` | a pending source delete, once its replacements uploaded | as `Ordinary` | as `Ordinary` |
-| `Operation(claim)` | operation bodies, including Turn Off's drain | the claim is the running operation | never |
+| `Operation(claim)` | operation bodies, including Turn Off's drain and a restore's wrapper write-back | the claim is the running operation | never |
 | `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
 | `RowDelete { claim, .. }` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running and its authorization still matches the inventory | never |
 | `OtherBackupDelete(claim)` | Delete Other Backups | that operation is running | never |
@@ -1178,7 +1234,7 @@ The same rules by runtime body:
 | `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
 | `Configured`, discarding a stopped reinitialize | `Configured` (discard writer) | `EnableDiscard` and `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
 | `Configured`, any other operation | `Configured` | `Operation` of that claim, `Ordinary` and `SourceCleanup` | stale |
-| `Disabled`, `PendingEnableRecovery` | `Off` | Enable's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
+| `Disabled`, `PendingEnableRecovery` | `Off` | Enable's or a restore's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
 | `Corrupted` | `Off` | nothing | `Ordinary` paused (`BackupOff`), the rest stale |
 | `FinishingDisable` | `FinishingDisable` | `TurnOffDelete` of the committed namespace and `Operation`, both of the running claim | `Ordinary` paused (`TurnOff`), the rest stale |
 | `DriveAccountSwitch` | `AccountSwitch` | `Operation` of the running claim | `Ordinary` paused (`AccountSwitch`), the rest stale |
@@ -1579,7 +1635,8 @@ owns that namespace: an upload, or the finalization of an Enable or
 reinitialize, writes the namespace it uploaded to into the row it starts or
 marks pending. A Verify that decrypts the provider's wrapper marks a `Failed`
 wrapper row pending in the namespace it read, through the same write-lane
-completion. A reinitialize or a Google Drive account switch moves the backup
+completion, and a restore marks the wrapper it wrote back pending in the
+namespace it activated. A reinitialize or a Google Drive account switch moves the backup
 to a new namespace under a new master key. If a wallet's row still named the
 replaced namespace, the verifier would read the replaced backup with the new
 key and record a permanent decryption failure for an upload that landed.

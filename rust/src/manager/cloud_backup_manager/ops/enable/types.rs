@@ -1,7 +1,7 @@
 use zeroize::Zeroizing;
 
 use crate::manager::cloud_backup_manager::actors::{
-    CleanupSourceNamespace, CloudBackupUploadedWallet,
+    CleanupSourceNamespace, CloudBackupUploadedWallet, CloudBackupWriteCompletion,
 };
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, PreparedWalletBackup, StagedPrfKey, UnpersistedPrfKey,
@@ -82,6 +82,8 @@ pub(crate) struct CloudBackupEnableRecoveryCompletion {
     pub(crate) namespace_id: String,
     pub(crate) passkey: PendingEnablePasskeyMetadata,
     pub(crate) active_critical_key: Zeroizing<[u8; 32]>,
+    /// Records the wrapper written back to the namespace before its wallets for confirmation
+    pub(crate) wrapper_completion: CloudBackupWriteCompletion,
     pub(crate) uploaded_wallets: Vec<CloudBackupUploadedWallet>,
     pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
     pub(crate) cleanup_sources: Vec<CleanupSourceNamespace>,
