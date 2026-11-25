@@ -21,6 +21,8 @@ struct SendFlowConfirmScreen: View {
     let details: ConfirmDetails
     let input: SendConfirmationInput
     let payjoinEndpoint: String?
+    /// The user's own wallet this send pays, when they picked it from Your Wallets
+    var recipient: TransferRecipient? = nil
 
     let prices: PriceResponse? = nil
 
@@ -80,6 +82,7 @@ struct SendFlowConfirmScreen: View {
             SendFlowConfirmationContent(
                 manager: manager,
                 details: details,
+                recipient: recipient,
                 prices: prices,
                 fiatAmount: fiatAmount,
                 showingMenu: $showingMenu,
@@ -219,6 +222,7 @@ private struct SendFlowConfirmationContent: View {
     @Bindable var manager: WalletManager
 
     let details: ConfirmDetails
+    let recipient: TransferRecipient?
     let prices: PriceResponse?
     let fiatAmount: String
     @Binding var showingMenu: Bool
@@ -236,6 +240,7 @@ private struct SendFlowConfirmationContent: View {
                 SendFlowConfirmationBody(
                     manager: manager,
                     details: details,
+                    recipient: recipient,
                     prices: prices,
                     fiatAmount: fiatAmount,
                     showingMenu: $showingMenu,
@@ -255,6 +260,7 @@ private struct SendFlowConfirmationBody: View {
     @Bindable var manager: WalletManager
 
     let details: ConfirmDetails
+    let recipient: TransferRecipient?
     let prices: PriceResponse?
     let fiatAmount: String
     @Binding var showingMenu: Bool
@@ -292,7 +298,12 @@ private struct SendFlowConfirmationBody: View {
 
                 Divider()
 
-                SendFlowDetailsView(manager: manager, details: details, prices: prices)
+                SendFlowDetailsView(
+                    manager: manager,
+                    details: details,
+                    prices: prices,
+                    recipient: recipient
+                )
             }
 
             Spacer(minLength: 0)

@@ -16,6 +16,9 @@ struct SendFlowDetailsView: View {
     let details: ConfirmDetails
     @State var prices: PriceResponse?
 
+    /// The picked wallet the send pays, shown in place of the bare address
+    var recipient: TransferRecipient? = nil
+
     // private
     @State private var presentingInputOutputDetails = false
     @State private var presentationSize: PresentationDetent = .medium
@@ -45,9 +48,15 @@ struct SendFlowDetailsView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            SendFlowDetailsAddressRow(address: details.sendingTo())
-                .padding(.top, 6)
-                .onTapGesture { presentingInputOutputDetails = true }
+            Group {
+                if let recipient {
+                    SendFlowDetailsRecipientCard(recipient: recipient)
+                } else {
+                    SendFlowDetailsAddressRow(address: details.sendingTo())
+                }
+            }
+            .padding(.top, 6)
+            .onTapGesture { presentingInputOutputDetails = true }
 
             SendFlowDetailsAmountRows(
                 feeAmount: displayFiatOrBtcAmount(details.feeTotal()),
@@ -75,6 +84,55 @@ struct SendFlowDetailsView: View {
         if total == 3 { presentationSize = .height(300) }
         if total > 3 { presentationSize = .height(400) }
         if total > 5 { presentationSize = .height(500) }
+    }
+}
+
+/// The user's own wallet a transfer pays, with the address it handed out
+private struct SendFlowDetailsRecipientCard: View {
+    let recipient: TransferRecipient
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("TO WALLET")
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(recipient.color))
+                    .frame(width: 8, height: 8)
+
+                Text(recipient.name)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .accessibilityIdentifier("sendFlowConfirm.transferRecipient.name")
+            }
+
+            Divider()
+
+            // no line limit: the card asks the user to check this address, so it shows all of it
+            Text(address: recipient.address)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Cove derived a hardware wallet's address from its public key, so the device itself
+            // is the one place that can confirm it
+            if recipient.addressCheck == .onDevice {
+                Text("Check this address on your hardware wallet before you send.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("sendFlowConfirm.transferRecipient.checkOnDevice")
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.systemGray6))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sendFlowConfirm.transferRecipient")
     }
 }
 

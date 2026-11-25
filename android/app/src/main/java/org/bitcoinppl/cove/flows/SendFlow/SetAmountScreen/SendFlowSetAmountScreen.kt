@@ -84,6 +84,7 @@ import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.FlexibleSpacer
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
+import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.FeeSpeed
@@ -102,7 +103,8 @@ fun SendFlowSetAmountScreen(
     onNext: () -> Unit,
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
-    onPickWallet: (() -> Unit)? = null,
+    onPickWallet: () -> Unit = {},
+    otherWalletColors: List<WalletColor> = emptyList(),
 ) {
     var focusedField by remember { mutableStateOf(SendFocusField.None) }
     val focusManager = LocalFocusManager.current
@@ -304,6 +306,10 @@ fun SendFlowSetAmountScreen(
                             EnterAddressView(
                                 onScanQr = onScanQr,
                                 onPickWallet = onPickWallet,
+                                otherWalletColors = otherWalletColors,
+                                transferRecipient = sendFlowManager.transferRecipient,
+                                isEditingAddress = presenter.focusField == SetAmountFocusField.ADDRESS,
+                                onEditAddress = { presenter.focusField = SetAmountFocusField.ADDRESS },
                                 initialAddress = initialAddress,
                                 onAddressChanged = { newAddress ->
                                     sendFlowManager.enteringAddress = newAddress
@@ -311,7 +317,14 @@ fun SendFlowSetAmountScreen(
                                 focusRequester = addressFocusRequester,
                                 onFocusChanged = { focused ->
                                     focusedField = if (focused) SendFocusField.Address else SendFocusField.None
-                                    presenter.focusField = if (focused) SetAmountFocusField.ADDRESS else null
+
+                                    // Done can move on to the amount, which swaps the field for the picked
+                                    // wallet's card, and that blur must not clear the field Done chose
+                                    if (focused) {
+                                        presenter.focusField = SetAmountFocusField.ADDRESS
+                                    } else if (presenter.focusField == SetAmountFocusField.ADDRESS) {
+                                        presenter.focusField = null
+                                    }
                                 },
                                 onDone = {
                                     presenter.focusField =
