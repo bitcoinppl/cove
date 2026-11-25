@@ -28,6 +28,18 @@ struct Request {
     body: Value,
 }
 
+/// A mock App Store Connect reply
+struct Reply {
+    status: &'static str,
+    body: Value,
+}
+
+impl From<Value> for Reply {
+    fn from(body: Value) -> Self {
+        Self { status: "200 OK", body }
+    }
+}
+
 struct Server {
     url: Url,
     handle: JoinHandle<Vec<Request>>,
@@ -35,13 +47,17 @@ struct Server {
 
 impl Server {
     fn new(responses: Vec<Value>) -> Self {
+        Self::with_replies(responses.into_iter().map(Reply::from).collect())
+    }
+
+    fn with_replies(replies: Vec<Reply>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
         listener.set_nonblocking(true).unwrap();
         let handle = std::thread::spawn(move || {
             let mut requests = Vec::new();
 
-            for response in responses {
+            for Reply { status, body: response } in replies {
                 let deadline = Instant::now() + LOADED_HOST_WAIT;
                 let mut stream = loop {
                     match listener.accept() {
@@ -99,7 +115,7 @@ impl Server {
                 requests.push(Request { method, url, body });
 
                 let body = response.to_string();
-                write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                write!(stream, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
             }
 
             requests
@@ -317,6 +333,58 @@ fn previous_build_without_notes_still_adds_the_new_build_to_the_group() {
         .any(|request| request.url.path().starts_with("/v1/betaBuildLocalizations")));
     assert_eq!(requests[7].method, "POST");
     assert_eq!(requests[7].url.path(), "/v1/betaGroups/private-group/relationships/builds");
+}
+
+#[test]
+fn retries_group_assignment_until_testflight_can_see_the_valid_build() {
+    let not_found = Reply {
+        status: "404 Not Found",
+        body: json!({"errors": [{"status": "404", "code": "NOT_FOUND"}]}),
+    };
+    let server = Server::with_replies(vec![
+        build("VALID").into(),
+        page(json!([])).into(),
+        page(json!([])).into(),
+        not_found,
+        build("VALID").into(),
+        page(json!([])).into(),
+        page(json!([])).into(),
+        json!({}).into(),
+    ]);
+    let distribution = distribution(&server, true);
+
+    distribution.distribute_with_timeout(&identity(), LOADED_HOST_WAIT, Duration::ZERO).unwrap();
+    let requests = server.handle.join().unwrap();
+    let assignments = requests
+        .iter()
+        .filter(|request| {
+            request.method == "POST"
+                && request.url.path() == "/v1/betaGroups/group/relationships/builds"
+        })
+        .count();
+
+    assert_eq!(requests.len(), 8);
+    assert_eq!(assignments, 2);
+}
+
+#[test]
+fn timed_out_group_assignment_reports_the_last_not_found() {
+    let server = Server::with_replies(vec![
+        build("VALID").into(),
+        page(json!([])).into(),
+        page(json!([])).into(),
+        Reply { status: "404 Not Found", body: json!({"errors": []}) },
+    ]);
+    let distribution = distribution(&server, true);
+
+    let error = distribution
+        .distribute_with_timeout(&identity(), Duration::ZERO, Duration::ZERO)
+        .unwrap_err();
+    let message = format!("{error:#}");
+    server.handle.join().unwrap();
+
+    assert!(message.contains("Timed out waiting for TestFlight build"), "{message}");
+    assert!(message.contains("404 Not Found"), "{message}");
 }
 
 #[test]

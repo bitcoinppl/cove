@@ -186,11 +186,21 @@ impl Distribution {
     ) -> Result<()> {
         print_info("Waiting for App Store Connect to process the uploaded build...");
         let deadline = Instant::now() + timeout;
+        let mut unassignable = None;
 
         loop {
             if let Some(build) = self.find_build(identity)? {
                 match build.attributes.processing_state {
-                    ProcessingState::Valid => return self.assign(&build),
+                    // App Store Connect can report a build VALID minutes before its TestFlight
+                    // endpoints accept it, answering 404 for the build until then
+                    ProcessingState::Valid => match self.assign(&build) {
+                        Err(error) if ApiStatusError::is_not_found(&error) => {
+                            print_info("TestFlight cannot see the valid build yet; retrying...");
+                            unassignable = Some(error);
+                        }
+
+                        result => return result,
+                    },
                     ProcessingState::Processing => {}
                     ProcessingState::Failed | ProcessingState::Invalid => {
                         bail!(
@@ -203,12 +213,17 @@ impl Distribution {
             }
 
             let remaining = deadline.saturating_duration_since(Instant::now());
-            ensure!(
-                !remaining.is_zero(),
-                "Timed out waiting for TestFlight build {} ({})",
-                identity.version,
-                identity.build_number
-            );
+            if remaining.is_zero() {
+                let message = format!(
+                    "Timed out waiting for TestFlight build {} ({})",
+                    identity.version, identity.build_number
+                );
+
+                return Err(match unassignable {
+                    Some(error) => error.wrap_err(message),
+                    None => eyre!(message),
+                });
+            }
 
             std::thread::sleep(interval.min(remaining));
         }
@@ -451,13 +466,37 @@ impl Api {
                 continue;
             }
 
-            let errors = response.text().unwrap_or_default();
-            bail!("App Store Connect {method} {} failed ({status}): {errors}", url.path());
+            let body = response.text().unwrap_or_default();
+            return Err(ApiStatusError { method, path: url.path().to_owned(), status, body }.into());
         }
 
         unreachable!("the last request attempt always returns")
     }
 }
+
+/// A non-success App Store Connect response, kept typed so callers can react to its status
+#[derive(Debug)]
+struct ApiStatusError {
+    method: Method,
+    path: String,
+    status: StatusCode,
+    body: String,
+}
+
+impl ApiStatusError {
+    fn is_not_found(error: &color_eyre::eyre::Report) -> bool {
+        error.downcast_ref::<Self>().is_some_and(|error| error.status == StatusCode::NOT_FOUND)
+    }
+}
+
+impl std::fmt::Display for ApiStatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { method, path, status, body } = self;
+        write!(f, "App Store Connect {method} {path} failed ({status}): {body}")
+    }
+}
+
+impl std::error::Error for ApiStatusError {}
 
 const BUILDS: &str = "builds";
 const BETA_BUILD_LOCALIZATIONS: &str = "betaBuildLocalizations";
