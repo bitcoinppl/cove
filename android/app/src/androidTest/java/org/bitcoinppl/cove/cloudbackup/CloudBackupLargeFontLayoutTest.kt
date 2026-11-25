@@ -171,7 +171,7 @@ class CloudBackupLargeFontLayoutTest {
                 WithFontScale(LARGEST_SYSTEM_FONT_SCALE) {
                     CloudBackupScreenFrame(
                         manager = CloudBackupManager(screen),
-                        actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}),
+                        actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}, onSwitchAccount = {}),
                     )
                 }
             }

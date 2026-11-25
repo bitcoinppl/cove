@@ -2,7 +2,14 @@ package org.bitcoinppl.cove.testconfig
 
 import android.content.Context
 import android.os.Process
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import kotlinx.coroutines.CompletableDeferred
+import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
+import org.bitcoinppl.cove.cloudbackup.DriveAccessToken
+import org.bitcoinppl.cove.cloudbackup.DriveAuthorization
+import org.bitcoinppl.cove.cloudbackup.SharedPreferencesDriveAccountBindingStore
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.bitcoinppl.cove_core.device.CloudBackupUploadStatus
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
@@ -47,6 +54,13 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     @Volatile
     private var persistentRoot: File? = null
+
+    @Volatile
+    private var appContext: Context? = null
+
+    // set while the bound Google account is removed, see removeBoundAccount
+    @Volatile
+    private var removedAccountDrive: CloudStorageAccess? = null
 
     private val masterDownloads = AtomicInteger(0)
     private val walletLists = AtomicInteger(0)
@@ -187,8 +201,25 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     fun attach(context: Context): CloudStorageAccess {
         persistentRoot = context.filesDir.resolve(".ui-test-cloud-provider")
+        appContext = context.applicationContext
 
         return this
+    }
+
+    /**
+     * Removes the Google account Cloud Backup is bound to from the device
+     *
+     * Every call then goes through the production Google Drive provider, whose authorization
+     * fails the way Google's does for an account the device no longer has, so the test covers
+     * how Android classifies that failure rather than scripting the classification
+     */
+    fun removeBoundAccount() {
+        val context = checkNotNull(appContext) { "attach the provider before removing its account" }
+        removedAccountDrive =
+            AndroidCloudStorageAccess(
+                RemovedAccountDriveAuthorization,
+                SharedPreferencesDriveAccountBindingStore(context),
+            )
     }
 
     fun configureDelayedBackupFound() {
@@ -212,6 +243,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     }
 
     fun configureProductionFixtureRestore() {
+        removedAccountDrive = null
         freshEnableScenario = null
         fixtureRestoreEnabled = true
         namespaceScenario = NamespaceScenario.sequence(listOf(NamespaceResult.BACKUP_FOUND), null)
@@ -629,6 +661,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             )
 
     override suspend fun listNamespaces(policy: CloudAccessPolicy): List<String> {
+        removedAccountDrive?.let { return it.listNamespaces(policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
         val enableScenario = freshEnableScenario
 
@@ -646,6 +680,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ): ByteArray {
+        removedAccountDrive?.let { return it.downloadMasterKeyBackup(namespace, locations, policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
         masterDownloads.incrementAndGet()
         freshEnableScenario?.let { scenario ->
@@ -672,6 +708,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespace: String,
         policy: CloudAccessPolicy,
     ): List<String> {
+        removedAccountDrive?.let { return it.listWalletFiles(namespace, policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
         walletLists.incrementAndGet()
         walletListGate?.let { gate ->
@@ -709,6 +747,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespace: String,
         policy: CloudAccessPolicy,
     ): CloudStorageInventorySnapshot {
+        removedAccountDrive?.let { return it.listWalletFilesSnapshot(namespace, policy) }
+
         walletSnapshotListBlock?.let { block ->
             if (block.claimed.compareAndSet(false, true)) {
                 block.entered.countDown()
@@ -728,6 +768,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ): CloudBackupUploadStatus {
+        removedAccountDrive?.let { return it.isBackupUploaded(namespace, recordId, locations, policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
 
         if (fixtureRestoreEnabled) {
@@ -760,6 +802,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     }
 
     override suspend fun overallSyncHealth(policy: CloudAccessPolicy): CloudSyncHealth {
+        removedAccountDrive?.let { return it.overallSyncHealth(policy) }
+
         // the Google Drive provider reports a failed health instead of throwing when offline
         if (!ScriptedConnectivityAccess.isConnected()) return CloudSyncHealth.Failed(OFFLINE_SYNC_HEALTH_MESSAGE)
         if (fixtureRestoreEnabled) return CloudSyncHealth.AllUploaded
@@ -780,6 +824,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
+        removedAccountDrive?.let { return it.uploadMasterKeyBackup(namespace, location, data, policy) }
+
         recordUpload(UploadKind.MASTER, masterUploads.incrementAndGet(), namespace, recordId = null)
 
         if (fixtureRestoreEnabled) {
@@ -810,6 +856,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
+        removedAccountDrive?.let { return it.uploadWalletBackup(namespace, recordId, location, data, policy) }
+
         val attempt = walletUploads.incrementAndGet()
         recordUpload(UploadKind.WALLET, attempt, namespace, recordId)
         walletUploadBlock?.enterIfClaimedBy(attempt)
@@ -879,6 +927,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ): ByteArray {
+        removedAccountDrive?.let { return it.downloadWalletBackup(namespace, recordId, locations, policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
         walletDownloads.incrementAndGet()
         if (policy == CloudAccessPolicy.CONSENT_ALLOWED) {
@@ -960,6 +1010,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) {
+        removedAccountDrive?.let { return it.deleteWalletBackup(namespace, recordId, locations, policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
         walletDeleteHold?.enterIfClaimedBy(walletDeletes.incrementAndGet())
 
@@ -995,6 +1047,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespace: String,
         policy: CloudAccessPolicy,
     ) {
+        removedAccountDrive?.let { return it.deleteNamespace(namespace, policy) }
+
         ScriptedConnectivityAccess.throwIfOffline()
         val attempt = namespaceDeletes.incrementAndGet()
         namespaceDeleteHold?.enterIfClaimedBy(attempt)
@@ -1406,4 +1460,13 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             }
         }
     }
+}
+
+// Google's authorize() for an account the device no longer has: it fails at once with CANCELED
+// and this message, with no consent UI, whether or not the request may show one
+private object RemovedAccountDriveAuthorization : DriveAuthorization {
+    override suspend fun accessToken(interactive: Boolean): DriveAccessToken =
+        throw ApiException(Status(CommonStatusCodes.CANCELED, "[28433] Cannot find a matching credential."))
+
+    override suspend fun clearToken(token: String) = Unit
 }

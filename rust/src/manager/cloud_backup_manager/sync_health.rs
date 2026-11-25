@@ -248,13 +248,16 @@ impl RustCloudBackupManager {
                 return None;
             };
 
-            if failed_state.issue == Some(CloudStorageIssue::AuthorizationRequired) {
-                return Some(CloudSyncHealth::AuthorizationRequired(sync_health_reader_message(
-                    failed_state.issue,
-                )));
+            let message = || sync_health_reader_message(failed_state.issue);
+            match failed_state.issue {
+                Some(CloudStorageIssue::AuthorizationRequired) => {
+                    Some(CloudSyncHealth::AuthorizationRequired(message()))
+                }
+                Some(CloudStorageIssue::AccountUnavailable) => {
+                    Some(CloudSyncHealth::AccountUnavailable(message()))
+                }
+                _ => None,
             }
-
-            None
         }) {
             return Some(sync_health);
         }
@@ -312,16 +315,16 @@ impl RustCloudBackupManager {
     }
 
     fn sync_health_from_cloud_error(error: CloudStorageError) -> CloudSyncHealth {
-        let authorization_required = matches!(error, CloudStorageError::AuthorizationRequired(_));
-        let unavailable = matches!(error, CloudStorageError::NotAvailable(_));
+        let issue = CloudStorageIssue::from(&error);
         let message = CloudBackupError::from(error).reader_message();
 
-        if authorization_required {
-            CloudSyncHealth::AuthorizationRequired(message)
-        } else if unavailable {
-            CloudSyncHealth::Unavailable
-        } else {
-            CloudSyncHealth::Failed(message)
+        match issue {
+            CloudStorageIssue::AuthorizationRequired => {
+                CloudSyncHealth::AuthorizationRequired(message)
+            }
+            CloudStorageIssue::AccountUnavailable => CloudSyncHealth::AccountUnavailable(message),
+            CloudStorageIssue::Unavailable => CloudSyncHealth::Unavailable,
+            _ => CloudSyncHealth::Failed(message),
         }
     }
 }
@@ -330,6 +333,9 @@ fn sync_health_reader_message(issue: Option<CloudStorageIssue>) -> String {
     let error = match issue {
         Some(CloudStorageIssue::AuthorizationRequired) => {
             CloudStorageError::AuthorizationRequired(String::new())
+        }
+        Some(CloudStorageIssue::AccountUnavailable) => {
+            CloudStorageError::AccountUnavailable(String::new())
         }
         Some(CloudStorageIssue::Offline) => CloudStorageError::Offline(String::new()),
         Some(CloudStorageIssue::SyncPending) => CloudStorageError::SyncPending(String::new()),

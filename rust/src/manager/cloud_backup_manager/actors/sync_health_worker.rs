@@ -60,6 +60,7 @@ impl CloudBackupSyncHealthWorker {
         match sync_health {
             CloudSyncHealth::Failed(_)
             | CloudSyncHealth::AuthorizationRequired(_)
+            | CloudSyncHealth::AccountUnavailable(_)
             | CloudSyncHealth::Unavailable => warn!("Cloud sync health changed: {sync_health:?}"),
 
             CloudSyncHealth::Unknown

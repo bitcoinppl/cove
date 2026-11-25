@@ -119,6 +119,9 @@ pub enum CloudBackupInventoryControl {
     CheckAgain,
     /// Android only: Google Drive needs authorizing before the inventory can load
     ReconnectDrive,
+    /// Android only: the bound Google account is no longer on this device, so authorizing it
+    /// again can't load the inventory; switching to another account is the only way on
+    SwitchDriveAccount,
 }
 
 /// Verification status and the recovery work that hangs off it
@@ -159,6 +162,9 @@ pub enum CloudBackupVerificationControl {
     RetryUpload,
     /// Android only: the latest upload waits on Google Drive access
     ReconnectDrive,
+    /// Android only: the latest upload, or a verification that failed, waits on a Google account
+    /// that is no longer on this device
+    SwitchDriveAccount,
 }
 
 /// Which rebuild recovers a backup that verification can't use
@@ -413,6 +419,8 @@ pub enum CloudBackupTurnOffFailure {
     Offline,
     /// Google Drive needs Reconnect, or iCloud Drive is off for Cove
     AuthorizationRequired,
+    /// The bound Google account is no longer on this device, so Reconnect can't help
+    AccountUnavailable,
     ProviderUnavailable,
     Other,
 }
@@ -530,6 +538,8 @@ pub enum CloudBackupOutcome {
 pub enum CloudBackupDisableNotStartedReason {
     Offline,
     AuthorizationRequired,
+    /// The bound Google account is no longer on this device
+    AccountUnavailable,
     ProviderUnavailable,
     /// The writes in flight did not drain
     WritesDidNotDrain,

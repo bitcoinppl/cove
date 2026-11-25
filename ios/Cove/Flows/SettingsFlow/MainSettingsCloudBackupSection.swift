@@ -225,7 +225,7 @@ private struct MainSettingsCloudBackupStatusPresentation {
             .turnOffIncomplete
         case .turnedOnAgain:
             .turnedOnAgain
-        case let .authorizationRequired(message):
+        case let .authorizationRequired(message), let .accountUnavailable(message):
             .init(
                 symbol: "exclamationmark.icloud",
                 title: "iCloud Access Needed",

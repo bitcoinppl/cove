@@ -328,6 +328,7 @@ impl From<CloudStorageIssue> for CloudCheckIssue {
     fn from(issue: CloudStorageIssue) -> Self {
         match issue {
             CloudStorageIssue::AuthorizationRequired
+            | CloudStorageIssue::AccountUnavailable
             | CloudStorageIssue::SyncPending
             | CloudStorageIssue::Unavailable => Self::CloudUnavailable,
             CloudStorageIssue::Offline => Self::Offline,

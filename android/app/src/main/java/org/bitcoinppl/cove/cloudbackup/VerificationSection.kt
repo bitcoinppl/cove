@@ -52,8 +52,7 @@ internal fun VerificationSection(
     manager: CloudBackupManager,
     screen: CloudBackupScreen,
     section: CloudBackupVerificationSection,
-    onRecreate: () -> Unit,
-    onReinitialize: () -> Unit,
+    actions: CloudBackupScreenActions,
 ) {
     val view = section.view
     // the batch the open confirmation was opened for, which its Delete sends back unchanged
@@ -67,8 +66,9 @@ internal fun VerificationSection(
             undecryptableCount = needsAttention?.walletIssues?.decryptionFailed ?: 0u,
             rebuildWarning = (view.state as? CloudBackupVerificationState.Failed)?.v1?.warning(),
             onVerify = verify,
-            onRecreate = onRecreate,
-            onReinitialize = onReinitialize,
+            onRecreate = actions.onRecreate,
+            onReinitialize = actions.onReinitialize,
+            onSwitchAccount = actions.onSwitchAccount,
             onDeleteUndecryptable = { undecryptableDeletion = it },
         )
     val controls: @Composable (VerifyControl) -> Unit = { verifyControl ->
@@ -179,6 +179,7 @@ private data class VerificationControlContext(
     val onVerify: () -> Unit,
     val onRecreate: () -> Unit,
     val onReinitialize: () -> Unit,
+    val onSwitchAccount: () -> Unit,
     val onDeleteUndecryptable: (CloudBackupBatchDeleteConsent) -> Unit,
 )
 
@@ -223,6 +224,16 @@ private fun VerificationControls(
                     title = "Reconnect Google Drive",
                     onDispatch = manager::dispatch,
                     onClick = { manager.dispatch(CloudBackupManagerAction.ReconnectDrive) },
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                )
+
+            CloudBackupVerificationControl.SwitchDriveAccount ->
+                CloudBackupActionButton(
+                    screen = screen,
+                    action = CloudBackupScreenAction.SWITCH_DRIVE_ACCOUNT,
+                    title = "Switch Google Account",
+                    onDispatch = manager::dispatch,
+                    onClick = context.onSwitchAccount,
                     modifier = Modifier.padding(horizontal = 14.dp),
                 )
         }

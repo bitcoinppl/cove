@@ -149,7 +149,7 @@ class CloudBackupScreenContractTest {
 
                         CloudBackupScreenFrame(
                             manager = manager,
-                            actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}),
+                            actions = CloudBackupScreenActions(onBack = {}, onRecreate = {}, onReinitialize = {}, onSwitchAccount = {}),
                         )
 
                         // the app's root host draws the prompt over every screen; its choices are

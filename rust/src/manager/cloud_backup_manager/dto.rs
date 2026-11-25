@@ -30,6 +30,9 @@ pub enum CloudBackupSettingsRowStatus {
     RecoveryRequired,
     Error(String),
     AuthorizationRequired(String),
+    /// The bound provider account is no longer on this device; the row opens the detail screen,
+    /// which offers switching accounts
+    AccountUnavailable(String),
     /// A committed Turn Off has not finished; the row opens the detail screen to finish it
     TurnOffIncomplete,
     /// An older build's Turn Off never deleted anything, so Cloud Backup was turned on again

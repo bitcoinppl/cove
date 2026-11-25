@@ -1072,9 +1072,16 @@ pub enum CloudStorageIssue {
     NotFound,
     QuotaExceeded,
     Other,
+    AccountUnavailable,
 }
 
 impl CloudStorageIssue {
+    /// Whether the provider is waiting on the user's account: authorization, or a switch away
+    /// from a bound account that is no longer on this device
+    pub(crate) fn requires_account_action(self) -> bool {
+        matches!(self, Self::AuthorizationRequired | Self::AccountUnavailable)
+    }
+
     pub(crate) fn persistable(self) -> Option<Self> {
         match self {
             Self::Other => None,

@@ -52,6 +52,7 @@ pub(crate) use self::types::{
     CloudBackupProgressSection, CloudBackupRowActionKind, CloudBackupRowControl,
     CloudBackupSavedPasskeyControl, CloudBackupSavedPasskeyLifecycle,
     CloudBackupSavedPasskeyScreen, CloudBackupSection, CloudBackupVerificationControl,
+    CloudBackupWalletsControl,
 };
 use cove_cspp::backup_data::PasskeyProviderHint;
 

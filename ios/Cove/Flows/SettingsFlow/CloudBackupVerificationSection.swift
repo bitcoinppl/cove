@@ -163,8 +163,9 @@ struct CloudBackupVerificationControls: View {
                     Label("Try Again", systemImage: "arrow.clockwise")
                 }
 
-            // only Google Drive asks to be authorized again; iCloud never does
-            case .reconnectDrive:
+            // only Google Drive asks to be authorized again or loses its bound account; iCloud
+            // never does
+            case .reconnectDrive, .switchDriveAccount:
                 EmptyView()
             }
         }

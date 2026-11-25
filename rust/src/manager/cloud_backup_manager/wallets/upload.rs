@@ -843,6 +843,7 @@ impl RustCloudBackupManager {
         matches!(
             error,
             CloudStorageError::AuthorizationRequired(_)
+                | CloudStorageError::AccountUnavailable(_)
                 | CloudStorageError::Offline(_)
                 | CloudStorageError::NotAvailable(_)
                 | CloudStorageError::UploadFailed(_)

@@ -46,10 +46,11 @@ impl From<Result<(), CloudBackupError>> for WalletUploadOutcome {
             return Self::Deferred(message);
         }
 
-        match CloudStorageIssue::from(&error) {
-            CloudStorageIssue::AuthorizationRequired => Self::AuthorizationRequired(message),
-            _ => Self::Failed(message),
+        if CloudStorageIssue::from(&error).requires_account_action() {
+            return Self::AuthorizationRequired(message);
         }
+
+        Self::Failed(message)
     }
 }
 
@@ -498,7 +499,7 @@ impl CloudBackupUploadWorker {
 }
 
 fn is_authorization_failed_blob(failed_state: &CloudBlobFailedState) -> bool {
-    failed_state.issue == Some(CloudStorageIssue::AuthorizationRequired)
+    failed_state.issue.is_some_and(CloudStorageIssue::requires_account_action)
 }
 
 fn should_retry_failed_blob(failed_state: &CloudBlobFailedState) -> bool {

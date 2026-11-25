@@ -1060,6 +1060,7 @@ mod tests {
             (CloudStorageIssue::Unavailable, "\"Unavailable\""),
             (CloudStorageIssue::NotFound, "\"NotFound\""),
             (CloudStorageIssue::QuotaExceeded, "\"QuotaExceeded\""),
+            (CloudStorageIssue::AccountUnavailable, "\"AccountUnavailable\""),
         ];
 
         for (issue, expected_json) in cases {

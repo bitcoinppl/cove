@@ -307,9 +307,7 @@ async fn read_folder(
             info!("Cloud folder has no master key wrapper");
             return Ok((CloudFolder::MasterKeyMissing, None));
         }
-        Err(error @ CloudStorageError::AuthorizationRequired(_))
-            if wrappers == WrapperRead::Uploaded =>
-        {
+        Err(error) if error.requires_account_action() && wrappers == WrapperRead::Uploaded => {
             return Err(error.into());
         }
         Err(error) => {
@@ -346,7 +344,7 @@ async fn read_upload_state(
             info!("Cloud folder has no master key wrapper");
             Ok(Some(CloudFolder::MasterKeyMissing))
         }
-        Err(error @ CloudStorageError::AuthorizationRequired(_)) => Err(error.into()),
+        Err(error) if error.requires_account_action() => Err(error.into()),
         Err(error) => {
             warn!("Failed to read cloud folder upload state: {error}");
             Ok(Some(CloudFolder::Unreadable(Some(error))))

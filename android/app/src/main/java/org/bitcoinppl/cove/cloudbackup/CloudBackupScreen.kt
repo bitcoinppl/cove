@@ -238,8 +238,7 @@ private fun CloudBackupBody(
             CloudBackupDetailContent(
                 manager = manager,
                 configured = body.v1,
-                onRecreate = actions.onRecreate,
-                onReinitialize = actions.onReinitialize,
+                actions = actions,
             )
         is CloudBackupScreenBody.FinishingDisable -> CloudBackupFinishingDisableContent(manager, screen, body.v1)
         is CloudBackupScreenBody.DriveAccountSwitch -> CloudBackupDriveAccountSwitchContent(manager, screen, body.v1)

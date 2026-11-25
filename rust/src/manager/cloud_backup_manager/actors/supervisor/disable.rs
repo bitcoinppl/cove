@@ -245,6 +245,9 @@ impl CloudBackupSupervisor {
             ListingEvidence::Failed(CloudStorageIssue::AuthorizationRequired) => {
                 Some(CloudBackupDisableNotStartedReason::AuthorizationRequired)
             }
+            ListingEvidence::Failed(CloudStorageIssue::AccountUnavailable) => {
+                Some(CloudBackupDisableNotStartedReason::AccountUnavailable)
+            }
             _ => None,
         };
         if let Some(reason) = unreachable {

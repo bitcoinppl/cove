@@ -17,6 +17,8 @@ import org.bitcoinppl.cove_core.device.cloudBackupLocationsSyncHealth
 
 private const val GOOGLE_DRIVE_AUTHORIZATION_REQUIRED_MESSAGE =
     "Cove couldn't access Google Drive. Reconnect Google Drive, then try again."
+private const val GOOGLE_DRIVE_ACCOUNT_UNAVAILABLE_MESSAGE =
+    "The Google account Cove backs up to is no longer on this device. Switch Google accounts to keep backing up."
 private const val GOOGLE_DRIVE_OFFLINE_MESSAGE =
     "Cove couldn't reach Google Drive. Reconnect to the internet, then try again."
 private const val GOOGLE_DRIVE_SYNC_FAILED_MESSAGE =
@@ -335,6 +337,8 @@ class AndroidCloudStorageAccess internal constructor(
             when (mapped) {
                 is CloudStorageException.AuthorizationRequired ->
                     CloudSyncHealth.AuthorizationRequired(GOOGLE_DRIVE_AUTHORIZATION_REQUIRED_MESSAGE)
+                is CloudStorageException.AccountUnavailable ->
+                    CloudSyncHealth.AccountUnavailable(GOOGLE_DRIVE_ACCOUNT_UNAVAILABLE_MESSAGE)
                 is CloudStorageException.Offline -> CloudSyncHealth.Failed(GOOGLE_DRIVE_OFFLINE_MESSAGE)
                 is CloudStorageException.NotAvailable -> CloudSyncHealth.Unavailable
                 else -> CloudSyncHealth.Failed(GOOGLE_DRIVE_SYNC_FAILED_MESSAGE)

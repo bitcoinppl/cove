@@ -103,6 +103,12 @@ fn catastrophic_cloud_restore_error(
 
             CatastrophicCloudRestoreResult::Inconclusive { message }
         }
+        CloudStorageError::AccountUnavailable(_) => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!(
+                "The {} Cloud Backup used is no longer on this device. Cove could not check for a Cloud Backup.",
+                provider.account_name()
+            ),
+        },
         CloudStorageError::Offline(message) => CatastrophicCloudRestoreResult::Offline {
             message: format!("Cannot check {} while offline: {message}", provider.storage_name()),
         },

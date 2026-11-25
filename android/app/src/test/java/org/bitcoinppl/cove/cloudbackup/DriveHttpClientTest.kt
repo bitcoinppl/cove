@@ -121,6 +121,20 @@ class DriveHttpClientTest {
         )
     }
 
+    // the exact error Google's authorize() returned on a device whose bound account was removed
+    @Test
+    fun aRemovedGoogleAccountIsAccountUnavailableNotAuthorizationRequired() {
+        val removed = ApiException(Status(CommonStatusCodes.CANCELED, "[28433] Cannot find a matching credential."))
+
+        for (mapped in listOf(mapDriveUploadError(removed, "wallet-record"), mapDriveListError(removed))) {
+            assertTrue(mapped.javaClass.name, mapped is CloudStorageException.AccountUnavailable)
+        }
+
+        // a consent prompt the user cancelled is still a plain authorization failure
+        val cancelled = ApiException(Status(CommonStatusCodes.CANCELED))
+        assertTrue(mapDriveListError(cancelled) is CloudStorageException.AuthorizationRequired)
+    }
+
     @Test
     fun googleApiErrorsAreMappedToUnavailableWithStatus() {
         val apiError = ApiException(Status(CommonStatusCodes.DEVELOPER_ERROR))

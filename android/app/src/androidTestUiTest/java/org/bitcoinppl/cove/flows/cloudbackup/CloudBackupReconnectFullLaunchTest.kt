@@ -44,6 +44,10 @@ class CloudBackupReconnectFullLaunchTest {
         const val RESTORE_ACTION = "Restore to this device"
         const val DELETE_ACTION = "Delete from Cloud Backup"
         val CLOUD_ONLY_WALLET_NAMES = listOf("Fixture Wallet Two", "Fixture Wallet Three")
+        const val RECONNECT_TITLE = "Reconnect Google Drive"
+        const val CHECK_AGAIN_TITLE = "Check Again"
+        const val SWITCH_ACCOUNT_TITLE = "Switch Google Account"
+        const val SWITCH_ACCOUNT_DIALOG_TITLE = "Switch Google Account?"
     }
 
     private lateinit var device: UiDevice
@@ -169,6 +173,41 @@ class CloudBackupReconnectFullLaunchTest {
             passkeyCallCounts(),
         )
         assertEquals(0, ScriptedPasskeyProvider.callCount(Invocation.CREATE))
+    }
+
+    // reported on a phone whose bound Google account was signed out: Reconnect asked Google for
+    // the same missing account, which failed at once, so each tap flashed the card and changed
+    // nothing; only the menu's Switch Account got the backup going again
+    @Test
+    fun aRemovedGoogleAccountOffersSwitchAccountInsteadOfReconnect() {
+        restoreFixtureAndOpenCloudBackupDetail()
+
+        ScriptedCloudStorageAccess.removeBoundAccount()
+        device.openSettings()
+        device.openCloudBackup()
+
+        assertTrue(
+            "reopening the detail should fail the refresh and show what it needs from the user",
+            device.wait(
+                Until.hasObject(By.text(SWITCH_ACCOUNT_TITLE)),
+                20_000L,
+            ) || device.hasObject(By.text(RECONNECT_TITLE)),
+        )
+        assertFalse(
+            "Reconnect asks Google for the account that is gone, so it can only fail again",
+            device.hasObject(By.text(RECONNECT_TITLE)),
+        )
+        assertFalse(
+            "Check Again asks Google for the account that is gone, so it can only fail again",
+            device.hasObject(By.text(CHECK_AGAIN_TITLE)),
+        )
+
+        device.tap(UiTarget.Text(SWITCH_ACCOUNT_TITLE))
+        device.waitForText(SWITCH_ACCOUNT_DIALOG_TITLE)
+        assertTrue(
+            "the card's switch should open the same confirmation as the menu's",
+            device.waitForControl(UiTarget.Text("Choose Account")).enabled,
+        )
     }
 
     private fun restoreFixtureAndOpenCloudBackupDetail() {

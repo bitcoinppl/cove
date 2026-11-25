@@ -50,7 +50,7 @@ impl BlobCheckResult {
     }
 
     fn cloud_storage_failure(error: CloudStorageError) -> Self {
-        if matches!(error, CloudStorageError::AuthorizationRequired(_)) {
+        if error.requires_account_action() {
             return Self::AuthorizationRequired { error: error.to_string() };
         }
 

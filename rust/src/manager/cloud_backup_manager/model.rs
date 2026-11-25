@@ -16,6 +16,7 @@ use super::{
 };
 
 use super::cloud_inventory::LocalUploadStatus;
+use super::error::CLOUD_BACKUP_ACCOUNT_UNAVAILABLE_MESSAGE;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
 use std::collections::{HashMap, HashSet};
@@ -622,7 +623,9 @@ impl CloudBackupReducerState {
     fn configured_sync_row(&self) -> CloudBackupSettingsRowStatus {
         let upload_failed = matches!(
             self.sync_health,
-            CloudSyncHealth::Failed(_) | CloudSyncHealth::AuthorizationRequired(_)
+            CloudSyncHealth::Failed(_)
+                | CloudSyncHealth::AuthorizationRequired(_)
+                | CloudSyncHealth::AccountUnavailable(_)
         );
         let confirming = !matches!(
             self.configured.pending_upload_verification,
@@ -654,6 +657,9 @@ impl CloudBackupReducerState {
             CloudSyncHealth::NoFiles => CloudBackupSettingsRowStatus::NoFiles,
             CloudSyncHealth::AuthorizationRequired(message) => {
                 CloudBackupSettingsRowStatus::AuthorizationRequired(message.clone())
+            }
+            CloudSyncHealth::AccountUnavailable(message) => {
+                CloudBackupSettingsRowStatus::AccountUnavailable(message.clone())
             }
             CloudSyncHealth::Unavailable => CloudBackupSettingsRowStatus::DriveUnavailable,
             CloudSyncHealth::Failed(message) => {
@@ -1008,10 +1014,17 @@ impl CloudBackupReducerState {
                 }
             }
             PendingUploadVerificationState::BlockedOnAuthorization => {
-                self.configured.sync = CloudBackupSyncState::Blocked(
-                    PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into(),
-                );
+                self.configured.sync =
+                    CloudBackupSyncState::Blocked(self.pending_upload_blocked_message().into());
             }
+        }
+    }
+
+    /// Why the upload waits: a gone account needs a switch, which authorizing again can't fix
+    fn pending_upload_blocked_message(&self) -> &'static str {
+        match self.sync_health {
+            CloudSyncHealth::AccountUnavailable(_) => CLOUD_BACKUP_ACCOUNT_UNAVAILABLE_MESSAGE,
+            _ => PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE,
         }
     }
 
@@ -1451,6 +1464,12 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::SyncHealthObserved(check) => {
                 let (health, master_key) = check.into_parts();
                 self.state.sync_health = health;
+
+                // the blocked upload's message names the account problem health just reported
+                let pending = self.state.configured.pending_upload_verification;
+                if pending == PendingUploadVerificationState::BlockedOnAuthorization {
+                    self.state.reconcile_pending_upload_verification(pending);
+                }
 
                 match master_key {
                     MasterKeyFinding::NotAsked => {}
@@ -2199,6 +2218,37 @@ mod tests {
             state.sync,
             CloudBackupSyncState::Blocked(PENDING_UPLOAD_AUTHORIZATION_BLOCKED_MESSAGE.into()),
         );
+    }
+
+    #[test]
+    fn blocked_pending_upload_names_a_gone_account_in_either_order() {
+        let account_gone = || {
+            CloudBackupStateReducerEvent::SyncHealthObserved(
+                CloudSyncHealth::AccountUnavailable("removed".into()).into(),
+            )
+        };
+        let blocked = || {
+            CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
+                PendingUploadVerificationState::BlockedOnAuthorization,
+            )
+        };
+        let sync_after = |events: [CloudBackupStateReducerEvent; 2]| {
+            let mut model = CloudBackupStateReducer::default();
+            model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
+            for event in events {
+                model.apply_event(event);
+            }
+
+            let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
+                panic!("enabled backup should project configured lifecycle");
+            };
+            state.sync
+        };
+
+        let expected =
+            CloudBackupSyncState::Blocked(CLOUD_BACKUP_ACCOUNT_UNAVAILABLE_MESSAGE.into());
+        assert_eq!(sync_after([blocked(), account_gone()]), expected);
+        assert_eq!(sync_after([account_gone(), blocked()]), expected);
     }
 
     #[test]

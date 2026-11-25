@@ -257,8 +257,9 @@ private struct CloudBackupInventoryIncompleteSection: View {
                         Label("Check Again", systemImage: "arrow.clockwise")
                     }
 
-                // only Google Drive asks to be authorized again; iCloud never does
-                case .reconnectDrive:
+                // only Google Drive asks to be authorized again or loses its bound account; iCloud
+                // never does
+                case .reconnectDrive, .switchDriveAccount:
                     EmptyView()
                 }
             }
@@ -427,7 +428,7 @@ private struct CloudBackupFinishingDisableStageRow: View {
         return switch reason {
         case .offline:
             "Cove can't reach iCloud right now."
-        case .authorizationRequired:
+        case .authorizationRequired, .accountUnavailable:
             "Cove can't access iCloud Drive. Turn on iCloud Drive for Cove, then try again."
         case .providerUnavailable:
             "iCloud Drive isn't available right now."

@@ -10,6 +10,11 @@ pub enum CloudStorageError {
     #[error("authorization required: {0}")]
     AuthorizationRequired(String),
 
+    /// The provider account Cloud Backup is bound to is no longer on this device, such as a
+    /// Google account the user removed; authorizing it again can't succeed, only switching can
+    #[error("account unavailable: {0}")]
+    AccountUnavailable(String),
+
     #[error("not available: {0}")]
     NotAvailable(String),
 
@@ -33,6 +38,14 @@ pub enum CloudStorageError {
 
     #[error("invalid namespace: {0}")]
     InvalidNamespace(String),
+}
+
+impl CloudStorageError {
+    /// Whether the provider is waiting on the user's account before any cloud call can succeed:
+    /// either authorization or, when the bound account is gone, a switch to another account
+    pub fn requires_account_action(&self) -> bool {
+        matches!(self, Self::AuthorizationRequired(_) | Self::AccountUnavailable(_))
+    }
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -60,7 +73,17 @@ pub enum CloudSyncHealth {
     Failed(String),
     NoFiles,
     AuthorizationRequired(String),
+    /// The bound provider account is no longer on this device; only switching accounts fixes it
+    AccountUnavailable(String),
     Unavailable,
+}
+
+impl CloudSyncHealth {
+    /// Whether the provider is waiting on the user's account, see
+    /// [`CloudStorageError::requires_account_action`]
+    pub fn requires_account_action(&self) -> bool {
+        matches!(self, Self::AuthorizationRequired(_) | Self::AccountUnavailable(_))
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
