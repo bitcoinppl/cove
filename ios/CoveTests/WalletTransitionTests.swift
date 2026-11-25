@@ -733,6 +733,7 @@ private final class TestSendFlowRustManager: SendFlowRustManaging {
     func maxSendMinusFeesAndSmallUtxo() -> Amount? { nil }
     func amount() -> Amount { Amount.fromSat(sats: 0) }
     func transferDestinations() -> [TransferDestination] { [] }
+    func transferRecipientPaying(address _: Address) -> TransferRecipient? { nil }
     func dispatch(action: SendFlowManagerAction) {
         dispatchedActions.withLock { $0.append(action) }
     }

@@ -17,6 +17,7 @@ use crate::{
     database::Database,
     fiat::FiatCurrency,
     manager::wallet_manager::live_metadata::WalletDisplayPreferences,
+    transfer_destination::TransferRecipient,
     wallet::{
         Address,
         balance::Balance,
@@ -49,8 +50,8 @@ pub struct SendFlowManagerState {
     /// The amount, in sats, of an alerting check that found no fee total and runs again once one
     /// lands, see `AmountAlert::ShownOnceFeeLoads`
     pub(crate) amount_check_awaiting_fee: Option<u64>,
-    /// The address last handed out by another of the user's wallets for this send
-    pub(crate) transfer_reservation: Option<TransferReservation>,
+    /// The picked wallet this send pays, kept only while the address is the one it handed out
+    pub(crate) transfer_recipient: Option<TransferRecipient>,
     /// Counts the addresses put in the send, so a picked wallet's address that lands after a
     /// newer one is dropped
     pub(crate) address_generation: u64,
@@ -89,13 +90,6 @@ pub struct AmountEntry {
     pub mode: AmountEntryMode,
     pub btc_text: String,
     pub fiat_text: String,
-}
-
-/// A receive address another of the user's wallets handed out for this send
-#[derive(Debug, Clone, PartialEq)]
-pub struct TransferReservation {
-    pub wallet_id: WalletId,
-    pub address: Address,
 }
 
 /// A Max amount and the drain it was built from
@@ -240,7 +234,7 @@ impl SendFlowManagerState {
             has_base_fees: false,
             last_fee_failure: None,
             amount_check_awaiting_fee: None,
-            transfer_reservation: None,
+            transfer_recipient: None,
             address_generation: 0,
             payjoin_endpoint: None,
         }
@@ -326,6 +320,43 @@ impl SendFlowManagerState {
     pub(crate) fn clear_warning_acknowledgements(&mut self) {
         self.acknowledged_warnings.clear();
     }
+
+    /// Sets the send's recipient address, and drops a picked wallet that did not hand it out
+    ///
+    /// Every change of the address goes through here, so a picked wallet never outlives its
+    /// address. Returns whether a picked wallet was dropped, so the caller tells the apps
+    #[must_use]
+    pub(crate) fn set_address(
+        &mut self,
+        address: Option<Arc<Address>>,
+        payjoin_endpoint: Option<String>,
+    ) -> RecipientDropped {
+        if self.address != address {
+            self.clear_warning_acknowledgements();
+        }
+
+        self.address = address;
+        self.payjoin_endpoint = payjoin_endpoint;
+
+        let still_paid = self
+            .transfer_recipient
+            .as_ref()
+            .is_some_and(|recipient| self.address.as_ref() == Some(&recipient.address));
+
+        if still_paid || self.transfer_recipient.is_none() {
+            return RecipientDropped::No;
+        }
+
+        self.transfer_recipient = None;
+        RecipientDropped::Yes
+    }
+}
+
+/// Whether setting the address dropped the picked wallet, which the apps then need to hear
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RecipientDropped {
+    Yes,
+    No,
 }
 
 impl FeeSelection {

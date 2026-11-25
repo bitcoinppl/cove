@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
-use cove_types::address::{AddressInfoWithDerivation, AddressWithNetwork};
+use cove_types::address::AddressWithNetwork;
 use tracing::{debug, warn};
 
 use super::{
-    Message, RustSendFlowManager, SendFlowError, SetAmountFocusField, state::TransferReservation,
+    Message, RustSendFlowManager, SendFlowError, SetAmountFocusField, state::RecipientDropped,
     validation::AmountAlert,
 };
 use crate::{
-    transfer_destination::{TransferAddressError, reserve_transfer_address},
-    wallet::{Address, metadata::WalletId},
+    transfer_destination::{
+        ReservedTransferAddress, TransferAddressError, TransferRecipient, reserve_transfer_address,
+    },
+    wallet::metadata::WalletId,
 };
 
 impl RustSendFlowManager {
@@ -54,15 +56,11 @@ impl RustSendFlowManager {
             .and_then(|address_with_network| address_with_network.payjoin.as_ref())
             .map(|payjoin| payjoin.endpoint.clone());
         let address = parsed.map(|address_with_network| Arc::new(address_with_network.address));
-        {
-            let mut state = self.state.lock();
-            if state.address != address {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = address.clone();
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
+        let dropped = self.state.lock().set_address(address.clone(), payjoin_endpoint);
         sender.queue(Message::UpdateAddress(address));
+        if dropped == RecipientDropped::Yes {
+            sender.queue(Message::UpdateTransferRecipient(None));
+        }
 
         // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
         if self.validate_address_internal(false) {
@@ -90,15 +88,11 @@ impl RustSendFlowManager {
 
     pub(crate) fn clear_address(self: &Arc<Self>) {
         let mut sender = self.reconciler.deferred_sender();
-        {
-            let mut state = self.state.lock();
-            if state.address.is_some() {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = None;
-            state.payjoin_endpoint = None;
-        }
+        let dropped = self.state.lock().set_address(None, None);
         sender.queue(Message::UpdateAddress(None));
+        if dropped == RecipientDropped::Yes {
+            sender.queue(Message::UpdateTransferRecipient(None));
+        }
 
         self.state.lock().entering_address = String::new();
         sender.queue(Message::UpdateEnteringAddress(String::new()));
@@ -138,15 +132,11 @@ impl RustSendFlowManager {
             address_with_network.payjoin.as_ref().map(|payjoin| payjoin.endpoint.clone());
         let address = Arc::new(address_with_network.address);
 
-        {
-            let mut state = self.state.lock();
-            if state.address.as_ref() != Some(&address) {
-                state.clear_warning_acknowledgements();
-            }
-            state.address = Some(address.clone());
-            state.payjoin_endpoint = payjoin_endpoint;
-        }
+        let dropped = self.state.lock().set_address(Some(address.clone()), payjoin_endpoint);
         sender.queue(Message::UpdateAddress(Some(address.clone())));
+        if dropped == RecipientDropped::Yes {
+            sender.queue(Message::UpdateTransferRecipient(None));
+        }
 
         self.state.lock().entering_address = address.to_string();
         sender.queue(Message::UpdateEnteringAddress(address.to_string()));
@@ -208,12 +198,13 @@ impl RustSendFlowManager {
         let source = self.wallet_manager.metadata.read().clone();
         let (generation, reusable) = {
             let state = self.state.lock();
+            // the address setter drops a recipient whose address left the field, so one still
+            // here is still entered
             let reusable = state
-                .transfer_reservation
+                .transfer_recipient
                 .as_ref()
-                .filter(|reservation| reservation.wallet_id == destination)
-                .filter(|reservation| state.address.as_deref() == Some(&reservation.address))
-                .map(|reservation| reservation.address.to_string());
+                .filter(|recipient| recipient.wallet_id == destination)
+                .map(|recipient| recipient.address.to_string());
 
             (state.address_generation, reusable)
         };
@@ -229,7 +220,7 @@ impl RustSendFlowManager {
         let me = self.clone();
         cove_tokio::task::spawn(async move {
             let reserved = reserve_transfer_address(&source, &destination).await;
-            me.finish_transfer_destination(generation, destination, reserved);
+            me.finish_transfer_destination(generation, reserved);
         });
     }
 
@@ -238,8 +229,7 @@ impl RustSendFlowManager {
     fn finish_transfer_destination(
         self: &Arc<Self>,
         generation: u64,
-        destination: WalletId,
-        reserved: Result<AddressInfoWithDerivation, TransferAddressError>,
+        reserved: Result<ReservedTransferAddress, TransferAddressError>,
     ) {
         let address_entry = self.address_entry.clone();
         let _address_turn = address_entry.lock();
@@ -257,12 +247,14 @@ impl RustSendFlowManager {
             }
         };
 
-        let address = Address::new(reserved.info.address.clone());
-        let entered = address.to_string();
-        self.state.lock().transfer_reservation =
-            Some(TransferReservation { wallet_id: destination, address });
+        // set before the address goes in, so the address setter sees the recipient's own
+        // address and keeps it
+        let recipient = TransferRecipient::from(reserved);
+        let entered = recipient.address.to_string();
+        self.state.lock().transfer_recipient = Some(recipient.clone());
 
         self.enter_address(entered);
+        self.reconciler.send(Message::UpdateTransferRecipient(Some(recipient)));
     }
 
     /// Puts an address in the field the same way a paste does, so validation, fees and the
@@ -286,9 +278,12 @@ mod tests {
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
         test_support::{hardware_signing::external_address, wallet_target::WalletTargetGuard},
-        transfer_destination::test_support::{import, mark_scanned},
+        transfer_destination::{
+            RecipientAddressCheck,
+            test_support::{import, mark_scanned},
+        },
         wallet::{
-            Wallet,
+            Address, Wallet,
             metadata::{WalletMetadata, WalletMode},
         },
         wallet_lifecycle::{WalletConstructionPermit, WalletLifecycleCoordinator},
@@ -385,13 +380,44 @@ mod tests {
             (state.entering_address.clone(), state.address.as_deref().map(ToString::to_string))
         };
 
+        let recipient = || manager.state.lock().transfer_recipient.clone();
+        let paying = |address: &str| {
+            let address = Address::from_string(address, Network::Signet).unwrap();
+            manager.transfer_recipient_paying(Arc::new(address))
+        };
+
         manager.clone().dispatch(Action::SelectTransferDestination(destination.id.clone()));
         wait_for("the first address", || entered().1.as_deref() == Some(first.as_str())).await;
         assert_eq!(entered().0, first, "the field shows the wallet's address");
+
+        let picked = recipient().expect("the picked wallet is the recipient");
+        assert_eq!(picked.wallet_id, destination.id);
+        assert_eq!(picked.name, destination.name);
+        assert_eq!(picked.address.to_string(), first);
+        assert_eq!(picked.address_check, RecipientAddressCheck::NotNeeded, "a hot wallet");
+        assert_eq!(paying(&first), Some(picked.clone()), "Confirm finds the picked wallet");
+
+        // the pick's message follows the address on the reservation's runtime, so it can land
+        // after the address shows in state
+        let mut messages = Vec::new();
+        wait_for("the pick's message", || {
+            messages.extend(drain_reconcile_messages(&manager));
+            messages
+                .iter()
+                .any(|message| matches!(message, Message::UpdateTransferRecipient(Some(_))))
+        })
+        .await;
+
         assert!(
-            drain_reconcile_messages(&manager)
-                .contains(&Message::UpdateEnteringAddress(first.clone())),
+            messages.contains(&Message::UpdateEnteringAddress(first.clone())),
             "the apps' field was not set to the wallet's address"
+        );
+        let position = |wanted: &Message| messages.iter().position(|message| message == wanted);
+        let filled = position(&Message::UpdateEnteringAddress(first.clone()));
+        let picked_at = position(&Message::UpdateTransferRecipient(Some(picked.clone())));
+        assert!(
+            picked_at.is_some() && picked_at > filled,
+            "the apps did not hear of the pick after its address: {messages:?}"
         );
 
         // going back and forth in the picker keeps the same address
@@ -400,10 +426,29 @@ mod tests {
         let wallet = Wallet::try_load_persisted(destination.id.clone()).unwrap();
         assert_eq!(wallet.bdk.derivation_index(KeychainKind::External), Some(0));
 
+        // the field writing back the same text keeps the pick
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(first.clone()));
+        assert_eq!(recipient(), Some(picked.clone()), "an echo dropped the pick");
+        assert!(
+            !drain_reconcile_messages(&manager).contains(&Message::UpdateTransferRecipient(None)),
+            "an echo told the apps the pick was dropped"
+        );
+
         // another address entered in between means the first may be paid by that other send
         let other = external_address(bitcoin::Network::Signet).to_string();
         manager.clone().dispatch(Action::NotifyEnteringAddressChanged(other.clone()));
         assert_eq!(entered().1.as_deref(), Some(other.as_str()));
+        assert_eq!(recipient(), None, "the pick outlived its address");
+        assert_eq!(paying(&first), None, "Confirm still found a dropped pick");
+        assert!(
+            drain_reconcile_messages(&manager).contains(&Message::UpdateTransferRecipient(None)),
+            "the apps were not told the pick was dropped"
+        );
+
+        // entering the picked address again by hand does not bring the pick back
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(first.clone()));
+        assert_eq!(recipient(), None, "a typed address became a pick");
+        manager.clone().dispatch(Action::NotifyEnteringAddressChanged(other.clone()));
 
         manager.clone().dispatch(Action::SelectTransferDestination(destination.id.clone()));
         wait_for("the second address", || entered().1.as_deref() == Some(second.as_str())).await;
