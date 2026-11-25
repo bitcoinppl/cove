@@ -102,6 +102,7 @@ private struct SendFlowHeaderBalanceContent: View {
                     Image(systemName: metadata.sensitiveVisible ? "eye.slash" : "eye")
                 }
                 .foregroundStyle(.white)
+                .accessibilityIdentifier("sendFlow.header.visibility")
             }
         }
     }

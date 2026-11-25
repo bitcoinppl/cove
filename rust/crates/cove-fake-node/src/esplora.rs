@@ -134,6 +134,19 @@ fn route(chain: &FakeChain, method: &str, path: &str, body: &[u8]) -> Response {
             "minimumFee": 1.0,
         })),
 
+        // mempool.space's prices shape at 100,000 per BTC, so 1,000 sats is 1.00 in fiat and UI
+        // tests can price amounts through COVE_PRICE_URL instead of reaching the internet
+        ("GET", ["api", "v1", "prices"]) => Response::json(&json!({
+            "time": 1_700_000_000,
+            "USD": 100_000,
+            "EUR": 100_000,
+            "GBP": 100_000,
+            "CAD": 100_000,
+            "CHF": 100_000,
+            "AUD": 100_000,
+            "JPY": 100_000,
+        })),
+
         _ => Response::not_found("Not found"),
     }
 }

@@ -16,6 +16,7 @@
 		C0A0000E2EF0000000000001 /* UtxoLockFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */; };
 		C0A1001E2F90000000000001 /* SendFlowUnitFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1001D2F90000000000001 /* SendFlowUnitFullLaunchUITests.swift */; };
 		C0A1003E2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1003D2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift */; };
+		C0A1002E2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1002D2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift */; };
 		C0A0FD022F70000000000001 /* VerifyWordsFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0FD012F70000000000001 /* VerifyWordsFullLaunchUITests.swift */; };
 		F4B000022F90000000000001 /* BiometricLockFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */; };
 		F4B000042F90000000000001 /* SimulatorBiometrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B000032F90000000000001 /* SimulatorBiometrics.swift */; };
@@ -148,6 +149,7 @@
 		C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtxoLockFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A1001D2F90000000000001 /* SendFlowUnitFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowUnitFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A1003D2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowPrefilledAmountFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0A1002D2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowDisplayPreferencesFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A0FD012F70000000000001 /* VerifyWordsFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricLockFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F4B000032F90000000000001 /* SimulatorBiometrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatorBiometrics.swift; sourceTree = "<group>"; };
@@ -328,6 +330,7 @@
 				C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */,
 				C0A1001D2F90000000000001 /* SendFlowUnitFullLaunchUITests.swift */,
 				C0A1003D2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift */,
+				C0A1002D2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift */,
 				C0A0FD012F70000000000001 /* VerifyWordsFullLaunchUITests.swift */,
 				F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */,
 				F4B000032F90000000000001 /* SimulatorBiometrics.swift */,
@@ -664,6 +667,7 @@
 				C0A0000E2EF0000000000001 /* UtxoLockFullLaunchUITests.swift in Sources */,
 				C0A1001E2F90000000000001 /* SendFlowUnitFullLaunchUITests.swift in Sources */,
 				C0A1003E2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift in Sources */,
+				C0A1002E2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift in Sources */,
 				C0A0FD022F70000000000001 /* VerifyWordsFullLaunchUITests.swift in Sources */,
 				F4B000022F90000000000001 /* BiometricLockFullLaunchUITests.swift in Sources */,
 				F4B000042F90000000000001 /* SimulatorBiometrics.swift in Sources */,

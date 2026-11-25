@@ -314,6 +314,7 @@ private struct SendFlowUtxoCustomAmountHeader: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("sendFlow.coinControl.customAmount.close")
         }
     }
 }
@@ -337,6 +338,7 @@ private struct SendFlowUtxoCustomAmountControls: View {
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .focused(isFocused)
+                    .accessibilityIdentifier("sendFlow.coinControl.customAmount")
 
                 Text(selectedUnitSymbol)
             }

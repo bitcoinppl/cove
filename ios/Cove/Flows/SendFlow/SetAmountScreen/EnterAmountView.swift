@@ -385,5 +385,8 @@ private struct EnterAmountSecondaryAmountRow: View {
             }
         }
         .onTapGesture(perform: toggleAmountUnit)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("sendFlow.secondaryAmount")
     }
 }
