@@ -92,6 +92,10 @@ paths = ["ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift"]
 suites = ["CoveUITests/TapSignerLayoutFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/SendFlowUnitFullLaunchUITests.swift"]
+suites = ["CoveUITests/SendFlowUnitFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/UtxoLockFullLaunchUITests.swift"]
 suites = ["CoveUITests/UtxoLockFullLaunchUITests"]
 
