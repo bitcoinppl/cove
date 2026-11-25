@@ -25,7 +25,7 @@ use parking_lot::Mutex;
 
 use crate::{
     android::{self, AndroidBuildTargets, BuildProfile},
-    android_ci_emulator::{self, adb, AvdSpec, UserData},
+    android_ci_emulator::{self, adb, AvdSpec, UserData, ANIMATIONS_OFF},
     common::{print_info, print_success, print_warning},
     shutdown::{self, Registration, Stop},
 };
@@ -37,6 +37,10 @@ const AVD: AvdSpec = AvdSpec {
     tag: "google_apis_playstore",
     profile: "pixel_8",
     config: &[("hw.cpu.ncore", "4"), ("hw.ramSize", "4096"), ("PlayStore.enabled", "yes")],
+    // not the CI emulator's hide_error_dialogs: the DismissAnrDialogs listener presses Wait on an
+    // ANR dialog, where hidden dialogs would let Android kill the stalled app, and the setting
+    // would stay on this writable AVD after the run
+    global_settings: &ANIMATIONS_OFF,
 };
 
 const EMAIL_KEYCHAIN_SERVICE: &str = "cove-cloud-backup-e2e-email";

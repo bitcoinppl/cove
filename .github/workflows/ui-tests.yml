@@ -257,14 +257,15 @@ jobs:
           # headroom for the software-rendered launcher, which stops responding on a busy emulator
           cores: 4
           ram-size: 4096M
-          disable-animations: true
+          # cargo xtask android-ci-emulator-settings turns animations off with the other settings
+          disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          # a stalled foreground launcher otherwise gets an "isn't responding" dialog that takes taps,
-          # Back and focus from the app under test, and UiAutomator can't read it to press Wait; with
-          # error dialogs hidden Android kills the launcher and restarts home instead, and it reads
-          # the setting when it changes, so it applies to the tests started on the next line
+          # the settings `just android-ci-emulator` boots the local emulator with, from
+          # rust/xtask/src/android_ci_emulator.rs: animations off and error dialogs hidden, so a
+          # stalled launcher's "isn't responding" dialog can't take taps from the app under test;
+          # Android reads them when they change, so they apply to the tests started on the next line
           script: |
-            adb shell settings put global hide_error_dialogs 1
+            just xtask android-ci-emulator-settings
             just android-instrumented-ci "$FLAVOUR" "$ANDROID_TESTS" "$ANDROID_NOT_TESTS"
         env:
           FLAVOUR: ${{ matrix.flavour }}
