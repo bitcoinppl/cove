@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove
 
+import org.bitcoinppl.cove_core.CoinControlRoute
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SendConfirmationInput
 import org.bitcoinppl.cove_core.SendRoute
@@ -75,6 +76,48 @@ class SendFlowRouteLifecycleTest {
                 default = Route.SelectedWallet("wallet-a"),
                 routes = listOf(Route.Send(SendRoute.SetAmount("wallet-b", null, null))),
                 walletId = "wallet-a",
+            ),
+        )
+    }
+
+    @Test
+    fun coinControlListKeepsItsSendFlowButCannotStartOne() {
+        val walletId = "wallet-a"
+        val backAtTheList = listOf(Route.CoinControl(CoinControlRoute.List(walletId)))
+
+        // back from the coin control send to its utxo list keeps the recipient and fee
+        assertTrue(
+            routeStackKeepsSendFlow(
+                default = Route.SelectedWallet(walletId),
+                routes = backAtTheList,
+                walletId = walletId,
+            ),
+        )
+
+        // but the list alone is not a send route, so it never creates a session
+        assertFalse(
+            routeStackContainsSendWallet(
+                default = Route.SelectedWallet(walletId),
+                routes = backAtTheList,
+                walletId = walletId,
+            ),
+        )
+
+        // another wallet's list keeps nothing alive
+        assertFalse(
+            routeStackKeepsSendFlow(
+                default = Route.SelectedWallet("wallet-b"),
+                routes = listOf(Route.CoinControl(CoinControlRoute.List("wallet-b"))),
+                walletId = walletId,
+            ),
+        )
+
+        // leaving coin control ends the send
+        assertFalse(
+            routeStackKeepsSendFlow(
+                default = Route.SelectedWallet(walletId),
+                routes = emptyList(),
+                walletId = walletId,
             ),
         )
     }

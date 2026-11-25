@@ -422,7 +422,7 @@ internal class AndroidManagerCache(
 
     internal fun clearInactiveSendFlowManager(router: RouterManager) {
         val manager = sendFlowManager ?: return
-        if (routeStackContainsSendWallet(router.default, router.routes, manager.id)) return
+        if (routeStackKeepsSendFlow(router.default, router.routes, manager.id)) return
 
         clearSendFlowManager()
     }
