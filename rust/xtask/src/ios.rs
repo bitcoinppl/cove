@@ -34,6 +34,7 @@ use std::{
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use xshell::{cmd, Shell};
 
+mod codesign;
 mod quarantine;
 mod testflight;
 
@@ -748,6 +749,7 @@ impl PendingTestflightUpload {
 
         // fail before bumping/building if Apple has not associated this TestFlight app id
         validate_testflight_associated_domain()?;
+        codesign::ensure_keychain_can_sign(&sh)?;
 
         let used = distribution.highest_build_number()?;
         let archive = BuildNumberFile::IosProject.bump_for_release(&sh, used, || {
@@ -777,6 +779,7 @@ pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Res
     let distribution = credentials.prepare_distribution()?;
 
     validate_testflight_associated_domain()?;
+    codesign::ensure_keychain_can_sign(&Shell::new()?)?;
 
     let archive = archive_testflight(&credentials, verbose)?;
 

@@ -48,6 +48,8 @@ This bumps the iOS build number past both the project file and the highest build
 
 Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key must have access to cloud-managed distribution certificates.
 
+Before it bumps the build number, it signs a scratch binary with each Apple Development and Apple Distribution identity in your keychain. A locked keychain, or a signing key that codesign can't use without a prompt, fails here in seconds instead of as `errSecInternalComponent` at the end of the archive. A locked keychain in a desktop session shows its password prompt at this point. If the check fails, run `security unlock-keychain ~/Library/Keychains/login.keychain-db` and retry. If it still fails, allow codesign to use the key with `security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db`. `just upload-testflight` runs the same check before it archives.
+
 If the upload or distribution fails after the bump, retry with `just upload-testflight`, which skips the upload when App Store Connect already has that build.
 
 ### Android
@@ -68,7 +70,7 @@ Use `just upload-google-play` (`just ugp`) when the versionCode was already bump
 just release-all    # alias: just rel
 ```
 
-This checks both stores' credentials, runs the iOS release build and archive, and then uploads to TestFlight while it builds and uploads Android, so the App Store Connect upload and processing wait no longer hold up Android. An iOS build failure stops before Android's versionCode is bumped. If one platform fails after that, the other still finishes. Retry iOS with `just upload-testflight`. Retry an Android build failure with `just release-android`, which bumps again from wherever the failure left the versionCode, and an Android upload failure, which keeps the new versionCode and signed bundle, with `just ugp`. It needs the environment variables of both releases.
+This checks both stores' credentials and that codesign can use your keychain, runs the iOS release build and archive, and then uploads to TestFlight while it builds and uploads Android, so the App Store Connect upload and processing wait no longer hold up Android. An iOS build failure stops before Android's versionCode is bumped. If one platform fails after that, the other still finishes. Retry iOS with `just upload-testflight`. Retry an Android build failure with `just release-android`, which bumps again from wherever the failure left the versionCode, and an Android upload failure, which keeps the new versionCode and signed bundle, with `just ugp`. It needs the environment variables of both releases.
 
 ## Development Workflow
 
