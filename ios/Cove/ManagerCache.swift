@@ -430,7 +430,7 @@ struct WalletManagerCacheState: Equatable {
 
     func reconcileSendFlowManagerOwnership(router: Router) {
         guard let sendFlowManager else { return }
-        guard !router.containsSendRoute(for: sendFlowManager.id) else { return }
+        guard !router.keepsSendFlow(for: sendFlowManager.id) else { return }
 
         clearSendFlowManager()
     }
@@ -485,6 +485,14 @@ extension Router {
     func containsSendRoute(for id: WalletId) -> Bool {
         self.default.isSendRoute(for: id) || routes.contains { $0.isSendRoute(for: id) }
     }
+
+    /// Whether the wallet's send flow is still in use: a send route, or the coin control list it
+    /// was opened from, which goes back to the same send with its recipient and fee kept
+    func keepsSendFlow(for id: WalletId) -> Bool {
+        containsSendRoute(for: id)
+            || self.default.isCoinControlRoute(for: id)
+            || routes.contains { $0.isCoinControlRoute(for: id) }
+    }
 }
 
 private extension Route {
@@ -503,5 +511,10 @@ private extension Route {
     func isSendRoute(for id: WalletId) -> Bool {
         guard case let .send(sendRoute) = self else { return false }
         return sendRoute.id() == id
+    }
+
+    func isCoinControlRoute(for id: WalletId) -> Bool {
+        guard case let .coinControl(coinControlRoute) = self else { return false }
+        return coinControlRoute.id() == id
     }
 }
