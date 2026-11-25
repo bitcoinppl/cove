@@ -440,7 +440,8 @@ private struct UtxoRowIdentity: View {
         let presenter = SendFlowPresenter(app: ap, manager: wm)
         let utxos = previewNewUtxoList(outputCount: 2, changeCount: 1)
 
-        if let sendFlowManager = try? ap.ensureSendFlowManager(wm, presenter: presenter) {
+        // its own manager: the app's cache only hands one out while a send route is open
+        if let sendFlowManager = try? SendFlowManager(wm.newSendFlowManager(), presenter: presenter) {
             SendFlowUtxoCustomAmountSheetView(utxos: utxos)
                 .environment(wm)
                 .environment(ap)
