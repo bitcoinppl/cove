@@ -185,6 +185,12 @@ enum Commands {
         port: u16,
     },
 
+    /// Apply the UI test emulator settings, animations off and error dialogs hidden, to the
+    /// emulator `ANDROID_SERIAL` names, else the only connected one; the UI tests workflow runs this
+    /// on its emulator, and `android-ci-emulator` applies the same settings when it boots one
+    #[command(name = "android-ci-emulator-settings")]
+    AndroidCiEmulatorSettings,
+
     /// Restore the frozen real Google Drive backup on a Play Store emulator and check its wallets
     /// and labels; local only, since the Google account's credentials live in this Mac's Keychain
     #[command(name = "android-cloud-backup-e2e")]
@@ -578,6 +584,7 @@ fn run(cli: Cli) -> Result<()> {
         Commands::IosUiTimings { records } => ios_ui_shard::refresh_timings(&records),
 
         Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
+        Commands::AndroidCiEmulatorSettings => android_ci_emulator::apply_settings(),
 
         Commands::AndroidCloudBackupE2e { port, keep_data, keep_emulator, skip_build } => {
             android_cloud_backup_e2e::run(android_cloud_backup_e2e::E2eOptions {

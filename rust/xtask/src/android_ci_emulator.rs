@@ -2,6 +2,7 @@
 //!
 //! `.github/workflows/ui-tests.yml` boots Android 15 (API 35) `google_apis` with the `pixel_6`
 //! profile, 4 cores and 4 GB, so the first start creates the `CoveCI35` AVD with those settings.
+//! Both apply the same global settings, from [`CI_GLOBAL_SETTINGS`], once the emulator has booted.
 //! The ABI follows this machine, since an x86_64 image only runs under emulation on Apple silicon.
 //! The emulator boots read-only, which lets several instances of the one AVD run at once, each on
 //! its own console port
@@ -28,7 +29,7 @@ use color_eyre::{
 use parking_lot::Mutex;
 
 use crate::{
-    android_device::{adb_stdout, command_error},
+    android_device::{adb_stdout, command_error, AndroidDevice},
     common::{log_tail, print_info, print_success, print_warning},
     shutdown::{self, Registration, Stop},
 };
@@ -44,6 +45,8 @@ pub(crate) struct AvdSpec {
     pub(crate) profile: &'static str,
     /// Config lines that replace the profile's
     pub(crate) config: &'static [(&'static str, &'static str)],
+    /// The `settings put global` names and values [`boot`] applies once the emulator has booted
+    pub(crate) global_settings: &'static [(&'static str, &'static str)],
 }
 
 const CI_AVD: AvdSpec = AvdSpec {
@@ -53,6 +56,7 @@ const CI_AVD: AvdSpec = AvdSpec {
     profile: "pixel_6",
     // the workflow's cores and ram-size inputs
     config: &[("hw.cpu.ncore", "4"), ("hw.ramSize", "4096")],
+    global_settings: &CI_GLOBAL_SETTINGS,
 };
 
 /// What a boot does with the AVD's user data
@@ -90,9 +94,26 @@ const EMULATOR_OPTIONS: [&str; 7] = [
     "none",
 ];
 
-// what the workflow's disable-animations input turns off
-const ANIMATION_SCALES: [&str; 3] =
-    ["window_animation_scale", "transition_animation_scale", "animator_duration_scale"];
+/// Animations off, as the UI tests workflow's emulator runs and every emulator [`boot`] starts
+pub(crate) const ANIMATIONS_OFF: [(&str, &str); 3] = [
+    ("window_animation_scale", "0"),
+    ("transition_animation_scale", "0"),
+    ("animator_duration_scale", "0"),
+];
+
+/// The global settings the UI tests workflow's emulator runs with; booting `CoveCI35` applies them,
+/// and the workflow applies them to its own emulator with `cargo xtask android-ci-emulator-settings`,
+/// so the local and CI emulators can't drift apart
+const CI_GLOBAL_SETTINGS: [(&str, &str); 4] = [
+    ANIMATIONS_OFF[0],
+    ANIMATIONS_OFF[1],
+    ANIMATIONS_OFF[2],
+    // a stalled foreground launcher otherwise gets an "isn't responding" dialog that takes taps,
+    // Back and focus from the app under test, and UiAutomator can't read it, so the
+    // DismissAnrDialogs listener can't press Wait on it; with error dialogs hidden Android kills
+    // the stalled app and restarts home instead, and it reads the setting when it changes
+    ("hide_error_dialogs", "1"),
+];
 
 const BOOT_TIMEOUT: Duration = Duration::from_secs(600);
 const STOP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -128,8 +149,20 @@ pub fn start(port: u16) -> Result<()> {
     Ok(())
 }
 
+/// Applies the UI tests workflow's emulator settings to the emulator UI tests run on: the one
+/// `ANDROID_SERIAL` names, else the only connected emulator
+pub fn apply_settings() -> Result<()> {
+    let emulator = AndroidDevice::require_ui_test_emulator()?;
+    let serial = emulator.serial();
+
+    apply_global_settings(serial, &CI_GLOBAL_SETTINGS)?;
+    print_success(&format!("Applied the UI test emulator settings to {serial}"));
+
+    Ok(())
+}
+
 /// Starts a headless emulator of `spec` on `port`, creating the AVD first if needed, waits for it
-/// to boot, and turns off animations
+/// to boot, and applies the spec's global settings
 ///
 /// Dropping the result, or a signal, stops the emulator; [`Emulator::detach`] leaves it running
 pub(crate) fn boot(spec: &AvdSpec, port: u16, user_data: UserData) -> Result<Emulator> {
@@ -171,12 +204,17 @@ pub(crate) fn boot(spec: &AvdSpec, port: u16, user_data: UserData) -> Result<Emu
         log_path.display()
     ));
     wait_for_boot(&emulator, &log_path)?;
-
-    for setting in ANIMATION_SCALES {
-        adb(emulator.serial(), &["shell", "settings", "put", "global", setting, "0"])?;
-    }
+    apply_global_settings(emulator.serial(), spec.global_settings)?;
 
     Ok(emulator)
+}
+
+fn apply_global_settings(serial: &str, settings: &[(&str, &str)]) -> Result<()> {
+    for &(name, value) in settings {
+        adb(serial, &["shell", "settings", "put", "global", name, value])?;
+    }
+
+    Ok(())
 }
 
 fn wait_for_boot(emulator: &Emulator, log_path: &Path) -> Result<()> {
