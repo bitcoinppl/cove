@@ -113,9 +113,7 @@ struct KeyTeleportSendReadyView: View {
                     qrHint: "Tap to show QR code",
                     codeHint: "Tap to show password"
                 ) {
-                    QrCodeView(text: packet)
-                        .frame(maxWidth: 280)
-                        .frame(maxWidth: .infinity)
+                    KeyTeleportPacketQr(text: packet)
                 } code: {
                     teleportPassword
                 }

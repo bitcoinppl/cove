@@ -74,6 +74,12 @@ internal fun WalletChoices(
     }
 }
 
+/**
+ * A KeyTeleport packet's QR code on a white card
+ *
+ * The screens stay dark, so the card's wide white border gives a camera the quiet zone it needs to
+ * find the code against the dark background around it
+ */
 @Composable
 internal fun PacketQr(text: String) {
     val bitmap = remember(text) { QrCodeGenerator.generate(text, size = QR_BITMAP_SIZE) }
@@ -88,7 +94,7 @@ internal fun PacketQr(text: String) {
                     .size(280.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color.White)
-                    .padding(12.dp),
+                    .padding(20.dp),
         )
     }
 }
