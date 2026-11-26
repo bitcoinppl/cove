@@ -144,24 +144,40 @@ impl CloudBackupDetail {
     /// Shows the upload state of `record_id`, as the next refresh would from its persisted state,
     /// returning whether a row changed
     ///
-    /// Every status an upload state decides is one that needs a sync, so the row keeps its place
+    /// In-progress and failed uploads normally stay in Needs Sync. After a rename whose refresh
+    /// failed, the same wallet can still sit Confirmed in Up to Date while its upload fails — then
+    /// the notice must move it between sections (#1192 case 2).
     pub(crate) fn apply_local_upload_status(
         &mut self,
         record_id: &str,
         status: LocalUploadStatus,
     ) -> bool {
-        let Some(wallet) = self.needs_sync.iter_mut().find(|wallet| wallet.record_id == record_id)
+        let next_status = CloudBackupWalletStatus::from(status);
+
+        if let Some(wallet) =
+            self.needs_sync.iter_mut().find(|wallet| wallet.record_id == record_id)
+        {
+            let changes =
+                wallet.sync_status != next_status && wallet.sync_status.follows_upload_state();
+            if changes {
+                wallet.sync_status = next_status;
+            }
+            return changes;
+        }
+
+        // a Confirmed up-to-date row whose later upload failed (or is pending) belongs in Needs Sync
+        let Some(index) = self.up_to_date.iter().position(|wallet| wallet.record_id == record_id)
         else {
             return false;
         };
-
-        let status = CloudBackupWalletStatus::from(status);
-        let changes = wallet.sync_status != status && wallet.sync_status.follows_upload_state();
-        if changes {
-            wallet.sync_status = status;
+        if self.up_to_date[index].sync_status != CloudBackupWalletStatus::Confirmed {
+            return false;
         }
 
-        changes
+        let mut wallet = self.up_to_date.remove(index);
+        wallet.sync_status = next_status;
+        self.needs_sync.push(wallet);
+        true
     }
 }
 
