@@ -3623,6 +3623,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_route_stablehash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_sendroute_session_kind(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignerroute_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_bip39error_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -64532,6 +64534,20 @@ sealed class SendRoute: Disposable  {
 
 
 
+    /**
+     * The kind of session this route starts, or none for a route that continues the send already
+     * open, such as the confirm screen
+     */ fun `sessionKind`(): SendSessionKind? {
+            return FfiConverterOptionalTypeSendSessionKind.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_sendroute_session_kind(FfiConverterTypeSendRoute.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
 
 
     companion object
@@ -64625,6 +64641,46 @@ public object FfiConverterTypeSendRoute : FfiConverterRustBuffer<SendRoute>{
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * The kind of send a send session serves
+ *
+ * Coin control's draft is kept while its UTXO list is open, so a normal send opened then, such as
+ * from a scanned payment link, must start its own session rather than inherit that draft
+ */
+
+enum class SendSessionKind {
+
+    NORMAL,
+    COIN_CONTROL;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendSessionKind: FfiConverterRustBuffer<SendSessionKind> {
+    override fun read(buf: ByteBuffer) = try {
+        SendSessionKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: SendSessionKind) = 4UL
+
+    override fun write(value: SendSessionKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -74907,6 +74963,38 @@ public object FfiConverterOptionalTypeOnboardingBranch: FfiConverterRustBuffer<O
         } else {
             buf.put(1)
             FfiConverterTypeOnboardingBranch.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeSendSessionKind: FfiConverterRustBuffer<SendSessionKind?> {
+    override fun read(buf: ByteBuffer): SendSessionKind? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeSendSessionKind.read(buf)
+    }
+
+    override fun allocationSize(value: SendSessionKind?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeSendSessionKind.allocationSize(value)
+        }
+    }
+
+    override fun write(value: SendSessionKind?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeSendSessionKind.write(value, buf)
         }
     }
 }

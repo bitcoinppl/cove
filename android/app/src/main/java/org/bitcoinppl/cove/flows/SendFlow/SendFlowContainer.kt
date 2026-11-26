@@ -81,7 +81,7 @@ fun SendFlowContainer(
             val wm = app.getWalletManagerLoaded(walletId)
             val presenter = SendFlowPresenter(app, wm)
             val sfm =
-                app.getSendFlowManager(wm, presenter) ?: run {
+                app.getSendFlowManager(wm, presenter, sendRoute) ?: run {
                     Log.d(tag, "send route for $walletId is gone, not starting a send session")
                     return@LaunchedEffect
                 }

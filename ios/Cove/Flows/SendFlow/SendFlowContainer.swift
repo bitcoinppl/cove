@@ -93,7 +93,11 @@ private struct SendFlowLoadedView: View {
         let presenter = SendFlowPresenter(app: app, manager: manager)
         let ensuredSendFlowManager: SendFlowManager?
         do {
-            ensuredSendFlowManager = try app.ensureSendFlowManager(manager, presenter: presenter)
+            ensuredSendFlowManager = try app.ensureSendFlowManager(
+                manager,
+                presenter: presenter,
+                for: sendRoute
+            )
         } catch {
             handleSendFlowManagerError(error)
             return

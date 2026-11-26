@@ -99,6 +99,29 @@ pub enum SendRoute {
     Confirm(SendRouteConfirmArgs),
 }
 
+/// The kind of send a send session serves
+///
+/// Coin control's draft is kept while its UTXO list is open, so a normal send opened then, such as
+/// from a scanned payment link, must start its own session rather than inherit that draft
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum SendSessionKind {
+    Normal,
+    CoinControl,
+}
+
+#[uniffi::export]
+impl SendRoute {
+    /// The kind of session this route starts, or none for a route that continues the send already
+    /// open, such as the confirm screen
+    pub fn session_kind(&self) -> Option<SendSessionKind> {
+        match self {
+            Self::SetAmount { .. } => Some(SendSessionKind::Normal),
+            Self::CoinControlSetAmount { .. } => Some(SendSessionKind::CoinControl),
+            Self::HardwareExport { .. } | Self::Confirm(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum CoinControlRoute {
     List(WalletId),

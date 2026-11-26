@@ -161,6 +161,9 @@ struct WalletManagerCacheState: Equatable {
 
     private(set) var walletManager: WalletManager?
     private(set) var sendFlowManager: SendFlowManager?
+    /// The kind of send the cached send flow manager was made for
+    @ObservationIgnored
+    private var sendFlowSessionKind: SendSessionKind?
     private(set) var keyTeleportManager: KeyTeleportManager?
     @ObservationIgnored
     weak var coinControlManager: CoinControlManager?
@@ -356,27 +359,36 @@ struct WalletManagerCacheState: Equatable {
     /// A send screen that is animating out still runs its tasks after the router dropped its
     /// route, and a manager it created there would outlive the flow with the unit and fiat mode
     /// the wallet had then, which the next send screen reused
+    ///
+    /// A route that starts a different kind of send than the cached manager serves gets a new
+    /// manager: a normal send opened while coin control's list keeps its draft starts fresh, and
+    /// that draft is discarded
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
         presenter: SendFlowPresenter,
-        router: Router
+        router: Router,
+        for sendRoute: SendRoute
     ) throws -> SendFlowManager? {
         guard router.containsSendRoute(for: walletManager.id) else {
             logger.debug("no send route for \(walletManager.id), not creating a SendFlowManager")
             return nil
         }
 
-        if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
+        let requestedKind = sendRoute.sessionKind()
+        if let sendFlowManager = cachedSendFlowManager(id: walletManager.id),
+           requestedKind == nil || requestedKind == sendFlowSessionKind
+        {
             logger.debug("found and using sendflow manager for \(walletManager.id)")
             sendFlowManager.presenter = presenter
             return sendFlowManager
         }
 
-        logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
+        logger.debug("no SendFlowManager for \(walletManager.id) serves \(String(describing: requestedKind)), creating new")
         clearSendFlowManager()
 
         let sendFlowManager = try makeSendFlowManager(walletManager, presenter)
         self.sendFlowManager = sendFlowManager
+        sendFlowSessionKind = requestedKind ?? .normal
         return sendFlowManager
     }
 
@@ -461,6 +473,7 @@ struct WalletManagerCacheState: Equatable {
 
         let sendFlowManager = self.sendFlowManager
         self.sendFlowManager = nil
+        sendFlowSessionKind = nil
         sendFlowManager?.close()
     }
 

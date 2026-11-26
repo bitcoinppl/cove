@@ -205,9 +205,15 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
-        presenter: SendFlowPresenter
+        presenter: SendFlowPresenter,
+        for sendRoute: SendRoute
     ) throws -> SendFlowManager? {
-        try managerCache.ensureSendFlowManager(walletManager, presenter: presenter, router: router)
+        try managerCache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: router,
+            for: sendRoute
+        )
     }
 
     public func setCoinControlManager(_ manager: CoinControlManager) {

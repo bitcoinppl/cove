@@ -44133,6 +44133,19 @@ public enum SendRoute {
 
 
 
+    /**
+     * The kind of session this route starts, or none for a route that continues the send already
+     * open, such as the confirm screen
+     */
+public func sessionKind() -> SendSessionKind?  {
+    return try!  FfiConverterOptionTypeSendSessionKind.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_sendroute_session_kind(
+            FfiConverterTypeSendRoute_lower(self),uniffiCallStatus
+    )
+})
+}
+
 
 
 }
@@ -44211,6 +44224,78 @@ public func FfiConverterTypeSendRoute_lift(_ buf: RustBuffer) throws -> SendRout
 #endif
 public func FfiConverterTypeSendRoute_lower(_ value: SendRoute) -> RustBuffer {
     return FfiConverterTypeSendRoute.lower(value)
+}
+
+
+
+/**
+ * The kind of send a send session serves
+ *
+ * Coin control's draft is kept while its UTXO list is open, so a normal send opened then, such as
+ * from a scanned payment link, must start its own session rather than inherit that draft
+ */
+
+public enum SendSessionKind: Equatable, Hashable {
+
+    case normal
+    case coinControl
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SendSessionKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendSessionKind: FfiConverterRustBuffer {
+    typealias SwiftType = SendSessionKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendSessionKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .normal
+
+        case 2: return .coinControl
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SendSessionKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .normal:
+            writeInt(&buf, Int32(1))
+
+
+        case .coinControl:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendSessionKind_lift(_ buf: RustBuffer) throws -> SendSessionKind {
+    return try FfiConverterTypeSendSessionKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendSessionKind_lower(_ value: SendSessionKind) -> RustBuffer {
+    return FfiConverterTypeSendSessionKind.lower(value)
 }
 
 
@@ -53018,6 +53103,30 @@ fileprivate struct FfiConverterOptionTypeOnboardingBranch: FfiConverterRustBuffe
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeOnboardingBranch.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeSendSessionKind: FfiConverterRustBuffer {
+    typealias SwiftType = SendSessionKind?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSendSessionKind.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSendSessionKind.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
