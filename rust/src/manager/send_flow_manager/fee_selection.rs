@@ -283,13 +283,18 @@ impl RustSendFlowManager {
         sender.queue(Message::UpdateFeeSelection(selection));
 
         // refreshed rates arrive without totals, and coin-control Max and the fee checks need one
-        if selected.total_fee.is_none() {
+        let has_total_fee = selected.total_fee.is_some();
+        if !has_total_fee {
             self.schedule_fee_rate_update();
-        } else {
-            self.run_amount_check_awaiting_fee(sender);
         }
 
         self.reconcile_coin_control_amount_for_selected_fee();
+
+        // after coin-control Max fits the new fee, so the held check never alerts on an amount
+        // that reconcile just lowered
+        if has_total_fee {
+            self.run_amount_check_awaiting_fee(sender);
+        }
 
         // a Max amount is drained at one rate, so at any other rate it leaves change or overspends;
         // a totals-only update keeps the rate, so it does not drain again

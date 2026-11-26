@@ -1706,6 +1706,20 @@ mod tests {
     }
 
     #[test]
+    fn prefilled_coin_control_max_check_uses_the_max_the_landed_fee_leaves() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = prefilled_amount_awaiting_fee(9_900);
+        set_coin_control_mode_with_total(&manager, 10_000);
+
+        assert!(!manager.check_prefilled_amount());
+        assert_eq!(alerts(&manager), vec![]);
+
+        // a 156 sat fee lowers Max from 9,900 to 9,844 sats, which fits the 10,000 selected
+        assert_eq!(land_fee_total(&manager, 156), vec![]);
+        assert_eq!(manager.amount_sats(), 9_844);
+    }
+
+    #[test]
     fn validate_amount_blocks_coin_control_send_when_amount_plus_fee_exceeds_selected_total() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let manager = manager_for_validation();
