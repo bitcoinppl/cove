@@ -13,6 +13,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.views.QrExportView
+import org.bitcoinppl.cove.views.QrModalBottomSheet
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
@@ -60,10 +61,7 @@ internal fun SendFlowHardwareBottomSheets(
             }
         }
         HardwareSheetState.ExportQr -> {
-            ModalBottomSheet(
-                onDismissRequest = { onSheetStateChange(null) },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            ) {
+            QrModalBottomSheet(onDismissRequest = { onSheetStateChange(null) }) {
                 QrExportView(
                     details = details,
                     modifier = Modifier.padding(16.dp),

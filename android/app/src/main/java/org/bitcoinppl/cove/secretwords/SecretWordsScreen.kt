@@ -23,7 +23,6 @@ import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -53,7 +52,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
+import org.bitcoinppl.cove.views.QrModalBottomSheet
 import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.MnemonicException
 import org.bitcoinppl.cove_core.types.WalletId
@@ -299,9 +298,8 @@ fun SecretWordsScreen(
 
     // seed QR bottom sheet
     if (showSeedQrSheet && revealed != null) {
-        ModalBottomSheet(
+        QrModalBottomSheet(
             onDismissRequest = { showSeedQrSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             properties =
                 ModalBottomSheetProperties(
                     securePolicy = SecureFlagPolicy.SecureOn,

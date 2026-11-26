@@ -14,6 +14,7 @@ private struct SelectedWalletSheetContent: View {
         switch sheet {
         case .receive:
             ReceiveView(manager: context.manager)
+                .qrSheetPresentation()
 
         case let .chooseAddressType(foundAddresses):
             ChooseWalletTypeView(manager: context.manager, foundAddresses: foundAddresses)
@@ -49,6 +50,7 @@ private struct LabelQrExportSheet: View {
         .presentationDetents([.height(500), .height(600), .large])
         .padding()
         .padding(.top, 10)
+        .qrSheetPresentation()
     }
 }
 
@@ -68,5 +70,6 @@ private struct XpubQrExportSheet: View {
         .presentationDetents([.height(500), .height(600), .large])
         .padding()
         .padding(.top, 10)
+        .qrSheetPresentation()
     }
 }

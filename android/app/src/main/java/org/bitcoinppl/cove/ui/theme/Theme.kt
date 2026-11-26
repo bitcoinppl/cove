@@ -103,16 +103,6 @@ fun CoveTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme =
-        when {
-            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                val context = LocalContext.current
-                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            }
-
-            darkTheme -> DarkColorScheme
-            else -> LightColorScheme
-        }
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -125,6 +115,31 @@ fun CoveTheme(
         }
     }
 
+    CoveColorTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)
+}
+
+/**
+ * Provides Cove's light or dark colors to [content] without touching the activity's system bars
+ *
+ * [CoveTheme] uses it for the whole app. Use it alone to show part of the screen in a fixed
+ * appearance, such as a sheet that must stay light, without restyling the status bar under it
+ */
+@Composable
+fun CoveColorTheme(
+    darkTheme: Boolean,
+    dynamicColor: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val colorScheme =
+        when {
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                val context = LocalContext.current
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
+
+            darkTheme -> DarkColorScheme
+            else -> LightColorScheme
+        }
     val coveColors = if (darkTheme) DarkCoveColors else LightCoveColors
 
     CompositionLocalProvider(LocalCoveColors provides coveColors) {

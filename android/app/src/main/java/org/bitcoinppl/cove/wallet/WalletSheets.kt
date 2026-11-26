@@ -14,7 +14,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,8 +36,8 @@ import org.bitcoinppl.cove.flows.SelectedWalletFlow.ReceiveAddressSheet
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
 import org.bitcoinppl.cove.views.QrExportView
+import org.bitcoinppl.cove.views.QrModalBottomSheet
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
-import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.LabelManager
 import java.io.File
@@ -172,13 +171,12 @@ internal fun WalletSheetsHost(
     // export labels QR sheet
     if (showLabelsQrExport) {
         exportLabelManager?.let { labelManager ->
-            ModalBottomSheet(
+            QrModalBottomSheet(
                 onDismissRequest = {
                     showLabelsQrExport = false
                     exportLabelManager?.close()
                     exportLabelManager = null
                 },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             ) {
                 QrExportView(
                     title = "Export Labels",
@@ -216,10 +214,7 @@ internal fun WalletSheetsHost(
 
     // export xpub QR sheet
     if (showXpubQrExport) {
-        ModalBottomSheet(
-            onDismissRequest = { showXpubQrExport = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
+        QrModalBottomSheet(onDismissRequest = { showXpubQrExport = false }) {
             ExportXpubQrView(manager)
         }
     }
