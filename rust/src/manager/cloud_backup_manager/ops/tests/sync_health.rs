@@ -658,7 +658,10 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
     );
 }
 
+// quarantined because shared-process cargo test runs can count background cloud listings
+// from other managers; fails intermittently on Cloud Backup stack CI (#1159)
 #[tokio::test(flavor = "current_thread")]
+#[ignore = "quarantined until 2027-01-21: https://github.com/bitcoinppl/cove/issues/1159"]
 async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
