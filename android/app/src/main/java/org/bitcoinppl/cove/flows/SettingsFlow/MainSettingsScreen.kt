@@ -306,6 +306,7 @@ fun MainSettingsScreen(
                                 onClick = {
                                     app.pushRoute(Route.Settings(SettingsRoute.CloudBackup))
                                 },
+                                modifier = Modifier.testTag("settings.cloud_backup"),
                             )
                         }
                     }

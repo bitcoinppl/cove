@@ -232,12 +232,35 @@ internal fun UiDevice.scrollUntilShown(
     upwardFirst: Boolean = false,
     message: String = "Timed out scrolling to ${target.description}",
     swipesPerDirection: Int = 4,
+) = scrollUntil(timeoutMs, upwardFirst, message, swipesPerDirection) { snapshot -> snapshot.shows(target) }
+
+/** Scrolls until [target] shows inside something clickable, then taps it once it holds still */
+internal fun UiDevice.scrollAndTap(
+    target: UiTarget,
+    timeoutMs: Long = 20_000L,
+    upwardFirst: Boolean = false,
+) {
+    // waits for the clickable match, since a section header with the same text can show while its
+    // row is still below the fold
+    scrollUntil(timeoutMs, upwardFirst, "Timed out scrolling to a control with ${target.description}") { snapshot ->
+        snapshot.control(target) != null
+    }
+
+    tap(target, timeoutMs)
+}
+
+private fun UiDevice.scrollUntil(
+    timeoutMs: Long,
+    upwardFirst: Boolean,
+    message: String,
+    swipesPerDirection: Int = 4,
+    found: (UiSnapshot) -> Boolean,
 ) {
     val deadline = System.currentTimeMillis() + timeoutMs
     var swipes = 0
 
     while (System.currentTimeMillis() < deadline) {
-        if (snapshot().shows(target)) return
+        if (found(snapshot())) return
 
         val upward = ((swipes / swipesPerDirection) % 2 == 1) != upwardFirst
         val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
@@ -250,16 +273,6 @@ internal fun UiDevice.scrollUntilShown(
     }
 
     error("$message; on screen: ${snapshot().texts()}")
-}
-
-/** Scrolls until [target] is on screen, then taps its control once it holds still */
-internal fun UiDevice.scrollAndTap(
-    target: UiTarget,
-    timeoutMs: Long = 20_000L,
-    upwardFirst: Boolean = false,
-) {
-    scrollUntilShown(target, timeoutMs, upwardFirst)
-    tap(target, timeoutMs)
 }
 
 private const val POLL_MS = 100L
