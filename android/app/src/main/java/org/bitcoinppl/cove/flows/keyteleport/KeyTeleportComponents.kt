@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +49,9 @@ import org.bitcoinppl.cove_core.types.WalletId
 
 private const val QR_BITMAP_SIZE = 720
 
+/** The white border, in modules, that the QR code standard asks scanners to be given */
+private const val QR_QUIET_ZONE_MODULES = 4
+
 @Composable
 internal fun WalletChoices(
     wallets: List<WalletMetadata>,
@@ -77,12 +79,16 @@ internal fun WalletChoices(
 /**
  * A KeyTeleport packet's QR code on a white card
  *
- * The screens stay dark, so the card's wide white border gives a camera the quiet zone it needs to
- * find the code against the dark background around it
+ * The screens stay dark, so the card's white border gives a camera the quiet zone it needs to find
+ * the code against the dark background around it. The border is drawn in the code's own modules,
+ * so it stays four modules wide however dense the packet makes the code
  */
 @Composable
 internal fun PacketQr(text: String) {
-    val bitmap = remember(text) { QrCodeGenerator.generate(text, size = QR_BITMAP_SIZE) }
+    val bitmap =
+        remember(text) {
+            QrCodeGenerator.generate(text, size = QR_BITMAP_SIZE, quietZoneModules = QR_QUIET_ZONE_MODULES)
+        }
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Image(
@@ -93,8 +99,7 @@ internal fun PacketQr(text: String) {
                 Modifier
                     .size(280.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White)
-                    .padding(20.dp),
+                    .background(Color.White),
         )
     }
 }
