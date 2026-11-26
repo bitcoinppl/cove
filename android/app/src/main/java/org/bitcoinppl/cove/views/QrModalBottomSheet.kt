@@ -1,18 +1,22 @@
 package org.bitcoinppl.cove.views
 
+import android.view.Window
 import android.view.WindowManager
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheetDefaults
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.SecureFlagPolicy
+import androidx.core.view.WindowCompat
 import org.bitcoinppl.cove.findActivity
 import org.bitcoinppl.cove.ui.theme.CoveColorTheme
+import org.bitcoinppl.cove.views.lockaware.LocalAppLocked
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 
 /**
@@ -20,18 +24,28 @@ import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
  *
  * The sheet stays light whatever the app's appearance, since cheap scanner cameras, such as
  * SeedSigner's, fail to find a QR code drawn on a dark sheet. The screen goes to full brightness
- * while the sheet is open and returns to the user's level once it closes. Takes the parameters of
- * [ModalBottomSheet] that QR sheets use
+ * while the sheet is open and the app is unlocked, and returns to the user's level once it closes.
+ * [securePolicy] sets whether the sheet's window may be captured in screenshots
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QrModalBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    properties: ModalBottomSheetProperties = ModalBottomSheetDefaults.properties,
+    securePolicy: SecureFlagPolicy = SecureFlagPolicy.Inherit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     FullScreenBrightness()
+
+    // the status bar shows the dimmed screen behind the sheet, so its icons keep that screen's
+    // appearance, while the navigation bar sits over the white sheet and needs dark icons. Left
+    // unset, the sheet would pick both from its own dark text
+    val properties =
+        ModalBottomSheetProperties(
+            securePolicy = securePolicy,
+            isAppearanceLightStatusBars = activityHasLightStatusBars(),
+            isAppearanceLightNavigationBars = true,
+        )
 
     CoveColorTheme(darkTheme = false) {
         ModalBottomSheet(
@@ -46,25 +60,36 @@ fun QrModalBottomSheet(
 }
 
 /**
- * Raises the screen to full brightness while this is composed
+ * Whether the activity's window draws dark status bar icons, which a light screen asks for, or
+ * whether the system is in light mode when the sheet has no activity to ask
+ */
+@Composable
+private fun activityHasLightStatusBars(): Boolean {
+    val view = LocalView.current
+    val window = view.context.findActivity()?.window ?: return !isSystemInDarkTheme()
+    return WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars
+}
+
+/**
+ * Raises the screen to full brightness while this is composed and the app is unlocked
  *
  * Sets the activity window's brightness, which Android applies only while the app is in front and
- * which the sheet's own window above it leaves in effect. Nothing else in the app sets it, so
- * leaving puts back the user's level by clearing the override rather than restoring a saved value
+ * which the sheet's own window above it leaves in effect. The app lock hides the sheet but keeps it
+ * composed, and the lock screen draws in that same activity window, so the override is cleared
+ * while locked. Nothing else in the app sets it, so leaving puts back the user's level by clearing
+ * the override rather than restoring a saved value
  */
 @Composable
 private fun FullScreenBrightness() {
     val window = LocalView.current.context.findActivity()?.window ?: return
+    val locked = LocalAppLocked.current
 
-    DisposableEffect(window) {
-        window.attributes = window.attributes.apply {
-            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
-        }
-
-        onDispose {
-            window.attributes = window.attributes.apply {
-                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-            }
-        }
+    DisposableEffect(window, locked) {
+        if (!locked) window.setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL)
+        onDispose { window.setScreenBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE) }
     }
+}
+
+private fun Window.setScreenBrightness(brightness: Float) {
+    attributes = attributes.apply { screenBrightness = brightness }
 }
