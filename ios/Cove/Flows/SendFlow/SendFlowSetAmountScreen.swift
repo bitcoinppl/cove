@@ -203,8 +203,9 @@ struct SendFlowSetAmountScreen: View {
                 presenter.focusField = .address
             }
 
+            // the fee total can still be loading here, so rust alerts once it knows the fee
             if let amount = sendFlowManager.amount, amount.asSats() != 0 {
-                _ = validateAmount(displayAlert: true)
+                _ = sendFlowManager.checkPrefilledAmount()
             }
 
             if sendFlowManager.address != nil {

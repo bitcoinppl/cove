@@ -48,6 +48,7 @@ use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
 use tracing::{debug, error, trace, warn};
+use validation::AmountAlert;
 
 use super::{
     deferred_sender,
@@ -240,7 +241,17 @@ impl RustSendFlowManager {
 
     #[uniffi::method(default(display_alert = false))]
     pub fn validate_amount(self: &Arc<Self>, display_alert: bool) -> bool {
-        self.validate_amount_internal(display_alert)
+        self.validate_amount_internal(display_alert.into())
+    }
+
+    /// Checks an amount Send opened with, such as one from a scanned payment request, and alerts
+    /// on what is wrong with it
+    ///
+    /// The screen can open before the fee total is calculated, so while it is still loading the
+    /// check waits for it and runs when it lands, instead of alerting that the fee is still loading
+    #[uniffi::method]
+    pub fn check_prefilled_amount(self: &Arc<Self>) -> bool {
+        self.validate_amount_internal(AmountAlert::ShownOnceFeeLoads)
     }
 }
 
@@ -259,26 +270,23 @@ impl RustSendFlowManager {
         true
     }
 
-    pub(crate) fn validate_amount_internal(self: &Arc<Self>, display_alert: bool) -> bool {
+    pub(crate) fn validate_amount_internal(self: &Arc<Self>, alert: AmountAlert) -> bool {
         let mut sender = self.reconciler.deferred_sender();
-        let Some(amount) = self.state.lock().amount_sats else {
-            let msg = Message::SetAlert(SendFlowError::InvalidNumber.into());
-            if display_alert {
-                sender.queue(msg);
-            } else {
-                debug!("validate_amount_failed: {msg:?}");
-            }
+        self.validate_amount_with(alert, &mut sender)
+    }
 
+    fn validate_amount_with(
+        self: &Arc<Self>,
+        alert: AmountAlert,
+        sender: &mut DeferredSender,
+    ) -> bool {
+        let Some(amount) = self.state.lock().amount_sats else {
+            Self::report_amount_failure(alert, SendFlowError::InvalidNumber.into(), sender);
             return false;
         };
 
         if amount == 0 {
-            let msg = Message::SetAlert(SendFlowError::ZeroAmount.into());
-            if display_alert {
-                sender.queue(msg);
-            } else {
-                debug!("validate_amount_failed: {msg:?}");
-            }
+            Self::report_amount_failure(alert, SendFlowError::ZeroAmount.into(), sender);
             return false;
         }
 
@@ -324,15 +332,8 @@ impl RustSendFlowManager {
                     return true;
                 }
 
-                if let Some(alert) = unavailable_balance_alert {
-                    let msg = Message::SetAlert(alert);
-
-                    if display_alert {
-                        sender.queue(msg);
-                    } else {
-                        debug!("validate_amount_failed: {msg:?}");
-                    }
-
+                if let Some(unavailable_balance_alert) = unavailable_balance_alert {
+                    Self::report_amount_failure(alert, unavailable_balance_alert, sender);
                     return false;
                 }
 
@@ -346,12 +347,7 @@ impl RustSendFlowManager {
 
                 let error =
                     validation::spend_over_balance_error(amount, total_fee_sats, spendable_balance);
-                let msg = Message::SetAlert(error.into());
-                if display_alert {
-                    sender.queue(msg);
-                } else {
-                    debug!("validate_amount_failed: {msg:?}");
-                }
+                Self::report_amount_failure(alert, error.into(), sender);
 
                 false
             }
@@ -359,15 +355,43 @@ impl RustSendFlowManager {
             validation::SpendableBalanceCheck::MissingFeeTotal => {
                 self.schedule_fee_rate_update();
 
-                let msg = Message::SetAlert(validation::missing_fee_total_alert());
-                if display_alert {
-                    sender.queue(msg);
-                } else {
-                    debug!("validate_amount_failed: {msg:?}");
+                // apply_fee_selection runs the check again once the total lands
+                if alert == AmountAlert::ShownOnceFeeLoads {
+                    self.state.lock().amount_check_awaiting_fee = Some(amount);
+                    debug!("validate_amount waits for the fee total");
+                    return false;
                 }
+
+                Self::report_amount_failure(alert, validation::missing_fee_total_alert(), sender);
 
                 false
             }
+        }
+    }
+
+    /// Runs an amount check that waited for the fee total, if the amount it checked is still the
+    /// one entered; a different amount had its own check when it was entered
+    fn run_amount_check_awaiting_fee(self: &Arc<Self>, sender: &mut DeferredSender) {
+        let awaiting_amount_is_current = {
+            let mut state = self.state.lock();
+            let awaiting = state.amount_check_awaiting_fee.take();
+            awaiting.is_some() && awaiting == state.amount_sats
+        };
+
+        if awaiting_amount_is_current {
+            self.validate_amount_with(AmountAlert::ShownOnceFeeLoads, sender);
+        }
+    }
+
+    fn report_amount_failure(
+        alert: AmountAlert,
+        failure: SendFlowAlertState,
+        sender: &mut DeferredSender,
+    ) {
+        let msg = Message::SetAlert(failure);
+        match alert {
+            AmountAlert::Silent => debug!("validate_amount_failed: {msg:?}"),
+            AmountAlert::Shown | AmountAlert::ShownOnceFeeLoads => sender.queue(msg),
         }
     }
 
@@ -1583,6 +1607,102 @@ mod tests {
             super::SendFlowAlertState::General { title, .. }
                 if title == "Fee Estimate Still Loading"
         ));
+    }
+
+    /// Lands a fee selection with a total the way a fee refresh does, returning the alerts it sent
+    fn land_fee_total(
+        manager: &Arc<super::RustSendFlowManager>,
+        total_fee_sats: u64,
+    ) -> Vec<super::SendFlowAlertState> {
+        let selected = fee_rate_option_with_total_fee(custom_fee_speed(), total_fee_sats);
+        let options = FeeRateOptionsWithTotalFee {
+            fast: fee_rate_option_with_total_fee(FeeSpeed::Fast, total_fee_sats),
+            medium: fee_rate_option_with_total_fee(FeeSpeed::Medium, total_fee_sats),
+            slow: fee_rate_option_with_total_fee(FeeSpeed::Slow, total_fee_sats),
+            custom: Some(selected),
+        };
+        let selection = super::FeeSelection::new(Arc::new(options), Arc::new(selected));
+
+        {
+            let mut sender = manager.reconciler.deferred_sender();
+            manager.apply_fee_selection(selection, &mut sender);
+        }
+
+        alerts(manager)
+    }
+
+    fn alerts(manager: &super::RustSendFlowManager) -> Vec<super::SendFlowAlertState> {
+        drain_reconcile_messages(manager)
+            .into_iter()
+            .filter_map(|message| match message {
+                super::Message::SetAlert(alert) => Some(alert),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn prefilled_amount_awaiting_fee(amount_sats: u64) -> Arc<super::RustSendFlowManager> {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, amount_sats);
+        set_selected_fee_without_total(&manager);
+        manager
+    }
+
+    #[test]
+    fn prefilled_amount_check_does_not_alert_while_the_fee_total_loads() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = prefilled_amount_awaiting_fee(5_000);
+
+        assert!(!manager.check_prefilled_amount());
+        assert_eq!(alerts(&manager), vec![]);
+
+        // a fee that fits leaves nothing to alert once it lands
+        assert_eq!(land_fee_total(&manager, 156), vec![]);
+        assert!(manager.validate_amount(false));
+    }
+
+    #[test]
+    fn prefilled_amount_check_alerts_once_the_fee_total_shows_the_spend_is_over_balance() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = prefilled_amount_awaiting_fee(49_900);
+
+        assert!(!manager.check_prefilled_amount());
+        assert_eq!(alerts(&manager), vec![]);
+
+        // 49,900 sats plus a 156 sat fee is 56 sats over the 50,000 spendable
+        let expected =
+            super::SendFlowAlertState::Error(super::SendFlowError::SpendExceedsBalance {
+                shortfall_sats: 56,
+            });
+        assert_eq!(land_fee_total(&manager, 156), vec![expected]);
+
+        // the held check runs once, so a later fee refresh doesn't alert again
+        assert_eq!(land_fee_total(&manager, 156), vec![]);
+    }
+
+    #[test]
+    fn prefilled_amount_check_is_dropped_when_the_amount_changes_before_the_fee_lands() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = prefilled_amount_awaiting_fee(5_000);
+
+        assert!(!manager.check_prefilled_amount());
+        manager.state.lock().amount_sats = Some(49_900);
+
+        assert_eq!(land_fee_total(&manager, 156), vec![]);
+    }
+
+    #[test]
+    fn prefilled_amount_check_still_alerts_an_amount_over_balance_before_the_fee_loads() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = prefilled_amount_awaiting_fee(50_100);
+
+        assert!(!manager.check_prefilled_amount());
+        assert_eq!(
+            alerts(&manager),
+            vec![super::SendFlowAlertState::Error(super::SendFlowError::AmountExceedsBalance {
+                excess_sats: 100
+            })]
+        );
     }
 
     #[test]

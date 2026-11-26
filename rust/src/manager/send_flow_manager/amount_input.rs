@@ -12,6 +12,7 @@ use super::{
     Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, State, btc_on_change,
     fiat_on_change,
     state::{MaxSelection, SendFlowManagerState},
+    validation::AmountAlert,
 };
 
 impl RustSendFlowManager {
@@ -160,7 +161,9 @@ impl RustSendFlowManager {
             self.apply_fee_selection(FeeSelection::new(options, fee_rate), &mut sender);
         }
 
-        if self.validate_amount_internal(false) && self.validate_address_internal(false) {
+        if self.validate_amount_internal(AmountAlert::Silent)
+            && self.validate_address_internal(false)
+        {
             self.state.lock().focus_field = None;
             sender.queue(Message::UpdateFocusField(None));
         }
@@ -202,7 +205,9 @@ impl RustSendFlowManager {
                     && state.amount_sats.unwrap_or_default() != 0
             };
 
-            if !self.validate_amount_internal(should_show_error) {
+            // leaving the fields doesn't ask to send, so a fee still loading isn't alerted
+            let amount_alert = AmountAlert::shown_once_fee_loads_if(should_show_error);
+            if !self.validate_amount_internal(amount_alert) {
                 self.state.lock().focus_field = Some(SetAmountFocusField::Amount);
                 sender.queue(Message::UpdateFocusField(Some(SetAmountFocusField::Amount)));
                 return;

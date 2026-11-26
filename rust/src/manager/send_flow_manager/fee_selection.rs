@@ -285,6 +285,8 @@ impl RustSendFlowManager {
         // refreshed rates arrive without totals, and coin-control Max and the fee checks need one
         if selected.total_fee.is_none() {
             self.schedule_fee_rate_update();
+        } else {
+            self.run_amount_check_awaiting_fee(sender);
         }
 
         self.reconcile_coin_control_amount_for_selected_fee();
