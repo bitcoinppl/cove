@@ -337,7 +337,7 @@ final class SendFlowDisplayPreferencesFullLaunchUITests: XCTestCase {
     private func typeAmount(_ amount: String) {
         XCTAssertTrue(amountField.waitForExistence(timeout: 10))
         amountField.tap()
-        amountField.typeTextOnceFocused(amount)
+        amountField.typeTextKeyByKey(amount)
         waitForAmountText(amount, "the amount field didn't take \(amount)")
     }
 
@@ -348,7 +348,7 @@ final class SendFlowDisplayPreferencesFullLaunchUITests: XCTestCase {
 
         let current = amountField.value as? String ?? ""
         let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 1)
-        amountField.typeTextOnceFocused(deletes + amount)
+        amountField.typeTextKeyByKey(deletes + amount)
     }
 
     /// Waits for the amount field to show the text, ignoring the grouping commas sats get

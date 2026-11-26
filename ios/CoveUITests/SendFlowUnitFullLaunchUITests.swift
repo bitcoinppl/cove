@@ -117,7 +117,7 @@ final class SendFlowUnitFullLaunchUITests: XCTestCase {
     private func typeAmount(_ amount: String) {
         XCTAssertTrue(amountField.waitForExistence(timeout: 10))
         amountField.tap()
-        amountField.typeTextOnceFocused(amount)
+        amountField.typeTextKeyByKey(amount)
         waitForAmountText(amount, "the amount field didn't take \(amount)")
     }
 
