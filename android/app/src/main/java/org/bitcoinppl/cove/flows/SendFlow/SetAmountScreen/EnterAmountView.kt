@@ -147,6 +147,7 @@ fun EnterAmountView(
             Row(
                 modifier =
                     Modifier
+                        .testTag("sendFlow.secondaryAmount")
                         .clickable(onClick = onToggleFiatOrBtc)
                         .padding(vertical = 8.dp)
                         .then(

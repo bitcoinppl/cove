@@ -18,6 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -308,7 +311,12 @@ fun CoinControlCustomAmountSheet(
                                 ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
-                            modifier = Modifier.widthIn(max = 100.dp),
+                            // the sheet is its own window, so the app root's resource id mapping doesn't reach it
+                            modifier =
+                                Modifier
+                                    .widthIn(max = 100.dp)
+                                    .semantics { testTagsAsResourceId = true }
+                                    .testTag("sendFlow.coinControl.customAmount"),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
