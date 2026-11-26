@@ -11,6 +11,7 @@ pub(crate) mod fake_node;
 pub(crate) mod hardware_signing;
 pub(crate) mod log_capture;
 pub(crate) mod malformed_psbt;
+pub(crate) mod payjoin;
 pub(crate) mod tap_signer_emulator;
 pub(crate) mod utxo_locks;
 pub(crate) mod wallet_target;

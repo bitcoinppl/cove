@@ -7,6 +7,7 @@ target = "rust"
 paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/wallet_manager/payjoin/**",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
 ]
@@ -25,6 +26,7 @@ target = "rust"
 paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/wallet_manager/payjoin/**",
     "rust/src/manager/wallet_manager/actor.rs",
     "rust/src/manager/wallet_manager/actor/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
@@ -137,6 +139,7 @@ target = "rust"
 paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/wallet_manager/payjoin/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
     "rust/src/manager/send_flow_manager/finalize.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
@@ -157,6 +160,7 @@ target = "rust"
 paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/wallet_manager/payjoin/**",
     "rust/src/manager/send_flow_manager/address_input.rs",
     "rust/src/manager/send_flow_manager/finalize.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",

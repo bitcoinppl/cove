@@ -42,9 +42,9 @@ use crate::{
 
 /// A fake node selected for signet, which puts back the node, wallet lists, selections, network
 /// and wallet mode it changed when it drops, since later tests share these settings
-struct Fixture {
-    node: FakeNode,
-    network: Network,
+pub(crate) struct Fixture {
+    pub(crate) node: FakeNode,
+    pub(crate) network: Network,
     previous_node: Node,
     previous_block_height: Option<BlockSizeLast>,
     wallet_id: Option<WalletId>,
@@ -55,7 +55,7 @@ struct Fixture {
 
 impl Fixture {
     /// Starts from empty signet wallet lists in main mode, with the fake node selected
-    fn signet() -> Self {
+    pub(crate) fn signet() -> Self {
         crate::test_support::ensure_tokio_runtime();
         crate::test_support::init_test_keychain();
         let wallets = RestoreSignetWallets::empty();
@@ -85,7 +85,7 @@ impl Fixture {
     }
 
     /// Opens the wallet's manager as the wallet screen does, and owns the wallet's cleanup
-    fn open(&mut self, id: WalletId) -> (RustWalletManager, ScreenUpdates) {
+    pub(crate) fn open(&mut self, id: WalletId) -> (RustWalletManager, ScreenUpdates) {
         self.own(&id);
         let manager = RustWalletManager::try_new(id).expect("the wallet manager opens");
         let screen = ScreenUpdates::listen(&manager);
@@ -109,12 +109,12 @@ impl Drop for Fixture {
 }
 
 /// A mnemonic nobody has used, so its addresses have no history anywhere
-fn fresh_mnemonic() -> Mnemonic {
+pub(crate) fn fresh_mnemonic() -> Mnemonic {
     Mnemonic::from_entropy(&rand::rng().random::<[u8; 16]>()).expect("16 bytes of entropy")
 }
 
 /// Reconcile messages the manager sent the screen that shows it
-struct ScreenUpdates {
+pub(crate) struct ScreenUpdates {
     receiver: Arc<flume::Receiver<SingleOrMany<Msg>>>,
     seen: Vec<Msg>,
 }
@@ -166,7 +166,7 @@ impl ScreenUpdates {
     }
 
     /// Waits for a scan to complete and the scan status to settle back to idle after it
-    async fn until_scan_settles(&mut self) {
+    pub(crate) async fn until_scan_settles(&mut self) {
         self.seen.clear();
         self.until_then_idle("the scan to complete", |message| {
             matches!(message, Msg::ScanComplete(_))
@@ -179,7 +179,7 @@ fn tx_id(txid: Txid) -> Arc<TxId> {
     Arc::new(TxId::from(txid))
 }
 
-async fn receive_script(manager: &RustWalletManager, index: u32) -> ScriptBuf {
+pub(crate) async fn receive_script(manager: &RustWalletManager, index: u32) -> ScriptBuf {
     let info = manager.address_at(index).await.expect("the wallet derives the address");
 
     bitcoin::Address::from_str(&info.address.to_string())

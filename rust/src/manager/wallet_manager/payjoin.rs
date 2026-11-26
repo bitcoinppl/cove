@@ -17,7 +17,6 @@ use payjoin::{
     },
     uri::v2::PjParam as V2PjParam,
 };
-use rand::seq::SliceRandom as _;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, warn};
@@ -28,13 +27,9 @@ use crate::database::wallet_data::{
 
 use super::actor::WalletActor;
 
-// maximum time to wait for a receiver proposal before broadcasting the fallback transaction;
-// the receiver's own pj expiry can be much later, so this bounds how long the payment waits.
-// a poll past the receiver's expiry is rejected by create_poll_request and falls back at once
-const PAYJOIN_SESSION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+mod config;
 
-const OHTTP_RELAYS: [&str; 3] =
-    ["https://relay.payjoin.org", "https://ohttp.achow101.com", "https://pj.bobspacebkk.com"];
+pub(crate) use config::{OhttpRelays, PayjoinConfig};
 
 /// Persists payjoin session events to the wallet's database so sessions survive app restarts.
 ///
@@ -283,13 +278,6 @@ async fn http_post(
         .to_vec())
 }
 
-// returns OHTTP relay URLs shuffled per call for resilience and privacy
-fn ohttp_relays() -> Vec<&'static str> {
-    let mut relays = OHTTP_RELAYS.to_vec();
-    relays.shuffle(&mut rand::rng());
-    relays
-}
-
 /// Why a request could not be carried by any OHTTP relay
 #[derive(Debug)]
 enum RelayRoundError {
@@ -302,15 +290,16 @@ enum RelayRoundError {
 // tries each OHTTP relay in shuffled order, returning the first successful (body, context) pair
 async fn try_ohttp_relays<C>(
     client: &reqwest::Client,
+    relays: &OhttpRelays,
     timeout: Duration,
     build_request: impl Fn(&str) -> Result<(payjoin::Request, C), CreateRequestError>,
 ) -> Result<(Vec<u8>, C), RelayRoundError> {
     // per-relay failures stay at debug because polls repeat them every tick; callers log
     // the summary returned here
-    let relays = ohttp_relays();
+    let relays = relays.shuffled();
     let mut last_err = eyre::eyre!("no OHTTP relays configured");
     for relay in &relays {
-        let (req, ctx) = match build_request(relay) {
+        let (req, ctx) = match build_request(relay.as_str()) {
             Ok(pair) => pair,
 
             // expiry does not depend on the relay, so trying the others cannot help
@@ -418,6 +407,7 @@ async fn do_poll(
     addr: WeakAddr<PayjoinActor>,
     polling_sender: V2Sender<PollingForProposal>,
     persister: PayjoinSessionPersister,
+    relays: OhttpRelays,
 ) {
     let client = match cove_http::new_client() {
         Ok(c) => c,
@@ -432,7 +422,7 @@ async fn do_poll(
     // proposal arrives or its own timeout fires, so allow slightly more than
     // the server-side timeout to avoid racing it
     let (poll_response, poll_ctx) =
-        match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
+        match try_ohttp_relays(&client, &relays, Duration::from_secs(35), |relay| {
             polling_sender.create_poll_request(relay)
         })
         .await
@@ -526,6 +516,7 @@ pub(crate) struct PayjoinActor {
     addr: WeakAddr<Self>,
     wallet_addr: WeakAddr<WalletActor>,
     persister: PayjoinSessionPersister,
+    config: PayjoinConfig,
     fallback_tx: BdkTransaction,
     session: PayjoinSession,
     poll_deadline: Option<Instant>,
@@ -537,6 +528,7 @@ impl PayjoinActor {
     pub(crate) fn new(
         wallet_addr: WeakAddr<WalletActor>,
         persister: PayjoinSessionPersister,
+        config: PayjoinConfig,
         sender: V2Sender<WithReplyKey>,
         fallback_tx: BdkTransaction,
     ) -> Self {
@@ -544,6 +536,7 @@ impl PayjoinActor {
             addr: WeakAddr::default(),
             wallet_addr,
             persister,
+            config,
             fallback_tx,
             session: PayjoinSession::PrePost { sender },
             poll_deadline: None,
@@ -555,24 +548,28 @@ impl PayjoinActor {
     pub(crate) fn resume_polling(
         wallet_addr: WeakAddr<WalletActor>,
         persister: PayjoinSessionPersister,
+        config: PayjoinConfig,
         polling_sender: V2Sender<PollingForProposal>,
         fallback_tx: BdkTransaction,
         created_at_secs: Option<u64>,
     ) -> Self {
+        let session_timeout = config.session_timeout();
         let poll_deadline = Some(match created_at_secs {
-            None => Instant::now() + PAYJOIN_SESSION_TIMEOUT,
+            None => Instant::now() + session_timeout,
 
             Some(start) => {
                 let now_secs =
                     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
                 let elapsed = Duration::from_secs(now_secs.saturating_sub(start));
-                Instant::now() + PAYJOIN_SESSION_TIMEOUT.saturating_sub(elapsed)
+                Instant::now() + session_timeout.saturating_sub(elapsed)
             }
         });
+
         Self {
             addr: WeakAddr::default(),
             wallet_addr,
             persister,
+            config,
             fallback_tx,
             session: PayjoinSession::Polling { polling_sender },
             poll_deadline,
@@ -617,6 +614,7 @@ impl PayjoinActor {
         };
 
         let persister = self.persister.clone();
+        let relays = self.config.relays().clone();
 
         self.addr.send_fut_with(|addr| async move {
             let client = match cove_http::new_client() {
@@ -629,7 +627,7 @@ impl PayjoinActor {
             };
 
             let (post_response, post_ctx) =
-                match try_ohttp_relays(&client, Duration::from_secs(30), |relay| {
+                match try_ohttp_relays(&client, &relays, Duration::from_secs(30), |relay| {
                     sender.create_v2_post_request(relay)
                 })
                 .await
@@ -679,7 +677,7 @@ impl PayjoinActor {
             return Produces::ok(());
         }
 
-        self.poll_deadline = Some(Instant::now() + PAYJOIN_SESSION_TIMEOUT);
+        self.poll_deadline = Some(Instant::now() + self.config.session_timeout());
         self.session = PayjoinSession::Polling { polling_sender };
         self.begin_next_poll();
         Produces::ok(())
@@ -711,7 +709,8 @@ impl PayjoinActor {
         };
 
         let persister = self.persister.clone();
-        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender, persister));
+        let relays = self.config.relays().clone();
+        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender, persister, relays));
 
         Produces::ok(())
     }
@@ -886,6 +885,7 @@ pub(crate) enum SessionResumption {
 pub(crate) fn resume_session(
     db: WalletDataDb,
     wallet_addr: WeakAddr<WalletActor>,
+    config: &PayjoinConfig,
 ) -> SessionResumption {
     let record = match db.get_payjoin_sender_session() {
         Ok(Some(record)) => record,
@@ -940,7 +940,7 @@ pub(crate) fn resume_session(
                 .created_at_secs
                 .map(|start| Duration::from_secs(now_secs.saturating_sub(start)));
 
-            if elapsed.is_some_and(|e| e >= PAYJOIN_SESSION_TIMEOUT) {
+            if elapsed.is_some_and(|e| e >= config.session_timeout()) {
                 warn!("payjoin session expired before resume, broadcasting fallback");
                 return fallback_from_record(&db, record);
             }
@@ -948,6 +948,7 @@ pub(crate) fn resume_session(
             SessionResumption::Resume(Box::new(PayjoinActor::resume_polling(
                 wallet_addr,
                 persister,
+                config.clone(),
                 polling_sender,
                 fallback_tx,
                 record.created_at_secs,
@@ -1041,6 +1042,7 @@ pub(crate) mod test_support {
             addr: WeakAddr::default(),
             wallet_addr: WeakAddr::default(),
             persister,
+            config: PayjoinConfig::default(),
             fallback_tx,
             session: PayjoinSession::Posting,
             poll_deadline: Some(Instant::now()),
@@ -1227,6 +1229,7 @@ mod tests {
             addr: WeakAddr::default(),
             wallet_addr: WeakAddr::default(),
             persister,
+            config: PayjoinConfig::default(),
             fallback_tx: empty_transaction(),
             session: PayjoinSession::Posting,
             poll_deadline: Some(Instant::now()),
@@ -1345,7 +1348,7 @@ mod tests {
     fn resume_with_no_record_is_none() {
         let (_persister, db) = new_test_persister();
 
-        let resumption = resume_session(db, WeakAddr::default());
+        let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         assert!(matches!(resumption, SessionResumption::None));
     }
@@ -1358,7 +1361,7 @@ mod tests {
         // a log that does not start with a Created event cannot be replayed
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
 
-        let resumption = resume_session(db, WeakAddr::default());
+        let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         match resumption {
             SessionResumption::BroadcastFallback { fallback_tx } => assert_eq!(fallback_tx, tx),
@@ -1389,7 +1392,7 @@ mod tests {
         };
         db.set_payjoin_sender_session(session).unwrap();
 
-        let resumption = resume_session(db, WeakAddr::default());
+        let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         match resumption {
             SessionResumption::BroadcastFallback { fallback_tx } => assert_eq!(fallback_tx, tx),
@@ -1454,7 +1457,7 @@ mod tests {
         };
         db.set_payjoin_sender_session(session).unwrap();
 
-        let resumption = resume_session(db, WeakAddr::default());
+        let resumption = resume_session(db, WeakAddr::default(), &PayjoinConfig::default());
 
         match resumption {
             SessionResumption::BroadcastStoredProposal { proposal_tx } => {
@@ -1477,7 +1480,7 @@ mod tests {
         };
         db.set_payjoin_sender_session(session).unwrap();
 
-        let resumption = resume_session(db.clone(), WeakAddr::default());
+        let resumption = resume_session(db.clone(), WeakAddr::default(), &PayjoinConfig::default());
 
         assert!(
             matches!(resumption, SessionResumption::ReportError { .. }),
@@ -1501,7 +1504,7 @@ mod tests {
         };
         db.set_payjoin_sender_session(session).unwrap();
 
-        let resumption = resume_session(db.clone(), WeakAddr::default());
+        let resumption = resume_session(db.clone(), WeakAddr::default(), &PayjoinConfig::default());
 
         assert!(
             matches!(resumption, SessionResumption::ReportError { .. }),
@@ -1525,7 +1528,7 @@ mod tests {
         };
         db.set_payjoin_sender_session(session).unwrap();
 
-        let resumption = resume_session(db.clone(), WeakAddr::default());
+        let resumption = resume_session(db.clone(), WeakAddr::default(), &PayjoinConfig::default());
 
         assert!(
             matches!(resumption, SessionResumption::ReportError { .. }),
