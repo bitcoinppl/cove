@@ -327,6 +327,27 @@ class SendDisplayRobot(
 
     fun customAmountText(): String? = device.findText(By.res(CUSTOM_AMOUNT_TAG))
 
+    /**
+     * Replaces the custom amount with [amount], deleting what the field shows key by key from its
+     * end, since select all doesn't take in the sheet's field and the tap that focuses it can put
+     * the cursor anywhere; the field keeps typed text as typed, so no key reformats it midway
+     */
+    fun replaceCustomAmount(amount: String) {
+        repeat(2) {
+            val shown = customAmountText().orEmpty()
+            device.waitFor(By.res(CUSTOM_AMOUNT_TAG)).click()
+            device.waitForIdle()
+            device.executeShellCommand("input keyevent KEYCODE_MOVE_END")
+            device.executeShellCommand("input keyevent ${List(shown.length + 1) { "KEYCODE_DEL" }.joinToString(" ")}")
+            if (!becomesTrue(2_000L) { customAmountText().isNullOrEmpty() }) return@repeat
+
+            device.executeShellCommand("input text $amount")
+            if (becomesTrue(5_000L) { customAmountText()?.replace(",", "") == amount }) return
+        }
+
+        fail("the custom amount field didn't take $amount, got \"${customAmountText()}\"\n${device.hierarchy()}")
+    }
+
     fun closeCustomAmountSheet() {
         wallet.dismissKeyboard()
         device.waitFor(By.desc("Close")).click()

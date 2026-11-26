@@ -198,9 +198,7 @@ class SendFlowDisplayPreferencesFullLaunchTest {
 
         send.openCustomAmountSheet()
         device.waitFor(By.text("SATS"))
-        send.wallet.typeInto(By.res(SendDisplayRobot.CUSTOM_AMOUNT_TAG), "150000") {
-            send.customAmountText()?.replace(",", "") == "150000"
-        }
+        send.replaceCustomAmount("150000")
         send.closeCustomAmountSheet()
 
         assertEquals("the custom amount didn't reach the amount screen", "150000", send.waitForCoinControlAmount("the custom amount never showed"))
