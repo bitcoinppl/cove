@@ -176,8 +176,10 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     private func screenAppeared() {
-        // the same coins sorted another way keep the draft in Rust, so order doesn't matter here
-        if validate(), sendFlowManager.utxos().map(Set.init) == Set(utxos) {
+        // Rust keeps the draft for the same coins, by outpoint, in any order and whatever their
+        // labels say now
+        let sameCoins = sendFlowManager.utxos().map { Set($0.map(\.outpoint)) } == Set(utxos.map(\.outpoint))
+        if validate(), sameCoins {
             isLoading = false
             loadingOpacity = 0
             presenter.focusField = .none
