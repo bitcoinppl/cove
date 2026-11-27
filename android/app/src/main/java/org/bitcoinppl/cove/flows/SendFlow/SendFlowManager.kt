@@ -110,8 +110,9 @@ class SendFlowManager internal constructor(
     var totalFeeString by mutableStateOf<String?>(null)
         private set
 
-    // debounce task
+    // debounce task, and the action it will dispatch
     private var debouncedTask: Job? = null
+    private var pendingAction: SendFlowManagerAction? = null
 
     init {
         logDebug("Initializing SendFlowManager for $id")
@@ -269,8 +270,7 @@ class SendFlowManager internal constructor(
 
     /** Commits the released slider amount and returns the authoritative Rust amount */
     fun commitCoinControlAmount(amount: Amount): Amount {
-        debouncedTask?.cancel()
-        debouncedTask = null
+        cancelDebouncedDispatch()
 
         return withRustOr(amount) {
             dispatch(SendFlowManagerAction.NotifyCoinControlAmountChanged(amount))
@@ -316,7 +316,13 @@ class SendFlowManager internal constructor(
     /** Applies what the user is entering, and the unit and field it is entered in */
     private fun applyEntry(message: SendFlowManagerReconcileMessage) {
         when (message) {
-            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> amountEntryMode = message.v1
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> {
+                // an edit typed before the mode change goes out now, tagged with the unit it was
+                // typed in, so Rust commits it instead of dropping it for the new unit
+                flushDebouncedDispatch()
+                amountEntryMode = message.v1
+            }
+
             is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> enteringBtcAmount = message.v1
             is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> enteringFiatAmount = message.v1
             is SendFlowManagerReconcileMessage.UpdateEnteringAddress -> _enteringAddress = message.v1
@@ -423,27 +429,39 @@ class SendFlowManager internal constructor(
         action: SendFlowManagerAction,
         debounceDelayMs: Long = DEFAULT_DEBOUNCE_MS,
     ) {
-        debouncedTask?.cancel()
-        debouncedTask = null
+        cancelDebouncedDispatch()
 
         if (debounceDelayMs <= 0) {
             dispatch(action)
             return
         }
 
+        pendingAction = action
         debouncedTask =
             mainScope.launch {
                 delay(debounceDelayMs)
                 if (!isActive) return@launch
-                dispatch(action)
+                flushDebouncedDispatch()
             }
+    }
+
+    /** Dispatches the pending debounced action now, if there is one */
+    private fun flushDebouncedDispatch() {
+        val action = pendingAction ?: return
+        cancelDebouncedDispatch()
+        dispatch(action)
+    }
+
+    private fun cancelDebouncedDispatch() {
+        debouncedTask?.cancel()
+        debouncedTask = null
+        pendingAction = null
     }
 
     override fun close() {
         rustGuard.closeOnce {
             logDebug("Closing SendFlowManager for $id")
-            debouncedTask?.cancel()
-            debouncedTask = null
+            cancelDebouncedDispatch()
             mainScope.cancel()
             rust.close()
         }
