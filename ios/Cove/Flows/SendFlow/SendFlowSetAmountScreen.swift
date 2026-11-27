@@ -343,7 +343,19 @@ private struct SendFlowSetAmountContent: View {
                     VStack(spacing: sectionSpacing) {
                         SendFlowAmountInfoSection()
                         EnterAmountView(sendFlowManager: sendFlowManager)
-                        SendFlowAddressSection(address: sendFlowManager.enteringAddress)
+
+                        // the number pad covers the address while the amount is typed, so the
+                        // note that the address is the user's own moves up under the amount
+                        if presenter.focusField == .amount,
+                           let message = sendFlowManager.addressOwnershipMessage
+                        {
+                            AddressOwnershipNote(message: message)
+                        }
+
+                        SendFlowAddressSection(
+                            address: sendFlowManager.enteringAddress,
+                            showsOwnershipNote: presenter.focusField != .amount
+                        )
                         SendFlowAccountSection(manager: manager, showsTitle: true)
 
                         if sendFlowManager.feeSelection != nil,
@@ -427,12 +439,20 @@ private struct SendFlowSetAmountContent: View {
 }
 
 private struct SendFlowAddressSection: View {
+    @Environment(SendFlowManager.self) private var sendFlowManager
+
     let address: Binding<String>
+
+    /// False while the note shows under the amount instead
+    let showsOwnershipNote: Bool
 
     var body: some View {
         VStack {
             Divider()
-            EnterAddressView(address: address)
+            EnterAddressView(
+                address: address,
+                ownershipMessage: showsOwnershipNote ? sendFlowManager.addressOwnershipMessage : nil
+            )
             Divider()
         }
     }

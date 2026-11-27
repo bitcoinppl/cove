@@ -231,7 +231,7 @@ Automated UI tests don't use these fixtures. They reset the fake node, fund the 
 - **The previous release** for in-place upgrade tests. On Android, the GitHub release APK and a locally signed build share the upload key, but a Play install is signed with Google's key and only updates through Play. iOS upgrades need the previous build from the App Store, since TestFlight only lists builds of the current version
 - **Approval for destructive rows** before the run: clean install, uninstall, Wipe Data PIN and cloud backup deletion each need a recovery path prepared first
 
-Automated tests that need two of the user's wallets import the test mnemonic through onboarding, then BIP39's legal winner phrase from Add Wallet, which they scan into its 12-word import through the QR seam rather than type, and switch between the two from the sidebar: `importFromAddWallet` and `selectWallet` in iOS's `FullLaunchSupport.swift` and Android's `FullLaunchWalletRobot`. Both phrases are public test vectors, so the tests name the Signet addresses they derive directly.
+Automated tests that need two of the user's wallets import the test mnemonic through onboarding, then BIP39's legal winner phrase from Add Wallet, which they scan into its 12-word import through the QR seam rather than type, and switch between the two from the sidebar: `importFromAddWallet` and `selectWallet` in iOS's `FullLaunchSupport.swift` and Android's `FullLaunchWalletRobot`. Both phrases are public test vectors, so the tests name the Signet addresses they derive directly. `AddressOwnershipSendFullLaunchUITests` and `AddressOwnershipSendFullLaunchTest` use the two to check the note under Set Amount's address field that names which wallet owns the address.
 
 ## Hardware signing UI tests
 

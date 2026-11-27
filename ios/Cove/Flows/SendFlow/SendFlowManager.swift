@@ -78,6 +78,7 @@ private enum SendFlowManagerAccessError: LocalizedError {
     private var _enteringAddress: String = ""
 
     var address: Address? = nil
+    private var addressOwnership: SendFlowAddressOwnership? = nil
     var amount: Amount? = nil
     var fiatAmount: Double? = nil
 
@@ -100,6 +101,18 @@ private enum SendFlowManagerAccessError: LocalizedError {
     var totalSpentInFiat: String = ""
     var totalSpentInBtc: String = ""
     var totalFeeString: String? = nil
+
+    /// Which of the user's wallets owns the address being sent to, while the note is still about it
+    ///
+    /// The field's text changes before Rust confirms the new address, so the note must match both
+    var addressOwnershipMessage: String? {
+        guard let addressOwnership,
+              addressOwnership.address == address,
+              addressOwnership.address.unformatted() == _enteringAddress
+        else { return nil }
+
+        return addressOwnership.message
+    }
 
     var enteringAddress: Binding<String> {
         Binding<String>(
@@ -327,6 +340,10 @@ private enum SendFlowManagerAccessError: LocalizedError {
     func apply(_ message: Message) {
         guard canApplyReconcileMessages else { return }
 
+        applyMessage(message)
+    }
+
+    private func applyMessage(_ message: Message) {
         switch message {
         case let .updateAmountFiat(fiat):
             self.fiatAmount = fiat
@@ -341,6 +358,9 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
         case let .updateAddress(address):
             self.address = address
+
+        case let .updateAddressOwnership(ownership):
+            self.addressOwnership = ownership
 
         case let .updateEnteringBtcAmount(amount):
             self.enteringBtcAmount = amount

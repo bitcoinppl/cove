@@ -7,7 +7,6 @@
 
 use bdk_wallet::{KeychainKind, chain::SpkIterator, descriptor::ExtendedDescriptor};
 use bitcoin::{Script, ScriptBuf};
-use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_types::{
     Network, WalletId,
     address::{AddressError, AddressWithNetwork},
@@ -48,8 +47,6 @@ pub struct OwnedAddress {
     pub network: Network,
     pub chain: AddressChain,
     pub index: u32,
-    /// The account in the wallet's derivation path, when its descriptor records one
-    pub account: Option<u32>,
 }
 
 /// A wallet the lookup could not read, so the address might still belong to it
@@ -116,10 +113,6 @@ impl AddressOwnershipLookup {
     ///
     /// Searches fail with [`AddressOwnershipError::WalletModeChanged`] unless that mode is the
     /// app's active mode, so a wallet left over from the other mode cannot reveal its wallets
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the send flow and transfer labels stacked on this call it")
-    )]
     pub fn for_wallet(metadata: &WalletMetadata) -> Self {
         Self { mode: metadata.wallet_mode, network: Some(metadata.network) }
     }
@@ -142,10 +135,6 @@ impl AddressOwnershipLookup {
     /// A script carries no network, so a lookup over every network matches wallets on any of
     /// them; use [`Self::for_wallet`] to stay on one network.
     /// This reads wallet stores from disk, so async callers should run it on a blocking thread
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "transfer labels at broadcast, stacked on this, call it")
-    )]
     pub fn find_script_owners(
         &self,
         script: &Script,
@@ -293,7 +282,6 @@ fn find_in_wallet(
         network: metadata.network,
         chain: keychain.into(),
         index,
-        account: chains.descriptor(keychain).account_index(),
     }))
 }
 

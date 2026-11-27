@@ -36738,11 +36738,6 @@ data class OwnedAddress (
     var `chain`: AddressChain
     ,
     var `index`: kotlin.UInt
-    ,
-    /**
-     * The account in the wallet's derivation path, when its descriptor records one
-     */
-    var `account`: kotlin.UInt?
 
 ){
 
@@ -36764,7 +36759,6 @@ public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress>
             FfiConverterTypeNetwork.read(buf),
             FfiConverterTypeAddressChain.read(buf),
             FfiConverterUInt.read(buf),
-            FfiConverterOptionalUInt.read(buf),
         )
     }
 
@@ -36773,8 +36767,7 @@ public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress>
             FfiConverterString.allocationSize(value.`walletName`) +
             FfiConverterTypeNetwork.allocationSize(value.`network`) +
             FfiConverterTypeAddressChain.allocationSize(value.`chain`) +
-            FfiConverterUInt.allocationSize(value.`index`) +
-            FfiConverterOptionalUInt.allocationSize(value.`account`)
+            FfiConverterUInt.allocationSize(value.`index`)
     )
 
     override fun write(value: OwnedAddress, buf: ByteBuffer) {
@@ -36783,7 +36776,6 @@ public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress>
             FfiConverterTypeNetwork.write(value.`network`, buf)
             FfiConverterTypeAddressChain.write(value.`chain`, buf)
             FfiConverterUInt.write(value.`index`, buf)
-            FfiConverterOptionalUInt.write(value.`account`, buf)
     }
 }
 
@@ -37143,6 +37135,60 @@ public object FfiConverterTypeSendConfirmationLock: FfiConverterRustBuffer<SendC
 
     override fun write(value: SendConfirmationLock, buf: ByteBuffer) {
             FfiConverterULong.write(value.`id`, buf)
+    }
+}
+
+
+
+/**
+ * Tells the user that the address they are sending to is one of their own
+ */
+data class SendFlowAddressOwnership (
+    /**
+     * The address this note describes; the apps show the note only while the send is to it, so
+     * a note that arrives after the address changed is never shown
+     */
+    var `address`: Address
+    ,
+    var `message`: kotlin.String
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`address`,
+        this.`message`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendFlowAddressOwnership: FfiConverterRustBuffer<SendFlowAddressOwnership> {
+    override fun read(buf: ByteBuffer): SendFlowAddressOwnership {
+        return SendFlowAddressOwnership(
+            FfiConverterTypeAddress.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SendFlowAddressOwnership) = (
+            FfiConverterTypeAddress.allocationSize(value.`address`) +
+            FfiConverterString.allocationSize(value.`message`)
+    )
+
+    override fun write(value: SendFlowAddressOwnership, buf: ByteBuffer) {
+            FfiConverterTypeAddress.write(value.`address`, buf)
+            FfiConverterString.write(value.`message`, buf)
     }
 }
 
@@ -64407,6 +64453,15 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
         companion object
     }
 
+    data class UpdateAddressOwnership(
+        val v1: org.bitcoinppl.cove_core.SendFlowAddressOwnership) : SendFlowManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
     data class SetMaxSelected(
         val v1: org.bitcoinppl.cove_core.types.Amount) : SendFlowManagerReconcileMessage()
 
@@ -64503,6 +64558,13 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     )
 
             }
+            is SendFlowManagerReconcileMessage.UpdateAddressOwnership -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is SendFlowManagerReconcileMessage.SetMaxSelected -> {
 
     Disposable.destroy(
@@ -64580,27 +64642,30 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             4 -> SendFlowManagerReconcileMessage.UpdateAddress(
                 FfiConverterOptionalTypeAddress.read(buf),
                 )
-            5 -> SendFlowManagerReconcileMessage.SetMaxSelected(
+            5 -> SendFlowManagerReconcileMessage.UpdateAddressOwnership(
+                FfiConverterTypeSendFlowAddressOwnership.read(buf),
+                )
+            6 -> SendFlowManagerReconcileMessage.SetMaxSelected(
                 FfiConverterTypeAmount.read(buf),
                 )
-            6 -> SendFlowManagerReconcileMessage.UnsetMaxSelected
-            7 -> SendFlowManagerReconcileMessage.UpdateAmountSats(
+            7 -> SendFlowManagerReconcileMessage.UnsetMaxSelected
+            8 -> SendFlowManagerReconcileMessage.UpdateAmountSats(
                 FfiConverterULong.read(buf),
                 )
-            8 -> SendFlowManagerReconcileMessage.UpdateAmountFiat(
+            9 -> SendFlowManagerReconcileMessage.UpdateAmountFiat(
                 FfiConverterDouble.read(buf),
                 )
-            9 -> SendFlowManagerReconcileMessage.UpdateFocusField(
+            10 -> SendFlowManagerReconcileMessage.UpdateFocusField(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            10 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
+            11 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
                 FfiConverterTypeFeeSelection.read(buf),
                 )
-            11 -> SendFlowManagerReconcileMessage.RefreshPresenters
-            12 -> SendFlowManagerReconcileMessage.SetAlert(
+            12 -> SendFlowManagerReconcileMessage.RefreshPresenters
+            13 -> SendFlowManagerReconcileMessage.SetAlert(
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
-            13 -> SendFlowManagerReconcileMessage.ClearAlert
+            14 -> SendFlowManagerReconcileMessage.ClearAlert
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -64632,6 +64697,13 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             (
                 4UL
                 + FfiConverterOptionalTypeAddress.allocationSize(value.v1)
+            )
+        }
+        is SendFlowManagerReconcileMessage.UpdateAddressOwnership -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeSendFlowAddressOwnership.allocationSize(value.v1)
             )
         }
         is SendFlowManagerReconcileMessage.SetMaxSelected -> {
@@ -64718,46 +64790,51 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterOptionalTypeAddress.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerReconcileMessage.SetMaxSelected -> {
+            is SendFlowManagerReconcileMessage.UpdateAddressOwnership -> {
                 buf.putInt(5)
+                FfiConverterTypeSendFlowAddressOwnership.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowManagerReconcileMessage.SetMaxSelected -> {
+                buf.putInt(6)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UnsetMaxSelected -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateAmountSats -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateAmountFiat -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterDouble.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateFocusField -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 FfiConverterTypeFeeSelection.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 Unit
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 FfiConverterTypeSendFlowAlertState.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

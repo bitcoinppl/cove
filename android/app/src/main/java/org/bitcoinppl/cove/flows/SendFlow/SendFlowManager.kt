@@ -58,6 +58,16 @@ class SendFlowManager internal constructor(
     // validated state
     var address by mutableStateOf<Address?>(null)
 
+    private var addressOwnership by mutableStateOf<SendFlowAddressOwnership?>(null)
+
+    // which of the user's wallets owns the address being sent to, while the note is still about it;
+    // the field's text changes before rust confirms the new address, so the note must match both
+    val addressOwnershipMessage: String?
+        get() =
+            addressOwnership
+                ?.takeIf { it.address == address && it.address.unformatted() == _enteringAddress }
+                ?.message
+
     var amount by mutableStateOf<Amount?>(null)
 
     var fiatAmount by mutableStateOf<Double?>(null)
@@ -311,6 +321,10 @@ class SendFlowManager internal constructor(
                 address = message.v1
             }
 
+            is SendFlowManagerReconcileMessage.UpdateAddressOwnership -> {
+                addressOwnership = message.v1
+            }
+
             is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> {
                 enteringBtcAmount = message.v1
             }
@@ -328,22 +342,7 @@ class SendFlowManager internal constructor(
             }
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                logWarn("setAlert: ${alertKind(message.v1)}")
-
-                val hadSheet = presenter.sheetState != null
-                val hadAlert = presenter.alertState != null
-                val isDismissingAlert = presenter.isDisappearing
-
-                if (hadSheet || hadAlert || isDismissingAlert) {
-                    presenter.clearAlert()
-                    presenter.sheetState = null
-                    mainScope.launch {
-                        delay(ALERT_PRESENTATION_DELAY_MS)
-                        presenter.alertState = TaggedItem(message.v1)
-                    }
-                } else {
-                    presenter.alertState = TaggedItem(message.v1)
-                }
+                applySetAlert(message.v1)
             }
 
             is SendFlowManagerReconcileMessage.ClearAlert -> {
@@ -361,6 +360,25 @@ class SendFlowManager internal constructor(
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
                 refreshPresenters()
             }
+        }
+    }
+
+    private fun applySetAlert(alertState: SendFlowAlertState) {
+        logWarn("setAlert: ${alertKind(alertState)}")
+
+        val hadSheet = presenter.sheetState != null
+        val hadAlert = presenter.alertState != null
+        val isDismissingAlert = presenter.isDisappearing
+
+        if (hadSheet || hadAlert || isDismissingAlert) {
+            presenter.clearAlert()
+            presenter.sheetState = null
+            mainScope.launch {
+                delay(ALERT_PRESENTATION_DELAY_MS)
+                presenter.alertState = TaggedItem(alertState)
+            }
+        } else {
+            presenter.alertState = TaggedItem(alertState)
         }
     }
 

@@ -1,9 +1,6 @@
 use bdk_wallet::{
-    KeychainKind,
-    bitcoin::bip32::Xpriv,
-    descriptor::ExtendedDescriptor,
+    KeychainKind, bitcoin::bip32::Xpriv, descriptor::ExtendedDescriptor,
     descriptor::IntoWalletDescriptor as _,
-    template::{Bip84, DescriptorTemplate as _},
 };
 use bip39::Mnemonic;
 use bitcoin::secp256k1::Secp256k1;
@@ -20,45 +17,15 @@ use crate::{
     database::Database,
     manager::import_wallet_manager::import_mnemonic_with_target,
     network::Network,
-    test_support::wallet_target::{WalletTargetGuard, every_scope, select_target},
+    test_support::{
+        bip84_keys::{address_at, bip84_descriptor, random_mnemonic},
+        wallet_target::{WalletTargetGuard, every_scope, select_target},
+    },
     wallet::{
         WalletAddressType,
         metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
     },
 };
-
-/// A fresh key set, so wallets other tests leave behind can never own its addresses
-fn random_mnemonic() -> Mnemonic {
-    Mnemonic::from_entropy(&rand::random::<[u8; 16]>()).unwrap()
-}
-
-/// BIP 84 account 0 descriptors built straight from BDK, independent of how Cove stores them
-fn bip84_descriptor(
-    mnemonic: &Mnemonic,
-    network: Network,
-    keychain: KeychainKind,
-) -> ExtendedDescriptor {
-    let network = bitcoin::Network::from(network);
-    let xprv = Xpriv::new_master(network, &mnemonic.to_seed("")).unwrap();
-    let (descriptor, _, _) = Bip84(xprv, keychain).build(network.into()).unwrap();
-
-    descriptor
-}
-
-fn address_at(
-    mnemonic: &Mnemonic,
-    network: Network,
-    keychain: KeychainKind,
-    index: u32,
-) -> AddressWithNetwork {
-    let address = bip84_descriptor(mnemonic, network, keychain)
-        .at_derivation_index(index)
-        .unwrap()
-        .address(bitcoin::Network::from(network))
-        .unwrap();
-
-    AddressWithNetwork::try_new(&address.to_string()).unwrap()
-}
 
 fn find_owners(address: &AddressWithNetwork) -> AddressOwnership {
     AddressOwnershipLookup::for_active_mode().unwrap().find_owners(address).unwrap()
@@ -71,7 +38,6 @@ fn owned(metadata: &WalletMetadata, chain: AddressChain, index: u32) -> OwnedAdd
         network: metadata.network,
         chain,
         index,
-        account: Some(0),
     }
 }
 
@@ -455,13 +421,7 @@ fn the_account_comes_from_the_chain_that_owns_the_address() {
         save_store_less_watch_only(Some((external, internal)), Network::Bitcoin, WalletMode::Main);
 
     let address = AddressWithNetwork::try_new(&change_address.to_string()).unwrap();
-    assert_eq!(
-        find_owners(&address),
-        owned_by(vec![OwnedAddress {
-            account: Some(1),
-            ..owned(&wallet, AddressChain::Change, 2)
-        }])
-    );
+    assert_eq!(find_owners(&address), owned_by(vec![owned(&wallet, AddressChain::Change, 2)]));
 }
 
 #[test]

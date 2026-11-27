@@ -15,6 +15,7 @@ struct EnterAddressView: View {
 
     /// args
     @Binding var address: String
+    var ownershipMessage: String? = nil
 
     /// private
     @FocusState private var focusField: SendFlowPresenter.FocusField?
@@ -39,6 +40,10 @@ struct EnterAddressView: View {
                     .autocorrectionDisabled(true)
                     .keyboardType(.asciiCapable)
             }
+
+            if let ownershipMessage {
+                AddressOwnershipNote(message: ownershipMessage)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -61,6 +66,22 @@ struct EnterAddressView: View {
 
     private func showQrScanner() {
         presenter.sheetState = TaggedItem(.qr)
+    }
+}
+
+/// Tells the user that the address they are sending to is one of their own
+struct AddressOwnershipNote: View {
+    let message: String
+
+    var body: some View {
+        HStack {
+            Label(message, systemImage: "person.crop.circle.badge.checkmark")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("sendFlow.addressOwnership")
+
+            Spacer()
+        }
     }
 }
 
