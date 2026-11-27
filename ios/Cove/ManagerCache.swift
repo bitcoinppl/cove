@@ -499,6 +499,15 @@ extension Router {
         self.default.isSendRoute(for: id) || routes.contains { $0.isSendRoute(for: id) }
     }
 
+    /// The routes after pushing a send of another kind than the one open for its wallet, which
+    /// replaces that send's screens, or nil when the route is pushed as usual
+    func routesReplacingOpenSend(with route: Route) -> [Route]? {
+        guard case .send = route else { return nil }
+
+        let pushed = RouteFactory().routesAfterPush(routes: routes, route: route)
+        return Array(pushed.dropLast()) == routes ? nil : pushed
+    }
+
     /// Whether the wallet's send flow is still in use: a send route, or, for a coin control send,
     /// the coin control list it was opened from, which goes back to the same send with its
     /// recipient and fee kept

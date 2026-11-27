@@ -446,13 +446,9 @@ struct CorruptedWalletDeletionRetry: Equatable {
             return
         }
 
-        // a send of another kind than the one open for its wallet replaces that send's screens
-        if case .send = route {
-            let routes = RouteFactory().routesAfterPush(routes: router.routes, route: route)
-            if Array(routes.dropLast()) != router.routes {
-                setRoute(routes)
-                return
-            }
+        if let routes = router.routesReplacingOpenSend(with: route) {
+            setRoute(routes)
+            return
         }
 
         navigationCoordinator.pushRoute(
