@@ -1,12 +1,17 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import android.view.View
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.coveComposeRule
@@ -32,6 +37,7 @@ class NodeSettingsCustomEsploraErrorTest {
 
     private lateinit var app: AppManager
     private lateinit var initialNetwork: Network
+    private lateinit var hostView: View
 
     @Before
     fun hostScreenOnSignet() {
@@ -42,6 +48,7 @@ class NodeSettingsCustomEsploraErrorTest {
         changeNetwork(Network.SIGNET)
 
         compose.setContent {
+            hostView = LocalView.current
             CoveTheme {
                 NodeSettingsScreen(app = app)
             }
@@ -59,7 +66,12 @@ class NodeSettingsCustomEsploraErrorTest {
         compose
             .onNode(hasSetTextAction() and hasText("URL"))
             .performTextReplacement(UNREACHABLE_ESPLORA_URL)
-        compose.onNodeWithText("Save Custom Node").performClick()
+
+        // CI's slower emulator has the keyboard fully up by the time the test taps Save, so wait
+        // for it on every machine. The local network section sits above the form, so the keyboard
+        // covers Save until it is scrolled into view, as a person would
+        compose.waitUntil(timeoutMillis = 10_000) { isKeyboardShown() }
+        compose.onNodeWithText("Save Custom Node").performScrollTo().performClick()
 
         // nothing listens on the emulator's own https port, so the check fails fast
         compose.waitUntil(timeoutMillis = 30_000) {
@@ -79,6 +91,11 @@ class NodeSettingsCustomEsploraErrorTest {
         assertFalse("the alert should not rewrite the URL as Electrum, got: $message", "ssl://" in message)
         assertFalse("the alert should not add the Electrum port, got: $message", ":50002" in message)
     }
+
+    private fun isKeyboardShown(): Boolean =
+        compose.runOnUiThread {
+            ViewCompat.getRootWindowInsets(hostView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        }
 
     private fun changeNetwork(network: Network) {
         compose.runOnUiThread { app.dispatch(AppAction.ChangeNetwork(network)) }
