@@ -597,7 +597,7 @@ coverage = [
 id = "s14-find-and-pick-a-node-on-the-local-network"
 section = "14"
 title = "Find a node on the local network and pick it"
-platforms = ["android"]
+platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/node_discovery.rs",
@@ -605,6 +605,9 @@ paths = [
     "rust/src/node_connect.rs",
     "rust/src/manager/node_discovery_manager.rs",
     "rust/src/manager/node_discovery_manager/**",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/LanNodeDiscovery.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeDiscoveryManager.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/LanNodeDiscovery.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/NodeDiscoveryManager.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
@@ -625,13 +628,38 @@ coverage = [
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::searchingOffWifiAsksToConnectToWifi",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::searchingBehindABlockingVpnSaysTheVpnBlocksIt",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::lanInterfacesAreTheDevicesPrivateIpv4Networks",
+    "ios-ui:ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift::testPickingAServerFoundOnTheNetworkSavesItAsTheSelectedNode",
+    "ios-ui:ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift::testAServerOnAnotherNetworkIsNotListed",
+    "ios-ui:ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift::testStopKeepsTheServersFoundSoFar",
+    "ios-ui:ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift::testAPresetTappedWhileAFoundServerIsCheckedIsIgnoredUntilTheCheckEnds",
+    "ios-ui:ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift::testEachSearchOutcomeSaysWhatToDoNext",
+    "ios-ui:ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift::testLeavingWhileAFoundServerIsCheckedDoesNotSaveTheForm",
+    "ios-unit:ios/CoveTests/LanNodeDiscoveryTests.swift::testLanInterfacesAreTheDevicesPrivateIpv4Networks",
 ]
 # rust decides what the search finds, that a probe sends nothing, and that only servers whose
 # genesis block matches the selected network are listed. The UI tests can't put a server on the
-# network the emulator is on, so the debug COVE_UI_TEST_LAN_DISCOVERY seam has Rust check loopback
-# servers instead of sweeping: the fake node's Electrum port is listed and a mainnet test server
-# isn't. They check the screen searches only when asked, Stop keeps the servers found, a picked
-# server is saved through the custom node check one choice at a time, and the screen says what to
-# do when a search ends off Wi-Fi, behind a VPN or empty. The interface listing handed to Rust has
-# its own test. On a network with an Electrum server,
+# network the simulator or emulator is on, so the debug COVE_UI_TEST_LAN_DISCOVERY seam has Rust
+# check loopback servers instead of sweeping: the fake node's Electrum port is listed and a mainnet
+# test server isn't. They check the screens search only when asked, Stop keeps the servers found,
+# a picked server is saved through the custom node check one choice at a time, and the screens say
+# what to do when a search ends off Wi-Fi, behind a VPN or empty. The interface listings each
+# platform hands Rust have their own tests. On a network with an Electrum server,
 # `live_lan_discovery_finds_and_connects_to_the_node` runs the real search with --ignored
+
+[[row]]
+id = "s14-ios-local-network-prompt-on-first-node-search"
+section = "14"
+title = "iOS asks for local network access on the first node search"
+platforms = ["ios"]
+target = "manual"
+paths = [
+    "ios/Cove/Info.plist",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/LanNodeDiscovery.swift",
+]
+coverage = [
+    "human",
+]
+# the simulator has no local network privacy, so only a device shows the prompt, and a search
+# made before it is answered can come back empty until Search Again. Denying the prompt leaves
+# every search empty, and Open Settings must lead to Cove's Local Network switch

@@ -355,6 +355,11 @@ extension XCUIApplication {
         tap(buttons[name], until: target, described: "button '\(name)'")
     }
 
+    /// Taps a text, such as a settings row's title, again until `target` shows
+    func tapStaticText(_ label: String, until target: XCUIElement) {
+        tap(staticTexts[label].firstMatch, until: target, described: "text '\(label)'")
+    }
+
     /// On CI a tap can land while the screen settles, a menu animates in, or a system banner
     /// passes over the button and do nothing, so tap again while the button is still showing
     private func tap(_ button: XCUIElement, until target: XCUIElement, described description: String) {

@@ -55,6 +55,10 @@ paths = ["ios/CoveUITests/NfcScanPrivacyCoverFullLaunchUITests.swift"]
 suites = ["CoveUITests/NfcScanPrivacyCoverFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/NodeLanDiscoveryFullLaunchUITests.swift"]
+suites = ["CoveUITests/NodeLanDiscoveryFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/PrivacyCoverFullLaunchUITests.swift"]
 suites = ["CoveUITests/PrivacyCoverFullLaunchUITests"]
 
@@ -275,6 +279,15 @@ suites = [
     "CoveUITests/KeyTeleportAppScannerFullLaunchUITests",
     "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests",
 ]
+
+# node settings, which only Settings' Node row opens, and the local network search it starts
+[[rule]]
+paths = [
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/LanNodeDiscovery.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeDiscoveryManager.swift",
+]
+suites = ["CoveUITests/NodeLanDiscoveryFullLaunchUITests"]
 
 # the tapSigner sheet, which opens only for a scanned TAPSIGNER or a TAPSIGNER wallet
 [[rule]]

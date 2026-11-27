@@ -23,6 +23,8 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
+    @State private var discovery = NodeDiscoveryManager()
+
     init() {
         let savedNode = nodeSelector.selectedNode()
         selectedRow = NodeRowSelection(savedNode)
@@ -45,12 +47,24 @@ struct NodeSelectionView: View {
         customNodeApiType != nil
     }
 
+    /// The saved custom node's url, which a server found on the network is saved as once picked
+    private var selectedCustomUrl: String? {
+        guard case let .custom(node) = nodeSelector.selectedNode() else { return nil }
+        return node.url
+    }
+
     /// Whether the custom form holds something other than the saved custom node
     private var customFormHasUnsavedChanges: Bool {
         guard let apiType = customNodeApiType else { return false }
         guard case let .custom(savedNode) = nodeSelector.selectedNode() else { return true }
 
         return savedNode.apiType != apiType || savedNode.url != customUrl || savedNode.name != customNodeName
+    }
+
+    /// Whether a selection is still being checked, which lasts until the check itself ends:
+    /// closing the loading popup cancels only the Swift task, never the Rust check and save
+    private var isCheckingSelection: Bool {
+        checkUrlTask != nil
     }
 
     func cancelCheckUrlTask() {
@@ -115,8 +129,8 @@ struct NodeSelectionView: View {
         }
 
         if let node {
-            Task {
-                showLoadingPopup()
+            showLoadingPopup()
+            checkUrlTask = Task {
                 let result = await Result { try await nodeSelector.checkAndSaveNode(node: node) }
 
                 switch result {
@@ -133,22 +147,47 @@ struct NodeSelectionView: View {
         }
     }
 
+    /// A found server already proved it serves this network, and picking it runs the same check
+    /// and save as a custom node
+    private func selectDiscoveredNode(_ found: DiscoveredNode) {
+        showLoadingPopup()
+        checkUrlTask = Task {
+            do {
+                try await nodeSelector.checkAndSaveNode(node: found.node)
+
+                // a picked server is saved as a custom node, which the custom form shows
+                customUrl = found.node.url
+                customNodeName = found.node.name
+                refreshNodeState()
+                completeLoading(.success("Connected to node successfully"))
+            } catch {
+                completeLoading(.failure("Failed to connect to node\n\(error.localizedDescription)"))
+            }
+        }
+    }
+
     var body: some View {
         NodeSelectionForm(
             presetNodes: presetNodes,
             selectedRow: $selectedRow,
+            lanSection: NodeSelectionLanSection(
+                search: discovery.state,
+                selectedUrl: selectedCustomUrl,
+                onSearch: discovery.start,
+                onStop: discovery.stop,
+                onSelect: selectDiscoveredNode
+            ),
             customUrl: $customUrl,
             customNodeName: $customNodeName,
             saveCustomNode: checkAndSaveNode
         )
+        // one selection is checked at a time, so an older check can't save over a newer choice
+        .disabled(isCheckingSelection)
         .scrollContentBackground(.hidden)
         .onChange(of: selectedRow) { _, newSelectedRow in
             nodeSelectionChanged(to: newSelectedRow)
         }
-        .onDisappear {
-            // save what was typed into the custom form, but do not re-check an unchanged saved node
-            if customFormHasUnsavedChanges { checkAndSaveNode() }
-        }
+        .onDisappear(perform: saveCustomFormOnLeaving)
         .alert(isPresented: $showParseUrlAlert) {
             Alert(
                 title: Text("Unable to parse URL"),
@@ -160,6 +199,16 @@ struct NodeSelectionView: View {
                 }
             )
         }
+    }
+
+    /// Saves what was typed into the custom form when the screen goes away
+    private func saveCustomFormOnLeaving() {
+        // one selection is checked at a time: older form values must not replace a preset or a
+        // found server whose check is still running
+        guard !isCheckingSelection else { return }
+
+        // an unchanged saved node is not re-checked
+        if customFormHasUnsavedChanges { checkAndSaveNode() }
     }
 
     private func nodeSelectionChanged(to newSelectedRow: NodeRowSelection) {
@@ -209,6 +258,7 @@ struct NodeSelectionView: View {
 private struct NodeSelectionForm: View {
     let presetNodes: [Node]
     @Binding var selectedRow: NodeRowSelection
+    let lanSection: NodeSelectionLanSection
     @Binding var customUrl: String
     @Binding var customNodeName: String
     let saveCustomNode: () -> Void
@@ -219,6 +269,7 @@ private struct NodeSelectionForm: View {
                 presetNodes: presetNodes,
                 selectedRow: $selectedRow
             )
+            lanSection
             NodeSelectionCustomFields(
                 customRow: CustomNodeRow(selectedRow),
                 customUrl: $customUrl,
@@ -250,6 +301,133 @@ private struct NodeSelectionPresetSection: View {
                 )
             }
         }
+    }
+}
+
+private struct NodeSelectionLanSection: View {
+    let search: NodeDiscoveryState
+    let selectedUrl: String?
+    let onSearch: () -> Void
+    let onStop: () -> Void
+    let onSelect: (DiscoveredNode) -> Void
+
+    private var isSearching: Bool {
+        if case .searching = search { true } else { false }
+    }
+
+    /// Whether the search ended having found nothing, the only time Local Network access is in doubt
+    private var foundNothing: Bool {
+        if case let .finished(found) = search { found.isEmpty } else { false }
+    }
+
+    private var message: String? {
+        switch search {
+        case .idle, .stopped: nil
+        case .searching: "Searching this network…"
+        case let .finished(found): found.isEmpty ? "No Electrum servers found on this network" : nil
+        case .failed(.NoLocalNetwork): "Connect to Wi-Fi to find nodes on your network"
+        case .failed(.LocalNetworkBlocked):
+            "A VPN is blocking this network. Allow local network access in your VPN, or turn it off, to search."
+        }
+    }
+
+    private var buttonTitle: String {
+        switch search {
+        case .idle: "Find Nodes on This Network"
+        // a running search can be stopped, keeping the servers it found
+        case .searching: "Stop"
+        case .stopped, .finished, .failed: "Search Again"
+        }
+    }
+
+    var body: some View {
+        Section {
+            ForEach(search.foundServers, id: \.node.url) { found in
+                DiscoveredNodeRow(
+                    found: found,
+                    isSelected: found.node.url == selectedUrl,
+                    select: { onSelect(found) }
+                )
+            }
+
+            if let message {
+                LanSearchStatusRow(message: message, isSearching: isSearching)
+            }
+
+            Button(buttonTitle, action: isSearching ? onStop : onSearch)
+                .font(.subheadline)
+        } header: {
+            Text("On This Network")
+        } footer: {
+            if foundNothing { LocalNetworkAccessHelp() }
+        }
+    }
+}
+
+private struct LanSearchStatusRow: View {
+    let message: String
+    let isSearching: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if isSearching { ProgressView() }
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Shown when a search finds nothing
+///
+/// iOS doesn't say whether Local Network access was granted, and can refuse the first search's
+/// connections while it asks, so this covers both cases. A denied prompt never comes back, so
+/// only Settings can undo it
+private struct LocalNetworkAccessHelp: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("If you just allowed local network access, search again.")
+            Text("If you didn't, turn on Local Network for Cove in Settings.")
+            Button("Open Settings", action: openSettings)
+        }
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+}
+
+private struct DiscoveredNodeRow: View {
+    let found: DiscoveredNode
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(found.host)
+                    .font(.subheadline)
+                Text(found.software.map { "\($0) · \(found.address)" } ?? found.address)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isSelected {
+                // the selected trait says this to VoiceOver
+                Image(systemName: "checkmark")
+                    .foregroundStyle(.blue)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: select)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
@@ -304,14 +482,18 @@ private struct NodeSelectionRow: View {
             Spacer()
 
             if isSelected {
+                // the selected trait says this to VoiceOver
                 Image(systemName: "checkmark")
                     .foregroundStyle(.blue)
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: select)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 
