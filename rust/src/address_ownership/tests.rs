@@ -291,6 +291,17 @@ fn wallets_without_a_store_are_searched_from_their_keychain_descriptors() {
     assert_eq!(find_owners(&address), owned_by(vec![owned(&watch_only, AddressChain::Change, 7)]));
 
     // the mirror has no record of revealed addresses, so its window starts at index 0
+    let last_in_gap = address_at(
+        &mnemonic,
+        Network::Bitcoin,
+        KeychainKind::External,
+        ADDRESS_OWNERSHIP_LOOKUP_GAP - 1,
+    );
+    assert_eq!(
+        find_owners(&last_in_gap),
+        owned_by(vec![owned(&watch_only, AddressChain::Receive, ADDRESS_OWNERSHIP_LOOKUP_GAP - 1)])
+    );
+
     let past_gap = address_at(
         &mnemonic,
         Network::Bitcoin,

@@ -28,8 +28,9 @@ use crate::{
 /// How many addresses past the last revealed one each address chain is searched
 ///
 /// Software that shares a wallet's keys, such as a hardware wallet's companion app, can hand out
-/// addresses Cove has not revealed yet, so the search reaches past what Cove has shown
-pub const ADDRESS_OWNERSHIP_LOOKUP_GAP: u32 = 100;
+/// addresses Cove has not revealed yet, so the search reaches past what Cove has shown. Each
+/// address costs one script derivation, so a full miss derives this many scripts per chain
+pub const ADDRESS_OWNERSHIP_LOOKUP_GAP: u32 = 500;
 
 /// Which of a wallet's two address chains an address comes from
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
