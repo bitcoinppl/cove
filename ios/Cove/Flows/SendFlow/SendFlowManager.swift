@@ -30,7 +30,7 @@ protocol SendFlowRustManaging: AnyObject, Sendable {
     ) async throws -> FeeRateOptionWithTotalFee
     func waitForInit() async -> Bool
     func amountExceedsBalance() -> Bool
-    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String) -> String?
+    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String, unit: BitcoinUnit) -> String?
     func sanitizeFiatEnteringAmount(oldValue: String, newValue: String) -> String?
     func utxos() -> [Utxo]?
     func maxSendMinusFees() -> Amount?
@@ -318,7 +318,8 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
     func sanitizeBtcEnteringAmount(oldValue: String, newValue: String) -> String? {
         withRustOr(nil) {
-            $0.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue)
+            // in the unit the screen shows, which Rust can move on from before the screen does
+            $0.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue, unit: amountEntryMode.unit)
         }
     }
 

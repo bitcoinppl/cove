@@ -521,13 +521,20 @@ impl RustSendFlowManager {
 
 #[uniffi::export]
 impl RustSendFlowManager {
+    /// The bitcoin field's text cleaned up for `unit`, the unit the field shows, or nothing when
+    /// it needs no change
+    ///
+    /// The platform's unit, not Rust's, decides, since a display preference change reaches Rust
+    /// before the screen, and a keystroke such as a decimal point is only valid in the unit the
+    /// user typed it in
     #[uniffi::method]
     fn sanitize_btc_entering_amount(
         self: &Arc<Self>,
         old_value: &str,
         new_value: &str,
+        unit: BitcoinUnit,
     ) -> Option<String> {
-        let on_change_handler = BtcOnChangeHandler::new(&self.state.lock());
+        let on_change_handler = BtcOnChangeHandler::typed_in(&self.state.lock(), unit);
         let changeset = on_change_handler.on_change(old_value, new_value);
         let entering_amount_btc = changeset.entering_amount_btc?;
 

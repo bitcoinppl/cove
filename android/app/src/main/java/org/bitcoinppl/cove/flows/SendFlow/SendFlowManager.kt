@@ -232,7 +232,8 @@ class SendFlowManager internal constructor(
         newValue: String,
     ): String? =
         withRustOr(null) {
-            sanitizeBtcEnteringAmount(oldValue, newValue)
+            // in the unit the screen shows, which Rust can move on from before the screen does
+            sanitizeBtcEnteringAmount(oldValue, newValue, amountEntryMode.unit)
         }
 
     fun sanitizeFiatEnteringAmount(

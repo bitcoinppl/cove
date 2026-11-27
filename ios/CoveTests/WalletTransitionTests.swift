@@ -716,7 +716,7 @@ private final class TestSendFlowRustManager: SendFlowRustManaging {
 
     func waitForInit() async -> Bool { false }
     func amountExceedsBalance() -> Bool { false }
-    func sanitizeBtcEnteringAmount(oldValue _: String, newValue _: String) -> String? { nil }
+    func sanitizeBtcEnteringAmount(oldValue _: String, newValue _: String, unit _: BitcoinUnit) -> String? { nil }
     func sanitizeFiatEnteringAmount(oldValue _: String, newValue _: String) -> String? { nil }
     func utxos() -> [Utxo]? { nil }
     func maxSendMinusFees() -> Amount? { nil }
