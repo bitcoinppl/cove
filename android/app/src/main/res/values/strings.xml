@@ -224,6 +224,7 @@
     <string name="node_lan_section">On This Network</string>
     <string name="node_lan_find">Find Nodes on This Network</string>
     <string name="node_lan_search_again">Search Again</string>
+    <string name="node_lan_stop">Stop</string>
     <string name="node_lan_searching">Searching this network…</string>
     <string name="node_lan_none_found">No Electrum servers found on this network</string>
     <string name="node_lan_no_network">Connect to Wi-Fi to find nodes on your network</string>

@@ -31,6 +31,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +49,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.bitcoinppl.cove.LanNodeDiscovery
+import org.bitcoinppl.cove.NodeDiscoveryManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
@@ -59,6 +60,7 @@ import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.DiscoveredNode
 import org.bitcoinppl.cove_core.NodeDiscoveryException
+import org.bitcoinppl.cove_core.NodeDiscoveryState
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
@@ -72,10 +74,13 @@ private const val TAG = "NodeSettings"
 fun NodeSettingsScreen(
     app: org.bitcoinppl.cove.AppManager,
     modifier: Modifier = Modifier,
-    discoverLanNodes: (suspend (NodeSelector) -> List<DiscoveredNode>)? = null,
 ) {
     val context = LocalContext.current
-    val searchLan = discoverLanNodes ?: remember(context) { LanNodeDiscovery(context)::discover }
+    val discovery = remember(context) { NodeDiscoveryManager(context) }
+    DisposableEffect(discovery) {
+        onDispose { discovery.close() }
+    }
+
     val nodeSelector = remember { NodeSelector() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -88,7 +93,6 @@ fun NodeSettingsScreen(
     var customNodeName by remember { mutableStateOf("") }
 
     var isLoading by remember { mutableStateOf(false) }
-    var lanSearch by remember { mutableStateOf<LanSearch>(LanSearch.NotStarted) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
     var errorTitle by remember { mutableStateOf("") }
@@ -193,7 +197,8 @@ fun NodeSettingsScreen(
         }
     }
 
-    // nothing reaches a discovered server until it is picked here, when the check talks to it
+    // a found server already proved it serves this network, and picking it runs the same check
+    // and save as a custom node
     fun selectDiscoveredNode(found: DiscoveredNode) {
         if (isLoading) return
 
@@ -227,27 +232,6 @@ fun NodeSettingsScreen(
             } finally {
                 isLoading = false
             }
-        }
-    }
-
-    fun searchLocalNetwork() {
-        if (lanSearch == LanSearch.Searching) return
-
-        scope.launch {
-            lanSearch = LanSearch.Searching
-            lanSearch =
-                try {
-                    LanSearch.Finished(searchLan(nodeSelector))
-                } catch (_: NodeDiscoveryException.NoLocalNetwork) {
-                    LanSearch.NoLocalNetwork
-                } catch (_: NodeDiscoveryException.LocalNetworkBlocked) {
-                    LanSearch.LocalNetworkBlocked
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "Local network node search failed", e)
-                    LanSearch.Finished(emptyList())
-                }
         }
     }
 
@@ -376,9 +360,10 @@ fun NodeSettingsScreen(
                 Spacer(modifier = Modifier.height(MaterialSpacing.medium))
                 SectionHeader(stringResource(R.string.node_lan_section))
                 LanNodesSection(
-                    search = lanSearch,
+                    search = discovery.state,
                     selectedUrl = (selectedNodeSelection as? NodeSelection.Custom)?.v1?.url,
-                    onSearch = { searchLocalNetwork() },
+                    onSearch = { discovery.start() },
+                    onStop = { discovery.stop() },
                     onSelect = { selectDiscoveredNode(it) },
                 )
 
@@ -450,59 +435,42 @@ fun NodeSettingsScreen(
     }
 }
 
-/** Where a search of the local network for nodes stands */
-private sealed interface LanSearch {
-    data object NotStarted : LanSearch
-
-    data object Searching : LanSearch
-
-    data object NoLocalNetwork : LanSearch
-
-    data object LocalNetworkBlocked : LanSearch
-
-    data class Finished(
-        val nodes: List<DiscoveredNode>,
-    ) : LanSearch
-}
-
 @Composable
 private fun LanNodesSection(
-    search: LanSearch,
+    search: NodeDiscoveryState,
     selectedUrl: String?,
     onSearch: () -> Unit,
+    onStop: () -> Unit,
     onSelect: (DiscoveredNode) -> Unit,
 ) {
+    val isSearching = search is NodeDiscoveryState.Searching
+    val found =
+        when (search) {
+            is NodeDiscoveryState.Searching -> search.found
+            is NodeDiscoveryState.Stopped -> search.found
+            is NodeDiscoveryState.Finished -> search.found
+            NodeDiscoveryState.Idle, is NodeDiscoveryState.Failed -> emptyList()
+        }
+
     MaterialSection {
         Column {
-            val message =
-                when (search) {
-                    LanSearch.NotStarted -> null
-                    LanSearch.Searching -> stringResource(R.string.node_lan_searching)
-                    LanSearch.NoLocalNetwork -> stringResource(R.string.node_lan_no_network)
-                    LanSearch.LocalNetworkBlocked -> stringResource(R.string.node_lan_blocked)
-                    is LanSearch.Finished ->
-                        if (search.nodes.isEmpty()) stringResource(R.string.node_lan_none_found) else null
-                }
+            found.forEach { server ->
+                DiscoveredNodeRow(
+                    found = server,
+                    isSelected = server.node.url == selectedUrl,
+                    onClick = { onSelect(server) },
+                )
 
-            if (search is LanSearch.Finished) {
-                search.nodes.forEach { found ->
-                    DiscoveredNodeRow(
-                        found = found,
-                        isSelected = found.node.url == selectedUrl,
-                        onClick = { onSelect(found) },
-                    )
-
-                    MaterialDivider()
-                }
+                MaterialDivider()
             }
 
-            message?.let {
+            lanSearchMessage(search)?.let {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (search == LanSearch.Searching) {
+                    if (isSearching) {
                         CircularProgressIndicator(modifier = Modifier.width(16.dp).height(16.dp), strokeWidth = 2.dp)
                     }
 
@@ -516,12 +484,16 @@ private fun LanNodesSection(
                 MaterialDivider()
             }
 
+            // a running search can be stopped, keeping the servers it found
             val searchLabel =
-                if (search == LanSearch.NotStarted) R.string.node_lan_find else R.string.node_lan_search_again
+                when (search) {
+                    NodeDiscoveryState.Idle -> R.string.node_lan_find
+                    is NodeDiscoveryState.Searching -> R.string.node_lan_stop
+                    else -> R.string.node_lan_search_again
+                }
 
             TextButton(
-                onClick = onSearch,
-                enabled = search != LanSearch.Searching,
+                onClick = if (isSearching) onStop else onSearch,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             ) {
                 Text(
@@ -532,6 +504,21 @@ private fun LanNodesSection(
         }
     }
 }
+
+/** What to tell the person about the search, or nothing when its servers say it all */
+@Composable
+private fun lanSearchMessage(search: NodeDiscoveryState): String? =
+    when (search) {
+        NodeDiscoveryState.Idle, is NodeDiscoveryState.Stopped -> null
+        is NodeDiscoveryState.Searching -> stringResource(R.string.node_lan_searching)
+        is NodeDiscoveryState.Finished ->
+            if (search.found.isEmpty()) stringResource(R.string.node_lan_none_found) else null
+        is NodeDiscoveryState.Failed ->
+            when (search.error) {
+                is NodeDiscoveryException.NoLocalNetwork -> stringResource(R.string.node_lan_no_network)
+                is NodeDiscoveryException.LocalNetworkBlocked -> stringResource(R.string.node_lan_blocked)
+            }
+    }
 
 @Composable
 private fun DiscoveredNodeRow(
