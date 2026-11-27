@@ -1859,6 +1859,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_qr_import(
     ): Short
+    external fun uniffi_cove_checksum_method_routefactory_routes_after_push(
+    ): Short
     external fun uniffi_cove_checksum_method_routefactory_secret_words(
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_send(
@@ -2859,7 +2861,7 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustsendflowmanager_sanitize_fiat_entering_amount(`ptr`: Long,`oldValue`: RustBuffer.ByValue,`newValue`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3142,6 +3144,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_routefactory_new_wallet_select(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_qr_import(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_routefactory_routes_after_push(`ptr`: Long,`routes`: RustBuffer.ByValue,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_secret_words(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4809,7 +4813,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 39583.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 53516.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 34681.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 54845.toShort()) {
@@ -5140,6 +5144,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_qr_import() != 52134.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_routefactory_routes_after_push() != 63522.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_secret_words() != 29505.toShort()) {
@@ -19586,6 +19593,16 @@ public interface RouteFactoryInterface {
 
     fun `qrImport`(): Route
 
+    /**
+     * The nested routes once `route` is pushed onto `routes`
+     *
+     * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
+     * of the other kind for the same wallet, such as a scanned payment address over a coin
+     * control send, replaces it: the old send's screens, from the coin control list it was opened
+     * from on, leave with its session instead of staying over a closed one
+     */
+    fun `routesAfterPush`(`routes`: List<Route>, `route`: Route): List<Route>
+
     fun `secretWords`(`walletId`: WalletId): Route
 
     fun `send`(`send`: SendRoute): Route
@@ -19903,6 +19920,29 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     UniffiLib.uniffi_cove_fn_method_routefactory_qr_import(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The nested routes once `route` is pushed onto `routes`
+     *
+     * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
+     * of the other kind for the same wallet, such as a scanned payment address over a coin
+     * control send, replaces it: the old send's screens, from the coin control list it was opened
+     * from on, leave with its session instead of staying over a closed one
+     */override fun `routesAfterPush`(`routes`: List<Route>, `route`: Route): List<Route> {
+            return FfiConverterSequenceTypeRoute.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_routefactory_routes_after_push(
+        it,
+
+        FfiConverterSequenceTypeRoute.lower(`routes`),
+        FfiConverterTypeRoute.lower(`route`),_status)
 }
     }
     )
@@ -23672,7 +23712,15 @@ public interface RustSendFlowManagerInterface {
 
     fun `listenForUpdates`(`reconciler`: SendFlowManagerReconciler)
 
-    fun `sanitizeBtcEnteringAmount`(`oldValue`: kotlin.String, `newValue`: kotlin.String): kotlin.String?
+    /**
+     * The bitcoin field's text cleaned up for `unit`, the unit the field shows, or nothing when
+     * it needs no change
+     *
+     * The platform's unit, not Rust's, decides, since a display preference change reaches Rust
+     * before the screen, and a keystroke such as a decimal point is only valid in the unit the
+     * user typed it in
+     */
+    fun `sanitizeBtcEnteringAmount`(`oldValue`: kotlin.String, `newValue`: kotlin.String, `unit`: BitcoinUnit): kotlin.String?
 
     fun `sanitizeFiatEnteringAmount`(`oldValue`: kotlin.String, `newValue`: kotlin.String): kotlin.String?
 
@@ -23880,7 +23928,15 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
 
 
 
-    override fun `sanitizeBtcEnteringAmount`(`oldValue`: kotlin.String, `newValue`: kotlin.String): kotlin.String? {
+
+    /**
+     * The bitcoin field's text cleaned up for `unit`, the unit the field shows, or nothing when
+     * it needs no change
+     *
+     * The platform's unit, not Rust's, decides, since a display preference change reaches Rust
+     * before the screen, and a keystroke such as a decimal point is only valid in the unit the
+     * user typed it in
+     */override fun `sanitizeBtcEnteringAmount`(`oldValue`: kotlin.String, `newValue`: kotlin.String, `unit`: BitcoinUnit): kotlin.String? {
             return FfiConverterOptionalString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -23888,7 +23944,8 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
         it,
 
         FfiConverterString.lower(`oldValue`),
-        FfiConverterString.lower(`newValue`),_status)
+        FfiConverterString.lower(`newValue`),
+        FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
 }
     }
     )

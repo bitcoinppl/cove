@@ -7657,6 +7657,16 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
 
     func qrImport()  -> Route
 
+    /**
+     * The nested routes once `route` is pushed onto `routes`
+     *
+     * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
+     * of the other kind for the same wallet, such as a scanned payment address over a coin
+     * control send, replaces it: the old send's screens, from the coin control list it was opened
+     * from on, leave with its session instead of staying over a closed one
+     */
+    func routesAfterPush(routes: [Route], route: Route)  -> [Route]
+
     func secretWords(walletId: WalletId)  -> Route
 
     func send(send: SendRoute)  -> Route
@@ -7870,6 +7880,25 @@ open func qrImport() -> Route  {
         uniffiCallStatus in
     uniffi_cove_fn_method_routefactory_qr_import(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The nested routes once `route` is pushed onto `routes`
+     *
+     * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
+     * of the other kind for the same wallet, such as a scanned payment address over a coin
+     * control send, replaces it: the old send's screens, from the coin control list it was opened
+     * from on, leave with its session instead of staying over a closed one
+     */
+open func routesAfterPush(routes: [Route], route: Route) -> [Route]  {
+    return try!  FfiConverterSequenceTypeRoute.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_routefactory_routes_after_push(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeRoute.lower(routes),
+        FfiConverterTypeRoute_lower(route),uniffiCallStatus
     )
 })
 }
@@ -10136,7 +10165,15 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
 
     func listenForUpdates(reconciler: SendFlowManagerReconciler)
 
-    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String)  -> String?
+    /**
+     * The bitcoin field's text cleaned up for `unit`, the unit the field shows, or nothing when
+     * it needs no change
+     *
+     * The platform's unit, not Rust's, decides, since a display preference change reaches Rust
+     * before the screen, and a keystroke such as a decimal point is only valid in the unit the
+     * user typed it in
+     */
+    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String, unit: BitcoinUnit)  -> String?
 
     func sanitizeFiatEnteringAmount(oldValue: String, newValue: String)  -> String?
 
@@ -10282,13 +10319,22 @@ open func listenForUpdates(reconciler: SendFlowManagerReconciler)  {try! rustCal
 }
 }
 
-open func sanitizeBtcEnteringAmount(oldValue: String, newValue: String) -> String?  {
+    /**
+     * The bitcoin field's text cleaned up for `unit`, the unit the field shows, or nothing when
+     * it needs no change
+     *
+     * The platform's unit, not Rust's, decides, since a display preference change reaches Rust
+     * before the screen, and a keystroke such as a decimal point is only valid in the unit the
+     * user typed it in
+     */
+open func sanitizeBtcEnteringAmount(oldValue: String, newValue: String, unit: BitcoinUnit) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustsendflowmanager_sanitize_btc_entering_amount(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(oldValue),
-        FfiConverterString.lower(newValue),uniffiCallStatus
+        FfiConverterString.lower(newValue),
+        FfiConverterTypeBitcoinUnit_lower(unit),uniffiCallStatus
     )
 })
 }
@@ -56265,7 +56311,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates() != 39583) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 53516) {
+    if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_btc_entering_amount() != 34681) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_sanitize_fiat_entering_amount() != 54845) {
@@ -56596,6 +56642,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_qr_import() != 52134) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_routefactory_routes_after_push() != 63522) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_secret_words() != 29505) {
