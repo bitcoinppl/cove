@@ -7,7 +7,6 @@
 
 use bdk_wallet::{KeychainKind, chain::SpkIterator, descriptor::ExtendedDescriptor};
 use bitcoin::{Script, ScriptBuf};
-use cove_bdk::descriptor_ext::DescriptorExt as _;
 use cove_types::{
     Network, WalletId,
     address::{AddressError, AddressWithNetwork},
@@ -48,8 +47,6 @@ pub struct OwnedAddress {
     pub network: Network,
     pub chain: AddressChain,
     pub index: u32,
-    /// The account in the wallet's derivation path, when its descriptor records one
-    pub account: Option<u32>,
 }
 
 /// A wallet the lookup could not read, so the address might still belong to it
@@ -285,7 +282,6 @@ fn find_in_wallet(
         network: metadata.network,
         chain: keychain.into(),
         index,
-        account: chains.descriptor(keychain).account_index(),
     }))
 }
 

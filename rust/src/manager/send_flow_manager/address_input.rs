@@ -472,6 +472,7 @@ mod tests {
 
         let own = address_at(&sending_keys, Network::Bitcoin, KeychainKind::External, 3).address;
         let other = address_at(&savings_keys, Network::Bitcoin, KeychainKind::Internal, 2).address;
+        let sending_name = sending.name.clone();
 
         // each owned address stays entered until its note arrives, as it would while the user
         // reads the screen; a note for an address that was already replaced is never sent
@@ -484,16 +485,13 @@ mod tests {
         // a note for the address no wallet owns would arrive here first
         assert_eq!(
             next_ownership_note(&manager).await,
-            (own.to_string(), "This is an address in this wallet (receive, index 3)".to_string())
+            (own.to_string(), format!("This address belongs to this wallet, “{sending_name}”"))
         );
 
         manager.clone().dispatch(Action::NotifyAddressChanged(Arc::new(other.clone())));
         assert_eq!(
             next_ownership_note(&manager).await,
-            (
-                other.to_string(),
-                format!("This is your address in “{}” (change, index 2)", savings.name)
-            )
+            (other.to_string(), format!("This address belongs to your wallet “{}”", savings.name))
         );
     }
 

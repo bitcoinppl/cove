@@ -56,10 +56,10 @@ final class AddressOwnershipSendFullLaunchUITests: XCTestCase {
         // covers the note, so set one first and each whole address closes the keyboard instead
         app.startSend(to: Self.senderReceive2)
         app.tapMax()
-        assertOwnershipNote("This is an address in this wallet (receive, index 2)")
+        assertOwnershipNote("This address belongs to this wallet, “\(sender)”")
 
         replaceAddress(with: Self.otherReceive0)
-        assertOwnershipNote("This is your address in “\(other)” (receive, index 0)")
+        assertOwnershipNote("This address belongs to your wallet “\(other)”")
 
         replaceAddress(with: XCUIApplication.externalAddress)
         assertNoOwnershipNote()
@@ -70,7 +70,7 @@ final class AddressOwnershipSendFullLaunchUITests: XCTestCase {
         app.tapButton(named: "coinControl.selectAll")
         app.tapButton(named: "coinControl.continue")
         app.enterAddress(Self.otherChange0)
-        assertOwnershipNote("This is your address in “\(other)” (change, index 0)")
+        assertOwnershipNote("This address belongs to your wallet “\(other)”")
     }
 
     // MARK: - Steps

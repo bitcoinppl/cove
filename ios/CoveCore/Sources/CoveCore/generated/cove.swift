@@ -20853,23 +20853,15 @@ public struct OwnedAddress: Equatable, Hashable {
     public var network: Network
     public var chain: AddressChain
     public var index: UInt32
-    /**
-     * The account in the wallet's derivation path, when its descriptor records one
-     */
-    public var account: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(walletId: WalletId, walletName: String, network: Network, chain: AddressChain, index: UInt32,
-        /**
-         * The account in the wallet's derivation path, when its descriptor records one
-         */account: UInt32?) {
+    public init(walletId: WalletId, walletName: String, network: Network, chain: AddressChain, index: UInt32) {
         self.walletId = walletId
         self.walletName = walletName
         self.network = network
         self.chain = chain
         self.index = index
-        self.account = account
     }
 
 
@@ -20892,8 +20884,7 @@ public struct FfiConverterTypeOwnedAddress: FfiConverterRustBuffer {
                 walletName: FfiConverterString.read(from: &buf),
                 network: FfiConverterTypeNetwork.read(from: &buf),
                 chain: FfiConverterTypeAddressChain.read(from: &buf),
-                index: FfiConverterUInt32.read(from: &buf),
-                account: FfiConverterOptionUInt32.read(from: &buf)
+                index: FfiConverterUInt32.read(from: &buf)
         )
     }
 
@@ -20903,7 +20894,6 @@ public struct FfiConverterTypeOwnedAddress: FfiConverterRustBuffer {
         FfiConverterTypeNetwork.write(value.network, into: &buf)
         FfiConverterTypeAddressChain.write(value.chain, into: &buf)
         FfiConverterUInt32.write(value.index, into: &buf)
-        FfiConverterOptionUInt32.write(value.account, into: &buf)
     }
 }
 

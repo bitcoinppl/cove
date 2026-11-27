@@ -36738,11 +36738,6 @@ data class OwnedAddress (
     var `chain`: AddressChain
     ,
     var `index`: kotlin.UInt
-    ,
-    /**
-     * The account in the wallet's derivation path, when its descriptor records one
-     */
-    var `account`: kotlin.UInt?
 
 ){
 
@@ -36764,7 +36759,6 @@ public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress>
             FfiConverterTypeNetwork.read(buf),
             FfiConverterTypeAddressChain.read(buf),
             FfiConverterUInt.read(buf),
-            FfiConverterOptionalUInt.read(buf),
         )
     }
 
@@ -36773,8 +36767,7 @@ public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress>
             FfiConverterString.allocationSize(value.`walletName`) +
             FfiConverterTypeNetwork.allocationSize(value.`network`) +
             FfiConverterTypeAddressChain.allocationSize(value.`chain`) +
-            FfiConverterUInt.allocationSize(value.`index`) +
-            FfiConverterOptionalUInt.allocationSize(value.`account`)
+            FfiConverterUInt.allocationSize(value.`index`)
     )
 
     override fun write(value: OwnedAddress, buf: ByteBuffer) {
@@ -36783,7 +36776,6 @@ public object FfiConverterTypeOwnedAddress: FfiConverterRustBuffer<OwnedAddress>
             FfiConverterTypeNetwork.write(value.`network`, buf)
             FfiConverterTypeAddressChain.write(value.`chain`, buf)
             FfiConverterUInt.write(value.`index`, buf)
-            FfiConverterOptionalUInt.write(value.`account`, buf)
     }
 }
 

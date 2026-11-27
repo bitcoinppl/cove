@@ -7,7 +7,7 @@ use tracing::warn;
 
 use super::{Message, RustSendFlowManager};
 use crate::address_ownership::{
-    AddressChain, AddressOwnership, AddressOwnershipError, AddressOwnershipLookup, OwnedAddress,
+    AddressOwnership, AddressOwnershipError, AddressOwnershipLookup, OwnedAddress,
 };
 
 /// Tells the user that the address they are sending to is one of their own
@@ -33,25 +33,15 @@ impl SendFlowAddressOwnership {
     }
 }
 
+// the chain and index mean nothing to most people, so the note names only the wallet; it names
+// the sending wallet too, so a send back to it can't be mistaken for one to another wallet
 fn message(owner: &OwnedAddress, sender: &WalletId) -> String {
-    let chain = match owner.chain {
-        AddressChain::Receive => "receive",
-        AddressChain::Change => "change",
-    };
-
-    let index = owner.index;
+    let wallet = &owner.wallet_name;
     if &owner.wallet_id == sender {
-        return format!("This is an address in this wallet ({chain}, index {index})");
+        return format!("This address belongs to this wallet, “{wallet}”");
     }
 
-    // most wallets only use account 0, so naming it would only add noise
-    let account = match owner.account {
-        Some(account) if account != 0 => format!("account {account}, "),
-        _ => String::new(),
-    };
-
-    let wallet = &owner.wallet_name;
-    format!("This is your address in “{wallet}” ({account}{chain}, index {index})")
+    format!("This address belongs to your wallet “{wallet}”")
 }
 
 impl RustSendFlowManager {

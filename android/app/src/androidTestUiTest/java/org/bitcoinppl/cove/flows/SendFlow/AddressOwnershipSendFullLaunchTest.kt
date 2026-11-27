@@ -103,10 +103,10 @@ class AddressOwnershipSendFullLaunchTest {
 
         // Set Amount, from the sender's own address to the other wallet's, then to a stranger's
         wallet.startSend(SENDER_RECEIVE_2)
-        assertOwnershipNote("This is an address in this wallet (receive, index 2)")
+        assertOwnershipNote("This address belongs to this wallet, “$sender”")
 
         wallet.enterAddress(OTHER_RECEIVE_0)
-        assertOwnershipNote("This is your address in “$other” (receive, index 0)")
+        assertOwnershipNote("This address belongs to your wallet “$other”")
 
         wallet.enterAddress(EXTERNAL_ADDRESS)
         assertNoOwnershipNote()
@@ -120,7 +120,7 @@ class AddressOwnershipSendFullLaunchTest {
         device.waitFor(By.res("coinControl.selectAll").text("Select All")).click()
         device.waitFor(By.res("coinControl.continue")).click()
         wallet.enterAddress(OTHER_CHANGE_0)
-        assertOwnershipNote("This is your address in “$other” (change, index 0)")
+        assertOwnershipNote("This address belongs to your wallet “$other”")
     }
 
     /**

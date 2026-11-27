@@ -38,7 +38,6 @@ fn owned(metadata: &WalletMetadata, chain: AddressChain, index: u32) -> OwnedAdd
         network: metadata.network,
         chain,
         index,
-        account: Some(0),
     }
 }
 
@@ -422,13 +421,7 @@ fn the_account_comes_from_the_chain_that_owns_the_address() {
         save_store_less_watch_only(Some((external, internal)), Network::Bitcoin, WalletMode::Main);
 
     let address = AddressWithNetwork::try_new(&change_address.to_string()).unwrap();
-    assert_eq!(
-        find_owners(&address),
-        owned_by(vec![OwnedAddress {
-            account: Some(1),
-            ..owned(&wallet, AddressChain::Change, 2)
-        }])
-    );
+    assert_eq!(find_owners(&address), owned_by(vec![owned(&wallet, AddressChain::Change, 2)]));
 }
 
 #[test]
