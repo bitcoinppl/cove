@@ -6,21 +6,13 @@
 import Darwin
 import Foundation
 
-/// Finds Electrum servers on the Wi-Fi or Ethernet network the phone is on
+/// The Wi-Fi and Ethernet networks a node search may search
 ///
 /// Rust owns the search and keeps it on the local network; this supplies the interfaces it may
 /// search, with the index Rust binds every socket to so a VPN can't carry the search. iOS asks
 /// for Local Network access the first time the search connects, and can refuse those first
 /// connections before the person answers, so a first search can come back empty
 enum LanNodeDiscovery {
-    static func discover(nodeSelector: NodeSelector) async throws -> [DiscoveredNode] {
-        #if DEBUG
-            if let scripted = try await UITestLanDiscovery.discover() { return scripted }
-        #endif
-
-        return try await nodeSelector.discoverLanNodes(interfaces: lanInterfaces())
-    }
-
     /// The IPv4 address and prefix of each Wi-Fi or wired Ethernet interface that is up
     ///
     /// iOS names those `en*`, while cellular is `pdp_ip*` and VPNs are `utun*` or `ipsec*`, so

@@ -23,7 +23,7 @@ struct NodeSelectionView: View {
 
     @State private var checkUrlTask: Task<Void, Never>?
 
-    @State private var lanSearch: LanSearch = .notStarted
+    @State private var discovery = NodeDiscoveryManager()
 
     init() {
         let savedNode = nodeSelector.selectedNode()
@@ -147,33 +147,8 @@ struct NodeSelectionView: View {
         }
     }
 
-    private func searchLocalNetwork() {
-        guard lanSearch != .searching else { return }
-
-        lanSearch = .searching
-
-        // the search always runs to the end and records its result: the Rust search can't be
-        // cancelled from Swift, so cancelling would only drop its answer and leave the section
-        // searching
-        Task {
-            let search: LanSearch
-            do {
-                let nodes = try await LanNodeDiscovery.discover(nodeSelector: nodeSelector)
-                search = .finished(nodes)
-            } catch NodeDiscoveryError.NoLocalNetwork {
-                search = .noLocalNetwork
-            } catch NodeDiscoveryError.LocalNetworkBlocked {
-                search = .localNetworkBlocked
-            } catch {
-                Log.warn("Local network node search failed: \(error.localizedDescription)")
-                search = .finished([])
-            }
-
-            lanSearch = search
-        }
-    }
-
-    /// Nothing reaches a discovered server until it is picked here, when the check talks to it
+    /// A found server already proved it serves this network, and picking it runs the same check
+    /// and save as a custom node
     private func selectDiscoveredNode(_ found: DiscoveredNode) {
         showLoadingPopup()
         checkUrlTask = Task {
@@ -196,9 +171,10 @@ struct NodeSelectionView: View {
             presetNodes: presetNodes,
             selectedRow: $selectedRow,
             lanSection: NodeSelectionLanSection(
-                search: lanSearch,
+                search: discovery.state,
                 selectedUrl: selectedCustomUrl,
-                onSearch: searchLocalNetwork,
+                onSearch: discovery.start,
+                onStop: discovery.stop,
                 onSelect: selectDiscoveredNode
             ),
             customUrl: $customUrl,
@@ -328,55 +304,62 @@ private struct NodeSelectionPresetSection: View {
     }
 }
 
-/// Where a search of the local network for nodes stands
-private enum LanSearch: Equatable {
-    case notStarted
-    case searching
-    case noLocalNetwork
-    case localNetworkBlocked
-    case finished([DiscoveredNode])
-}
-
 private struct NodeSelectionLanSection: View {
-    let search: LanSearch
+    let search: NodeDiscoveryState
     let selectedUrl: String?
     let onSearch: () -> Void
+    let onStop: () -> Void
     let onSelect: (DiscoveredNode) -> Void
+
+    private var isSearching: Bool {
+        if case .searching = search { true } else { false }
+    }
+
+    /// Whether the search ended having found nothing, the only time Local Network access is in doubt
+    private var foundNothing: Bool {
+        if case let .finished(found) = search { found.isEmpty } else { false }
+    }
 
     private var message: String? {
         switch search {
-        case .notStarted: nil
+        case .idle, .stopped: nil
         case .searching: "Searching this network…"
-        case .noLocalNetwork: "Connect to Wi-Fi to find nodes on your network"
-        case .localNetworkBlocked:
+        case let .finished(found): found.isEmpty ? "No Electrum servers found on this network" : nil
+        case .failed(.NoLocalNetwork): "Connect to Wi-Fi to find nodes on your network"
+        case .failed(.LocalNetworkBlocked):
             "A VPN is blocking this network. Allow local network access in your VPN, or turn it off, to search."
-        case let .finished(nodes): nodes.isEmpty ? "No Electrum servers found on this network" : nil
+        }
+    }
+
+    private var buttonTitle: String {
+        switch search {
+        case .idle: "Find Nodes on This Network"
+        // a running search can be stopped, keeping the servers it found
+        case .searching: "Stop"
+        case .stopped, .finished, .failed: "Search Again"
         }
     }
 
     var body: some View {
         Section {
-            if case let .finished(nodes) = search {
-                ForEach(nodes, id: \.node.url) { found in
-                    DiscoveredNodeRow(
-                        found: found,
-                        isSelected: found.node.url == selectedUrl,
-                        select: { onSelect(found) }
-                    )
-                }
+            ForEach(search.foundServers, id: \.node.url) { found in
+                DiscoveredNodeRow(
+                    found: found,
+                    isSelected: found.node.url == selectedUrl,
+                    select: { onSelect(found) }
+                )
             }
 
             if let message {
-                LanSearchStatusRow(message: message, isSearching: search == .searching)
+                LanSearchStatusRow(message: message, isSearching: isSearching)
             }
 
-            Button(search == .notStarted ? "Find Nodes on This Network" : "Search Again", action: onSearch)
+            Button(buttonTitle, action: isSearching ? onStop : onSearch)
                 .font(.subheadline)
-                .disabled(search == .searching)
         } header: {
             Text("On This Network")
         } footer: {
-            if search == .finished([]) { LocalNetworkAccessHelp() }
+            if foundNothing { LocalNetworkAccessHelp() }
         }
     }
 }

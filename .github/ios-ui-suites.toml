@@ -285,7 +285,7 @@ suites = [
 paths = [
     "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
     "ios/Cove/Flows/SettingsFlow/SettingsScreen/LanNodeDiscovery.swift",
-    "ios/Cove/UITestSeams/UITestLanDiscovery.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeDiscoveryManager.swift",
 ]
 suites = ["CoveUITests/NodeLanDiscoveryFullLaunchUITests"]
 

@@ -1,18 +1,19 @@
 import Darwin
 import XCTest
 
-/// Node settings search the local network only when asked, list what the search finds, and save
-/// a picked server through the node check, one choice at a time
+/// Node settings search the local network only when asked, list only the servers for the selected
+/// network, and save a picked server through the node check, one choice at a time
 ///
 /// A UI test can't put an Electrum server on the simulator's network, so the app's debug-only
-/// `COVE_UI_TEST_LAN_DISCOVERY` seam answers each search the screen starts with the results the
-/// test scripts; the Rust tests cover the search itself. A found server is the fake node's
-/// Electrum port, or a listener on this machine that never answers, which the simulator reaches
-/// on the loopback it shares. Needs the fake node, which `xtask ios-ui`
-/// (`just ios-ui-background`) starts for every run
+/// `COVE_UI_TEST_LAN_DISCOVERY` seam answers each search the screen starts with the loopback
+/// servers the test scripts, which the simulator shares with this machine. Rust checks those
+/// servers as it checks swept ones, so the fake node's Electrum port is listed and a server on
+/// another network isn't; the Rust tests cover the sweep itself. Needs the fake node, which
+/// `xtask ios-ui` (`just ios-ui-background`) starts for every run
 final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
     private static let fakeServerHost = "fake-electrs.local"
-    private static let silentServerHost = "silent-electrs.local"
+    private static let slowServerHost = "slow-electrs.local"
+    private static let mainnetServerHost = "mainnet-electrs.local"
     private static let signetDefaultNode = "mutinynet"
 
     private var app: XCUIApplication!
@@ -57,17 +58,50 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
         XCTAssertEqual(app.textFields["Enter URL"].value as? String, electrumUrl)
     }
 
-    /// Only one choice is checked at a time: a preset tapped while a found server is still being
-    /// checked, after its loading popup is closed, is ignored until that check ends
-    func testAPresetTappedWhileAFoundServerIsCheckedIsIgnoredUntilTheCheckEnds() throws {
-        let silent = try SilentServer()
-        defer { silent.close() }
+    /// Every server is asked which chain it serves, so one on another network is never offered
+    func testAServerOnAnotherNetworkIsNotListed() throws {
+        let mainnet = try ElectrumTestServer(genesisHash: ElectrumTestServer.mainnetGenesis)
+        defer { mainnet.close() }
 
-        script([.servers([(Self.silentServerHost, silent.port)])])
+        script([.servers([(Self.mainnetServerHost, mainnet.port), (Self.fakeServerHost, UITestHostPorts.electrumPort)])])
         openNodeSettings()
         app.tapButton(named: "Find Nodes on This Network")
 
-        let found = foundServer(Self.silentServerHost)
+        XCTAssertTrue(app.buttons["Search Again"].waitForExistence(timeout: 15), "the search never finished")
+        XCTAssertTrue(foundServer(Self.fakeServerHost).exists, "the signet server wasn't listed")
+        XCTAssertFalse(foundServer(Self.mainnetServerHost).exists, "a mainnet server was listed on signet")
+        XCTAssertGreaterThan(mainnet.requests, 0, "the mainnet server was never asked")
+    }
+
+    /// Stopping a search keeps the servers it already found
+    func testStopKeepsTheServersFoundSoFar() {
+        script([.servers([(Self.fakeServerHost, UITestHostPorts.electrumPort)], keepSearching: true)])
+        openNodeSettings()
+        app.tapButton(named: "Find Nodes on This Network")
+
+        let found = foundServer(Self.fakeServerHost)
+        XCTAssertTrue(found.waitForExistence(timeout: 10), "the found server was never listed")
+        XCTAssertTrue(app.staticTexts["Searching this network…"].exists, "a running search isn't shown as searching")
+
+        app.tapButton(named: "Stop")
+        XCTAssertTrue(app.buttons["Search Again"].waitForExistence(timeout: 5), "Stop didn't stop the search")
+        XCTAssertTrue(found.exists, "stopping dropped the server found")
+        XCTAssertFalse(app.staticTexts["Searching this network…"].exists, "a stopped search is still shown as searching")
+        XCTAssertFalse(app.staticTexts["No Electrum servers found on this network"].exists, "a stopped search says it found nothing")
+    }
+
+    /// Only one choice is checked at a time: a preset tapped while a found server is still being
+    /// checked, after its loading popup is closed, is ignored until that check ends
+    func testAPresetTappedWhileAFoundServerIsCheckedIsIgnoredUntilTheCheckEnds() throws {
+        // proves it serves signet, then never answers the node check, which holds it open
+        let slow = try ElectrumTestServer(genesisHash: ElectrumTestServer.signetGenesis)
+        defer { slow.close() }
+
+        script([.servers([(Self.slowServerHost, slow.port)])])
+        openNodeSettings()
+        app.tapButton(named: "Find Nodes on This Network")
+
+        let found = foundServer(Self.slowServerHost)
         XCTAssertTrue(found.waitForExistence(timeout: 10), "the found server was never listed")
         found.tap()
 
@@ -78,7 +112,7 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1)
         XCTAssertFalse(preset.isSelected, "a preset can't replace a node still being checked")
 
-        XCTAssertTrue(app.staticText(containing: "Failed to connect to node").waitForExistence(timeout: 60), "the silent server's check never ended")
+        XCTAssertTrue(app.staticText(containing: "Failed to connect to node").waitForExistence(timeout: 60), "the slow server's check never ended")
         closePopup()
 
         preset.tap()
@@ -122,13 +156,14 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
     /// Leaving node settings while a found server is checked doesn't save the custom form over it
     ///
     /// Leaving saves what was typed into the custom form, so this edits the form, picks a server
-    /// that never answers, closes the loading popup and goes back. Once that check has failed, the
+    /// that never answers the check, closes the loading popup and goes back. Once that check has failed, the
     /// saved node must still be the one from before
     func testLeavingWhileAFoundServerIsCheckedDoesNotSaveTheForm() throws {
-        let silent = try SilentServer()
-        defer { silent.close() }
+        // proves it serves signet, then never answers the node check, which holds it open
+        let slow = try ElectrumTestServer(genesisHash: ElectrumTestServer.signetGenesis)
+        defer { slow.close() }
 
-        script([.servers([(Self.silentServerHost, silent.port)])])
+        script([.servers([(Self.slowServerHost, slow.port)])])
         openNodeSettings()
 
         // the saved node is the fake Esplora custom node, so a new name is an unsaved edit
@@ -138,7 +173,7 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
         name.typeTextOnceFocused("Edited")
 
         app.tapButton(named: "Find Nodes on This Network")
-        let found = foundServer(Self.silentServerHost)
+        let found = foundServer(Self.slowServerHost)
         XCTAssertTrue(found.waitForExistence(timeout: 10), "the found server was never listed")
         found.tap()
 
@@ -148,7 +183,7 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10), "going back didn't leave node settings")
 
         let failed = app.staticText(containing: "Failed to connect to node")
-        XCTAssertTrue(failed.waitForExistence(timeout: 60), "the silent server's check never ended")
+        XCTAssertTrue(failed.waitForExistence(timeout: 60), "the slow server's check never ended")
         XCTAssertTrue(failed.waitForNonExistence(timeout: 15), "the failure popup never closed")
 
         openNodeRow()
@@ -160,7 +195,7 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
 
     private enum Search {
         case error(String)
-        case servers([(host: String, port: Int)])
+        case servers([(host: String, port: Int)], keepSearching: Bool = false)
     }
 
     /// Sets the search results the app's seam answers each search with, in order
@@ -169,8 +204,11 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
             switch search {
             case let .error(error):
                 ["error": error]
-            case let .servers(servers):
-                ["servers": servers.map { ["host": $0.host, "port": $0.port] }]
+            case let .servers(servers, keepSearching):
+                [
+                    "servers": servers.map { ["host": $0.host, "port": $0.port] },
+                    "keepSearching": keepSearching,
+                ]
             }
         }
 
@@ -207,13 +245,27 @@ final class NodeLanDiscoveryFullLaunchUITests: XCTestCase {
     }
 }
 
-/// A TCP listener on this machine's loopback that accepts connections and never answers, which
-/// holds a node check open until it times out
-private final class SilentServer {
+/// An Electrum server on this machine's loopback, which the simulator shares, that proves it
+/// serves the chain whose genesis block is `genesisHash` and never answers anything else, so a
+/// node check of it runs until it times out
+private final class ElectrumTestServer: @unchecked Sendable {
+    static let signetGenesis = "00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6"
+    static let mainnetGenesis = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
+
     let port: Int
     private let socket: Int32
+    private let genesisHash: String
+    private let lock = NSLock()
+    private var requestCount = 0
 
-    init() throws {
+    /// How many requests the server has been sent
+    var requests: Int {
+        lock.withLock { requestCount }
+    }
+
+    init(genesisHash: String) throws {
+        self.genesisHash = genesisHash
+
         let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
 
@@ -243,9 +295,61 @@ private final class SilentServer {
 
         socket = fd
         port = Int(UInt16(bigEndian: assigned.sin_port))
+        Thread.detachNewThread { [self] in acceptConnections() }
     }
 
     func close() {
+        shutdown(socket, SHUT_RDWR)
         Darwin.close(socket)
+    }
+
+    private func acceptConnections() {
+        while true {
+            let connection = accept(socket, nil, nil)
+            guard connection >= 0 else { return }
+            Thread.detachNewThread { [self] in answer(connection) }
+        }
+    }
+
+    private func answer(_ connection: Int32) {
+        defer { Darwin.close(connection) }
+
+        var pending = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+
+        while true {
+            let count = read(connection, &buffer, buffer.count)
+            guard count > 0 else { return }
+            pending.append(contentsOf: buffer[..<count])
+
+            while let newline = pending.firstIndex(of: UInt8(ascii: "\n")) {
+                let line = pending[..<newline]
+                pending = Data(pending[pending.index(after: newline)...])
+
+                guard let response = response(to: line) else { continue }
+                _ = response.withUnsafeBytes { write(connection, $0.baseAddress, response.count) }
+            }
+        }
+    }
+
+    /// The reply to one request line, or nil for the requests this server never answers
+    private func response(to line: Data) -> Data? {
+        guard let request = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              let method = request["method"] as? String
+        else { return nil }
+
+        lock.withLock { requestCount += 1 }
+
+        let result: Any
+        switch method {
+        case "server.version": result = ["Electrum test server 1.0", "1.4"]
+        case "server.features": result = ["genesis_hash": genesisHash, "server_version": "Electrum test server 1.0"]
+        default: return nil
+        }
+
+        let reply: [String: Any] = ["jsonrpc": "2.0", "id": request["id"] ?? NSNull(), "result": result]
+        guard var data = try? JSONSerialization.data(withJSONObject: reply) else { return nil }
+        data.append(UInt8(ascii: "\n"))
+        return data
     }
 }
