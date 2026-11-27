@@ -5,7 +5,6 @@ use crate::{
     database::Database,
     network::Network,
     node::{ApiType, Node},
-    node_discovery::{self, DiscoveredNode, LanInterface, NodeDiscoveryError},
 };
 use cove_macros::impl_default_for;
 use cove_util::result_ext::ResultExt as _;
@@ -163,19 +162,6 @@ impl NodeSelector {
         };
 
         Ok(node)
-    }
-
-    /// Finds Electrum servers for the selected network on the local network
-    ///
-    /// Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
-    /// only opens and closes TCP connections, so no server receives a request until the person
-    /// picks one and it goes through `check_and_save_node`
-    #[uniffi::method]
-    pub async fn discover_lan_nodes(
-        &self,
-        interfaces: Vec<LanInterface>,
-    ) -> Result<Vec<DiscoveredNode>, NodeDiscoveryError> {
-        node_discovery::discover(self.network, &interfaces).await
     }
 
     #[uniffi::method]

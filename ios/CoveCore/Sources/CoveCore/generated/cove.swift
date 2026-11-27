@@ -6898,15 +6898,6 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
     func checkSelectedNode(node: Node) async throws
 
     /**
-     * Finds Electrum servers for the selected network on the local network
-     *
-     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
-     * only opens and closes TCP connections, so no server receives a request until the person
-     * picks one and it goes through `check_and_save_node`
-     */
-    func discoverLanNodes(interfaces: [LanInterface]) async throws  -> [DiscoveredNode]
-
-    /**
      * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
     func parseCustomNode(url: String, apiType: ApiType, enteredName: String) throws  -> Node
@@ -7019,30 +7010,6 @@ open func checkSelectedNode(node: Node)async throws   {
             freeFunc: ffi_cove_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeNodeSelectorError_lift
-        )
-}
-
-    /**
-     * Finds Electrum servers for the selected network on the local network
-     *
-     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. Discovery
-     * only opens and closes TCP connections, so no server receives a request until the person
-     * picks one and it goes through `check_and_save_node`
-     */
-open func discoverLanNodes(interfaces: [LanInterface])async throws  -> [DiscoveredNode]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_nodeselector_discover_lan_nodes(
-                    self.uniffiCloneHandle(),
-                    FfiConverterSequenceTypeLanInterface.lower(interfaces)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
-            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
-            freeFunc: ffi_cove_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeDiscoveredNode.lift,
-            errorHandler: FfiConverterTypeNodeDiscoveryError_lift
         )
 }
 
@@ -9788,6 +9755,199 @@ public func FfiConverterTypeRustKeyTeleportManager_lift(_ handle: UInt64) throws
 #endif
 public func FfiConverterTypeRustKeyTeleportManager_lower(_ value: RustKeyTeleportManager) -> UInt64 {
     return FfiConverterTypeRustKeyTeleportManager.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Searches the local network for Electrum servers, one search at a time
+ */
+public protocol RustNodeDiscoveryManagerProtocol: AnyObject, Sendable {
+
+    func listenForUpdates(reconciler: NodeDiscoveryManagerReconciler)
+
+    /**
+     * Searches the given interfaces for servers on the selected network, unless a search is
+     * already running
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. The search
+     * writes only Electrum's `server.version`, `server.features` and block header 0 requests,
+     * so no server learns anything about the wallet until the person picks one and it goes
+     * through `check_and_save_node`
+     */
+    func start(interfaces: [LanInterface])
+
+    /**
+     * The search as it stands, read once when the screen starts listening
+     */
+    func state()  -> NodeDiscoveryState
+
+    /**
+     * Stops the running search, keeping the servers it found
+     */
+    func stop()
+
+}
+/**
+ * Searches the local network for Electrum servers, one search at a time
+ */
+open class RustNodeDiscoveryManager: RustNodeDiscoveryManagerProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_fn_clone_rustnodediscoverymanager(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_constructor_rustnodediscoverymanager_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_fn_free_rustnodediscoverymanager(handle, $0) }
+    }
+
+
+
+
+open func listenForUpdates(reconciler: NodeDiscoveryManagerReconciler)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustnodediscoverymanager_listen_for_updates(
+            self.uniffiCloneHandle(),
+        FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler_lower(reconciler),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Searches the given interfaces for servers on the selected network, unless a search is
+     * already running
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. The search
+     * writes only Electrum's `server.version`, `server.features` and block header 0 requests,
+     * so no server learns anything about the wallet until the person picks one and it goes
+     * through `check_and_save_node`
+     */
+open func start(interfaces: [LanInterface])  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustnodediscoverymanager_start(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceTypeLanInterface.lower(interfaces),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * The search as it stands, read once when the screen starts listening
+     */
+open func state() -> NodeDiscoveryState  {
+    return try!  FfiConverterTypeNodeDiscoveryState_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustnodediscoverymanager_state(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Stops the running search, keeping the servers it found
+     */
+open func stop()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustnodediscoverymanager_stop(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRustNodeDiscoveryManager: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RustNodeDiscoveryManager
+
+    public static func lift(_ handle: UInt64) throws -> RustNodeDiscoveryManager {
+        return RustNodeDiscoveryManager(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RustNodeDiscoveryManager) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RustNodeDiscoveryManager {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RustNodeDiscoveryManager, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustNodeDiscoveryManager_lift(_ handle: UInt64) throws -> RustNodeDiscoveryManager {
+    return try FfiConverterTypeRustNodeDiscoveryManager.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRustNodeDiscoveryManager_lower(_ value: RustNodeDiscoveryManager) -> UInt64 {
+    return FfiConverterTypeRustNodeDiscoveryManager.lower(value)
 }
 
 
@@ -19579,7 +19739,7 @@ public struct DiscoveredNode: Equatable, Hashable {
      */
     public var address: String
     /**
-     * The node software known to run there, such as `Umbrel Fulcrum`
+     * The node software known or reported to run there, such as `Umbrel Fulcrum`
      */
     public var software: String?
 
@@ -19597,7 +19757,7 @@ public struct DiscoveredNode: Equatable, Hashable {
          * The server's IP address and port, such as `192.168.1.10:50001`
          */address: String,
         /**
-         * The node software known to run there, such as `Umbrel Fulcrum`
+         * The node software known or reported to run there, such as `Umbrel Fulcrum`
          */software: String?) {
         self.node = node
         self.host = host
@@ -40007,6 +40167,235 @@ public func FfiConverterTypeNodeDiscoveryError_lower(_ value: NodeDiscoveryError
 }
 
 
+/**
+ * A change to the search, applied in order to the state the screen started from
+ */
+
+public enum NodeDiscoveryReconcileMessage: Equatable, Hashable {
+
+    /**
+     * A new search started, clearing the previous one's servers
+     */
+    case started
+    /**
+     * A server passed its check; insert it at `index` in the found servers
+     */
+    case found(index: UInt32, server: DiscoveredNode
+    )
+    /**
+     * The person stopped the search, which keeps its servers
+     */
+    case stopped
+    /**
+     * The search ended, keeping its servers
+     */
+    case finished
+    /**
+     * The search couldn't run
+     */
+    case failed(error: NodeDiscoveryError
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeDiscoveryReconcileMessage: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeDiscoveryReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = NodeDiscoveryReconcileMessage
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeDiscoveryReconcileMessage {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .started
+
+        case 2: return .found(index: try FfiConverterUInt32.read(from: &buf), server: try FfiConverterTypeDiscoveredNode.read(from: &buf)
+        )
+
+        case 3: return .stopped
+
+        case 4: return .finished
+
+        case 5: return .failed(error: try FfiConverterTypeNodeDiscoveryError.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeDiscoveryReconcileMessage, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .started:
+            writeInt(&buf, Int32(1))
+
+
+        case let .found(index,server):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt32.write(index, into: &buf)
+            FfiConverterTypeDiscoveredNode.write(server, into: &buf)
+
+
+        case .stopped:
+            writeInt(&buf, Int32(3))
+
+
+        case .finished:
+            writeInt(&buf, Int32(4))
+
+
+        case let .failed(error):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeNodeDiscoveryError.write(error, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeDiscoveryReconcileMessage_lift(_ buf: RustBuffer) throws -> NodeDiscoveryReconcileMessage {
+    return try FfiConverterTypeNodeDiscoveryReconcileMessage.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeDiscoveryReconcileMessage_lower(_ value: NodeDiscoveryReconcileMessage) -> RustBuffer {
+    return FfiConverterTypeNodeDiscoveryReconcileMessage.lower(value)
+}
+
+
+
+/**
+ * Where a search stands, with the servers it has found
+ */
+
+public enum NodeDiscoveryState: Equatable, Hashable {
+
+    /**
+     * No search has started
+     */
+    case idle
+    /**
+     * A search is running, and has found these servers so far
+     */
+    case searching(found: [DiscoveredNode]
+    )
+    /**
+     * The person stopped the search, which keeps the servers it had found
+     */
+    case stopped(found: [DiscoveredNode]
+    )
+    /**
+     * The search checked everything it found, or reached its time limit
+     */
+    case finished(found: [DiscoveredNode]
+    )
+    /**
+     * The search couldn't run
+     */
+    case failed(error: NodeDiscoveryError
+    )
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeDiscoveryState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeDiscoveryState: FfiConverterRustBuffer {
+    typealias SwiftType = NodeDiscoveryState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeDiscoveryState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .searching(found: try FfiConverterSequenceTypeDiscoveredNode.read(from: &buf)
+        )
+
+        case 3: return .stopped(found: try FfiConverterSequenceTypeDiscoveredNode.read(from: &buf)
+        )
+
+        case 4: return .finished(found: try FfiConverterSequenceTypeDiscoveredNode.read(from: &buf)
+        )
+
+        case 5: return .failed(error: try FfiConverterTypeNodeDiscoveryError.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeDiscoveryState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case let .searching(found):
+            writeInt(&buf, Int32(2))
+            FfiConverterSequenceTypeDiscoveredNode.write(found, into: &buf)
+
+
+        case let .stopped(found):
+            writeInt(&buf, Int32(3))
+            FfiConverterSequenceTypeDiscoveredNode.write(found, into: &buf)
+
+
+        case let .finished(found):
+            writeInt(&buf, Int32(4))
+            FfiConverterSequenceTypeDiscoveredNode.write(found, into: &buf)
+
+
+        case let .failed(error):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeNodeDiscoveryError.write(error, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeDiscoveryState_lift(_ buf: RustBuffer) throws -> NodeDiscoveryState {
+    return try FfiConverterTypeNodeDiscoveryState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeDiscoveryState_lower(_ value: NodeDiscoveryState) -> RustBuffer {
+    return FfiConverterTypeNodeDiscoveryState.lower(value)
+}
+
+
+
 
 public enum NodeSelection: Equatable, Hashable {
 
@@ -51345,6 +51734,163 @@ public func FfiConverterCallbackInterfaceKeyTeleportManagerReconciler_lower(_ v:
 
 
 
+public protocol NodeDiscoveryManagerReconciler: AnyObject, Sendable {
+
+    func reconcile(message: NodeDiscoveryReconcileMessage)
+
+    func reconcileMany(messages: [NodeDiscoveryReconcileMessage])
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceNodeDiscoveryManagerReconciler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler = UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler(
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            do {
+                try FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler.handleMap.remove(handle: uniffiHandle)
+            } catch {
+                print("Uniffi callback interface NodeDiscoveryManagerReconciler: handle missing in uniffiFree")
+            }
+        },
+        uniffiClone: { (uniffiHandle: UInt64) -> UInt64 in
+            do {
+                return try FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler.handleMap.clone(handle: uniffiHandle)
+            } catch {
+                fatalError("Uniffi callback interface NodeDiscoveryManagerReconciler: handle missing in uniffiClone")
+            }
+        },
+        reconcile: { (
+            uniffiHandle: UInt64,
+            message: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcile(
+                     message: try FfiConverterTypeNodeDiscoveryReconcileMessage_lift(message)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        reconcileMany: { (
+            uniffiHandle: UInt64,
+            messages: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.reconcileMany(
+                     messages: try FfiConverterSequenceTypeNodeDiscoveryReconcileMessage.lift(messages)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        }
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
+}
+
+private func uniffiCallbackInitNodeDiscoveryManagerReconciler() {
+    uniffi_cove_fn_init_callback_vtable_nodediscoverymanagerreconciler(UniffiCallbackInterfaceNodeDiscoveryManagerReconciler.vtablePtr)
+}
+
+// FfiConverter protocol for callback interfaces
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler {
+    fileprivate static let handleMap = UniffiHandleMap<NodeDiscoveryManagerReconciler>()
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+extension FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler : FfiConverter {
+    typealias SwiftType = NodeDiscoveryManagerReconciler
+    typealias FfiType = UInt64
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lift(_ handle: UInt64) throws -> SwiftType {
+        try handleMap.get(handle: handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func lower(_ v: SwiftType) -> UInt64 {
+        return handleMap.insert(obj: v)
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public static func write(_ v: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(v))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler_lift(_ handle: UInt64) throws -> NodeDiscoveryManagerReconciler {
+    return try FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler_lower(_ v: NodeDiscoveryManagerReconciler) -> UInt64 {
+    return FfiConverterCallbackInterfaceNodeDiscoveryManagerReconciler.lower(v)
+}
+
+
+
+
 public protocol OnboardingManagerReconciler: AnyObject, Sendable {
 
     func reconcile(message: OnboardingReconcileMessage)
@@ -54458,6 +55004,31 @@ fileprivate struct FfiConverterSequenceTypeKeyTeleportMessageItem: FfiConverterR
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNodeDiscoveryReconcileMessage: FfiConverterRustBuffer {
+    typealias SwiftType = [NodeDiscoveryReconcileMessage]
+
+    public static func write(_ value: [NodeDiscoveryReconcileMessage], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNodeDiscoveryReconcileMessage.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeDiscoveryReconcileMessage] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [NodeDiscoveryReconcileMessage]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNodeDiscoveryReconcileMessage.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRoute: FfiConverterRustBuffer {
     typealias SwiftType = [Route]
 
@@ -56444,6 +57015,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustkeyteleportmanager_state() != 37488) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustnodediscoverymanager_listen_for_updates() != 35524) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodediscoverymanager_start() != 37490) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodediscoverymanager_state() != 60474) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustnodediscoverymanager_stop() != 27630) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -56748,9 +57331,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_nodeselector_discover_lan_nodes() != 19359) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549) {
@@ -57149,6 +57729,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_constructor_rustkeyteleportmanager_new() != 10345) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_constructor_rustnodediscoverymanager_new() != 60874) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -57284,6 +57867,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile_many() != 45107) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nodediscoverymanagerreconciler_reconcile() != 49063) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_nodediscoverymanagerreconciler_reconcile_many() != 41328) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -57318,6 +57907,7 @@ private let initializationResult: InitializationResult = {
     uniffiCallbackInitCoinControlManagerReconciler()
     uniffiCallbackInitFfiReconcile()
     uniffiCallbackInitKeyTeleportManagerReconciler()
+    uniffiCallbackInitNodeDiscoveryManagerReconciler()
     uniffiCallbackInitOnboardingManagerReconciler()
     uniffiCallbackInitPendingWalletManagerReconciler()
     uniffiCallbackInitSendFlowManagerReconciler()

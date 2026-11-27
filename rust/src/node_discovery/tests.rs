@@ -18,6 +18,7 @@ fn findings(open: &[&str], names: &[(&str, &str)], known: &[(&str, &str)]) -> Su
     }
 
     SubnetFindings {
+        binding: LanBinding::InterfaceIndex { index: 1 },
         open: open.iter().map(|text| address(text)).collect(),
         mdns: MdnsAnswers {
             addresses,
@@ -27,7 +28,8 @@ fn findings(open: &[&str], names: &[(&str, &str)], known: &[(&str, &str)]) -> Su
 }
 
 fn merge_mainnet(found: Vec<SubnetFindings>) -> Vec<DiscoveredNode> {
-    merge(Network::Bitcoin, &Catalog::for_network(Network::Bitcoin), found)
+    let candidates = merge(Network::Bitcoin, &Catalog::for_network(Network::Bitcoin), found);
+    candidates.into_iter().map(|candidate| candidate.found).collect()
 }
 
 #[test]
@@ -108,11 +110,14 @@ fn other_networks_use_their_own_electrum_ports_and_no_distribution_ports() {
     assert_eq!(catalog.generic_port_numbers(), vec![60601]);
     assert!(catalog.known_hostnames().is_empty());
 
-    let nodes = merge(
+    let nodes: Vec<DiscoveredNode> = merge(
         Network::Signet,
         &catalog,
         vec![findings(&["192.168.1.10:60601", "192.168.1.10:50001"], &[], &[])],
-    );
+    )
+    .into_iter()
+    .map(|candidate| candidate.found)
+    .collect();
 
     assert_eq!(nodes.len(), 1, "a mainnet port is not a signet server: {nodes:?}");
     assert_eq!(nodes[0].node.url, "tcp://192.168.1.10:60601");
@@ -148,8 +153,8 @@ async fn no_local_interface_means_no_local_network() {
     };
 
     assert_eq!(
-        discover(Network::Bitcoin, &[cellular]).await,
-        Err(NodeDiscoveryError::NoLocalNetwork)
+        Search::sweep(Network::Bitcoin, &[cellular]).await.unwrap_err(),
+        NodeDiscoveryError::NoLocalNetwork
     );
 }
 
@@ -164,30 +169,103 @@ async fn a_network_sockets_cannot_be_bound_to_is_reported_as_blocked() {
     };
 
     assert_eq!(
-        discover(Network::Bitcoin, &[behind_vpn]).await,
-        Err(NodeDiscoveryError::LocalNetworkBlocked)
+        Search::sweep(Network::Bitcoin, &[behind_vpn]).await.unwrap_err(),
+        NodeDiscoveryError::LocalNetworkBlocked
     );
+}
+
+fn on(address: &str, prefix_length: u8, index: u32) -> LanInterface {
+    LanInterface {
+        ipv4_address: address.to_string(),
+        prefix_length,
+        binding: LanBinding::InterfaceIndex { index },
+    }
 }
 
 // two addresses on one network share a block that is swept once, while the same block on
 // another network, such as Ethernet beside Wi-Fi, is still swept over that network
 #[test]
 fn a_block_is_swept_once_per_network() {
-    let on = |address: &str, prefix_length: u8, index: u32| LanInterface {
-        ipv4_address: address.to_string(),
-        prefix_length,
-        binding: LanBinding::InterfaceIndex { index },
-    };
-
     let subnets = lan_subnets(&[
         on("192.168.1.18", 24, 1),
         on("192.168.1.19", 24, 1),
-        on("192.168.1.20", 16, 1),
         on("192.168.1.30", 24, 2),
     ]);
 
-    // the /16 address narrows to the same /24 but also sweeps that block's edges, so it stays
-    assert_eq!(subnets.len(), 3);
+    assert_eq!(subnets.len(), 2);
+    assert_eq!(subnets[1].binding(), LanBinding::InterfaceIndex { index: 2 });
+}
+
+// the /16 address narrows to the same /24 but also sweeps that block's edges, so it stays
+#[test]
+fn a_wider_network_narrowed_to_the_same_block_is_still_swept() {
+    let subnets = lan_subnets(&[on("192.168.1.18", 24, 1), on("192.168.1.20", 16, 1)]);
+
+    assert_eq!(subnets.len(), 2);
+}
+
+// a phone on several networks at once searches only the first ones the platform reports, so
+// the sweep's cost stays bounded
+#[test]
+fn a_search_covers_at_most_two_subnets_in_the_platforms_order() {
+    let subnets =
+        lan_subnets(&[on("10.0.5.2", 24, 3), on("192.168.1.18", 24, 1), on("172.16.0.9", 24, 2)]);
+
+    let swept: Vec<Ipv4Addr> = subnets.iter().map(LanSubnet::own_address).collect();
+    assert_eq!(swept, vec![ip("10.0.5.2"), ip("192.168.1.18")]);
+}
+
+// every open port is asked which chain it serves, so only servers for the selected network are
+// listed, and they keep the search's order whatever order their checks finish in
+#[tokio::test]
+async fn only_servers_for_the_selected_network_are_listed() {
+    use super::verify::tests::{Behavior, serve};
+
+    let signet = serve(Behavior::Electrum { network: Network::Signet }).await;
+    let mainnet = serve(Behavior::Electrum { network: Network::Bitcoin }).await;
+    let web = serve(Behavior::Http).await;
+    let second_signet = serve(Behavior::WithoutFeatures { network: Network::Signet }).await;
+
+    let candidate = |host: &str, address: SocketAddr| {
+        let node =
+            Node::new_electrum(host.to_string(), format!("tcp://{address}"), Network::Signet);
+        let found = DiscoveredNode {
+            node,
+            host: host.to_string(),
+            address: address.to_string(),
+            software: None,
+        };
+
+        Candidate { found, address, route: Route::Lan(lan_binding::tests::loopback()) }
+    };
+
+    let search = Search {
+        network: Network::Signet,
+        candidates: vec![
+            candidate("signet.local", signet),
+            candidate("mainnet.local", mainnet),
+            candidate("web.local", web),
+            candidate("second.local", second_signet),
+        ],
+    };
+
+    let mut listed: Vec<Verified> = search.verified().collect().await;
+    listed.sort_by_key(|verified| verified.rank);
+
+    let summary: Vec<(usize, &str, &str)> = listed
+        .iter()
+        .map(|verified| {
+            (verified.rank, verified.found.host.as_str(), verified.found.node.name.as_str())
+        })
+        .collect();
+
+    assert_eq!(
+        summary,
+        vec![
+            (0, "signet.local", "Fulcrum (signet.local)"),
+            (3, "second.local", "Fulcrum (second.local)"),
+        ]
+    );
 }
 
 /// Runs discovery on a real local network, then picks what it found the way the node screen
@@ -218,7 +296,9 @@ async fn live_lan_discovery_finds_and_connects_to_the_node() {
     };
 
     let started = std::time::Instant::now();
-    let nodes = discover(Network::Bitcoin, &[interface]).await.expect("a local network");
+    let search = Search::sweep(Network::Bitcoin, &[interface]).await.expect("a local network");
+    let nodes: Vec<DiscoveredNode> =
+        search.verified().map(|verified| verified.found).collect().await;
     println!("discovery took {:?} and found {nodes:#?}", started.elapsed());
 
     let found = nodes

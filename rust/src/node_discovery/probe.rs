@@ -33,9 +33,9 @@ impl Prober {
     /// Finds which of the addresses accept a TCP connection, returning them in no particular
     /// order
     ///
-    /// A probe only completes the TCP handshake and closes the connection: it never writes, so a
-    /// server learns nothing about the wallet until the person picks it and the app checks it.
-    /// Every probe is bound to `binding`'s network, and one that can't be bound isn't sent
+    /// A probe only completes the TCP handshake and closes the connection without writing, and
+    /// only the ports that accept get the Electrum check that follows. Every probe is bound to
+    /// `binding`'s network, and one that can't be bound isn't sent
     pub async fn open_ports(
         &self,
         binding: LanBinding,
