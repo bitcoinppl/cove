@@ -11,11 +11,13 @@ It runs two ways:
 
 Esplora `POST /tx` and Electrum `blockchain.transaction.broadcast` check a new transaction before accepting it, the way consensus would:
 
-- Every input must spend an output the chain knows, whether confirmed or pending. Otherwise the reply is `bad-txns-inputs-missingorspent`.
+- Every input must spend an output the chain knows, whether confirmed or pending, that no confirmed transaction has spent. Otherwise the reply is `bad-txns-inputs-missingorspent`.
+- A transaction whose outputs add up to more than its inputs is refused with `bad-txns-in-belowout`.
+- A transaction that spends the same output as pending ones replaces them, along with their pending descendants, the way Bitcoin Core 28 and later do with full RBF: the replaced transactions need not signal BIP 125, but the replacement must pay for them. The checks run in Core's order. The replacement may not spend an output of a transaction it evicts. Its fee rate, in whole sat/kvB of Core's virtual size, the larger of its weight and 20 times its signature operation cost, divided by 4 and rounded up, must be above that of each transaction it double-spends. It may evict at most 100 transactions, counting each one it double-spends with its descendants. It may not spend a pending output unless an evicted transaction, descendants included, spent from the same parent. Its fee must be at least that of everything it evicts, and the difference must pay 1 sat/vB of that size, Core's incremental relay fee before 29.1. Otherwise the reply starts with Core's `bad-txns-spends-conflicting-tx`, `insufficient fee`, `too many potential replacements` or `replacement-adds-unconfirmed`, and the mempool is left as it was. A double spend of a transaction added with `add_to_mempool` whose inputs the chain doesn't know is refused, since its fee is unknown.
 - Every input's scripts and signatures must satisfy the output it spends, checked by libbitcoinconsensus from Bitcoin Core 26 with taproot enabled. Otherwise the reply is `mandatory-script-verify-flag-failed (input N)`.
 - A transaction that is already confirmed is refused with `Transaction already in block chain`. A rebroadcast of one in the mempool is accepted again.
 
-Esplora replies with status 400 and the message, and Electrum replies with a JSON-RPC error. Mempool policy is not checked: fees, dust, standardness, double spends, replacement and coinbase maturity all pass. Funding transactions from `pay`, `/fund` and `/fund-wallet` spend synthetic `OP_1` outputs and skip the check, since they never go through a broadcast.
+Esplora replies with status 400 and the message, and Electrum replies with a JSON-RPC error. Other mempool policy is not checked: the fee of a transaction that replaces nothing, dust, standardness and coinbase maturity all pass. Funding transactions from `pay`, `/fund` and `/fund-wallet` spend synthetic `OP_1` outputs and skip the check, since they never go through a broadcast.
 
 ## Running the binary
 
