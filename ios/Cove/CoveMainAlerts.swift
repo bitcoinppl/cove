@@ -248,7 +248,12 @@ private struct AddressAlertActions: View {
             CopyAddressActions(address: address, app: app)
 
         case let .foundAddress(address, amount, owner):
-            FoundAddressActions(address: address, amount: amount, owner: owner, app: app)
+            FoundAddressActions(
+                address: address,
+                amount: amount,
+                walletToOpen: owner?.walletToOpen,
+                app: app
+            )
 
         case .noCameraPermission:
             CameraPermissionActions(app: app)
@@ -277,17 +282,17 @@ private struct CopyAddressActions: View {
 private struct FoundAddressActions: View {
     let address: Address
     let amount: Amount?
-    let owner: FoundAddressOwner?
+    let walletToOpen: WalletId?
     let app: AppManager
 
     var body: some View {
-        if let owner {
+        if let walletToOpen {
             Button("Go to Wallet") {
                 app.alertState = .none
                 do {
-                    try app.selectWalletOrThrow(owner.walletId)
+                    try app.selectWalletOrThrow(walletToOpen)
                 } catch {
-                    Log.error("Unable to select wallet \(owner.walletId), error: \(error)")
+                    Log.error("Unable to select wallet \(walletToOpen), error: \(error)")
                     app.alertState = TaggedItem(.unableToSelectWallet)
                 }
             }

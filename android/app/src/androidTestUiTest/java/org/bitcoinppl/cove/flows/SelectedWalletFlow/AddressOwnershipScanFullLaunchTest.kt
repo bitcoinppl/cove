@@ -83,9 +83,9 @@ class AddressOwnershipScanFullLaunchTest {
     }
 
     /**
-     * Scanned from the second wallet, its own change address says it is this wallet's, an address
-     * no wallet owns shows the alert without a note, and the first wallet's address names the first
-     * wallet and offers Go to Wallet, which opens it
+     * Scanned from the second wallet, its own change address says it is this wallet's without
+     * offering Go to Wallet, an address no wallet owns shows the alert without a note, and the first
+     * wallet's address names the first wallet and offers Go to Wallet, which opens it
      */
     @Test
     fun foundAddressAlertNamesTheWalletThatOwnsTheAddress() {
@@ -106,24 +106,28 @@ class AddressOwnershipScanFullLaunchTest {
         val first = requireNotNull(wallet.selectedWalletName()) { "the first wallet has no name\n${device.hierarchy()}" }
 
         wallet.importFromAddWallet(SECOND_MNEMONIC, qr, sats = 0L)
-        assertNotEquals("both wallets have the same name, so the alert can't tell them apart", first, wallet.selectedWalletName())
+        val second = requireNotNull(wallet.selectedWalletName()) { "the second wallet has no name\n${device.hierarchy()}" }
+        assertNotEquals("both wallets have the same name, so the alert can't tell them apart", first, second)
 
         scanFoundAddress(SECOND_CHANGE_0)
-        assertMessageContains("This is an address in this wallet (change, index 0)")
-        assertTrue("an owned address offers Go to Wallet\n${device.hierarchy()}", device.hasObject(By.text(GO_TO_WALLET)))
+        assertMessageContains("This address belongs to this wallet, “$second”")
+        assertFalse(
+            "the open wallet's own address offered Go to Wallet, which leads back here\n${device.hierarchy()}",
+            device.hasObject(By.text(GO_TO_WALLET)),
+        )
         dismissAlert()
 
         // the alert waits for the lookup, so it shows without a note once the lookup found no owner
         scanFoundAddress(EXTERNAL_ADDRESS)
         assertFalse(
             "the alert named an owner for an address no wallet owns\n${device.hierarchy()}",
-            device.hasObject(By.textContains("This is ")),
+            device.hasObject(By.textContains("belongs to")),
         )
         assertFalse("an address no wallet owns offered Go to Wallet", device.hasObject(By.text(GO_TO_WALLET)))
         dismissAlert()
 
         scanFoundAddress(FIRST_RECEIVE_0)
-        assertMessageContains("This is your address in “$first” (receive, index 0)")
+        assertMessageContains("This address belongs to your wallet “$first”")
         device.waitFor(By.text(GO_TO_WALLET)).click()
         wallet.waitUntil("expected Go to Wallet to close the alert and open “$first”") {
             !device.hasObject(By.text(ALERT_TITLE)) && wallet.selectedWalletName() == first

@@ -321,5 +321,5 @@ coverage = [
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/AddressOwnershipScanFullLaunchTest.kt::foundAddressAlertNamesTheWalletThatOwnsTheAddress",
     "rust:rust/src/address_ownership/tests.rs::a_scanned_address_alert_names_the_wallet_that_owns_it",
 ]
-# the ui tests scan, from the second wallet, its own change address, one no wallet owns, and the first wallet's receive address, checking the alert names this wallet with Go to Wallet, then neither, then the first wallet, whose Go to Wallet opens the first wallet
+# the ui tests scan, from the second wallet, its own change address, one no wallet owns, and the first wallet's receive address, checking the alert names this wallet without Go to Wallet, then neither, then the first wallet, whose Go to Wallet opens the first wallet
 # a lookup result that arrives after another alert was shown or dismissed is dropped; that race needs timing neither the ui tests nor an agent can control, so it has no test here

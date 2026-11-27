@@ -558,15 +558,15 @@ fn a_scanned_address_alert_names_the_wallet_that_owns_it() {
     assert_eq!(
         owner(address_at(&selected_keys, Network::Bitcoin, KeychainKind::External, 3)),
         Some(FoundAddressOwner {
-            wallet_id: selected.id,
-            description: "This is an address in this wallet (receive, index 3)".to_string(),
+            description: format!("This address belongs to this wallet, “{}”", selected.name),
+            wallet_to_open: None,
         })
     );
     assert_eq!(
         owner(address_at(&other_keys, Network::Bitcoin, KeychainKind::Internal, 2)),
         Some(FoundAddressOwner {
-            wallet_id: other.id.clone(),
-            description: format!("This is your address in “{}” (change, index 2)", other.name),
+            description: format!("This address belongs to your wallet “{}”", other.name),
+            wallet_to_open: Some(other.id),
         })
     );
     assert_eq!(

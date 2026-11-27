@@ -127,11 +127,12 @@ pub enum AppAlertState {
 /// Which of the user's wallets owns a scanned address, as the found address alert names it
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FoundAddressOwner {
-    /// The owning wallet, which the alert offers to open
-    pub wallet_id: WalletId,
-
     /// One line telling the user the address is theirs, worded for the selected wallet
     pub description: String,
+
+    /// The owning wallet when it is not the selected one, which the alert offers to open; the
+    /// selected wallet's own address would only lead back to the screen the user is on
+    pub wallet_to_open: Option<WalletId>,
 }
 
 /// The alert for a scanned address that is valid on the selected network
@@ -167,8 +168,8 @@ async fn selected_wallet_owner(address: &Address) -> Option<FoundAddressOwner> {
 
     match found {
         Ok(ownership) => ownership.owner_to_name(&selected).map(|owner| FoundAddressOwner {
-            wallet_id: owner.wallet_id.clone(),
             description: owner.describe(&selected),
+            wallet_to_open: (owner.wallet_id != selected).then(|| owner.wallet_id.clone()),
         }),
 
         // the alert belongs to a mode the app has left
