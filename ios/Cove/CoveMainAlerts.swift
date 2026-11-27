@@ -20,9 +20,9 @@ private struct AppAlertMessage: View {
     var body: some View {
         let text = alert.message()
 
-        if case let .foundAddress(_, _, ownership?) = alert {
+        if case let .foundAddress(_, _, owner?) = alert {
             let address = Text(text).font(.system(.caption2, design: .monospaced))
-            Text("\(address)\n\n\(ownership)")
+            Text("\(address)\n\n\(owner.description)")
         } else if case .foundAddress = alert {
             Text(text)
                 .font(.system(.caption2, design: .monospaced))
@@ -244,8 +244,8 @@ private struct AddressAlertActions: View {
         case let .addressWrongNetwork(address, _, _), let .noWalletSelected(address):
             CopyAddressActions(address: address, app: app)
 
-        case let .foundAddress(address, amount, _):
-            FoundAddressActions(address: address, amount: amount, app: app)
+        case let .foundAddress(address, amount, owner):
+            FoundAddressActions(address: address, amount: amount, owner: owner, app: app)
 
         case .noCameraPermission:
             CameraPermissionActions(app: app)
@@ -274,9 +274,22 @@ private struct CopyAddressActions: View {
 private struct FoundAddressActions: View {
     let address: Address
     let amount: Amount?
+    let owner: FoundAddressOwner?
     let app: AppManager
 
     var body: some View {
+        if let owner {
+            Button("Go to Wallet") {
+                app.alertState = .none
+                do {
+                    try app.selectWalletOrThrow(owner.walletId)
+                } catch {
+                    Log.error("Unable to select wallet \(owner.walletId), error: \(error)")
+                    app.alertState = TaggedItem(.unableToSelectWallet)
+                }
+            }
+        }
+
         Button("Copy Address") {
             UIPasteboard.general.string = String(address)
         }

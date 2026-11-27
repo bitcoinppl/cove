@@ -15,7 +15,7 @@ use super::{
     check_address_ownership_with,
 };
 use crate::{
-    app::alert_state::{AppAlertState, found_address_alert},
+    app::alert_state::{AppAlertState, FoundAddressOwner, found_address_alert},
     bdk_store::BdkStore,
     database::Database,
     manager::import_wallet_manager::import_mnemonic_with_target,
@@ -544,27 +544,33 @@ fn a_scanned_address_alert_names_the_wallet_that_owns_it() {
     let other_keys = random_mnemonic();
     let other = import_mnemonic_with_target(other_keys.clone(), Network::Bitcoin, WalletMode::Main)
         .unwrap();
-    Database::global().global_config.select_wallet(selected.id).unwrap();
+    Database::global().global_config.select_wallet(selected.id.clone()).unwrap();
 
-    let ownership = |address: AddressWithNetwork| {
+    let owner = |address: AddressWithNetwork| {
         let alert = cove_tokio::task::block_on(found_address_alert(Arc::new(address)));
-        let AppAlertState::FoundAddress { ownership, .. } = alert else {
+        let AppAlertState::FoundAddress { owner, .. } = alert else {
             panic!("a scanned address shows the found address alert, got {alert:?}");
         };
 
-        ownership
+        owner
     };
 
     assert_eq!(
-        ownership(address_at(&selected_keys, Network::Bitcoin, KeychainKind::External, 3)),
-        Some("This is an address in this wallet (receive, index 3)".to_string())
+        owner(address_at(&selected_keys, Network::Bitcoin, KeychainKind::External, 3)),
+        Some(FoundAddressOwner {
+            wallet_id: selected.id,
+            description: "This is an address in this wallet (receive, index 3)".to_string(),
+        })
     );
     assert_eq!(
-        ownership(address_at(&other_keys, Network::Bitcoin, KeychainKind::Internal, 2)),
-        Some(format!("This is your address in “{}” (change, index 2)", other.name))
+        owner(address_at(&other_keys, Network::Bitcoin, KeychainKind::Internal, 2)),
+        Some(FoundAddressOwner {
+            wallet_id: other.id.clone(),
+            description: format!("This is your address in “{}” (change, index 2)", other.name),
+        })
     );
     assert_eq!(
-        ownership(address_at(&random_mnemonic(), Network::Bitcoin, KeychainKind::External, 0)),
+        owner(address_at(&random_mnemonic(), Network::Bitcoin, KeychainKind::External, 0)),
         None
     );
 }

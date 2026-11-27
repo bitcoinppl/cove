@@ -28,36 +28,79 @@ pub enum AppAlertState {
     ImportedLabelsSuccessfully,
 
     // warn
-    DuplicateWallet { wallet_id: WalletId },
-    HotWalletKeyMissing { wallet_id: WalletId },
+    DuplicateWallet {
+        wallet_id: WalletId,
+    },
+    HotWalletKeyMissing {
+        wallet_id: WalletId,
+    },
 
     // errors
     InvalidWordGroup,
-    ErrorImportingHotWallet { message: String },
-    AddressWrongNetwork { address: Arc<Address>, network: Network, current_network: Network },
-    // `ownership` names which of the user's wallets owns the address, when one does
-    FoundAddress { address: Arc<Address>, amount: Option<Arc<Amount>>, ownership: Option<String> },
+    ErrorImportingHotWallet {
+        message: String,
+    },
+    AddressWrongNetwork {
+        address: Arc<Address>,
+        network: Network,
+        current_network: Network,
+    },
+    // `owner` is the user's wallet that owns the address, when one does
+    FoundAddress {
+        address: Arc<Address>,
+        amount: Option<Arc<Amount>>,
+        owner: Option<FoundAddressOwner>,
+    },
     UnableToSelectWallet,
-    ErrorImportingHardwareWallet { message: String },
-    InvalidFileFormat { message: String },
-    NoWalletSelected { address: Arc<Address> },
-    InvalidFormat { message: String },
-    NoUnsignedTransactionFound { tx_id: Arc<TxId> },
-    UnableToGetAddress { error: String },
+    ErrorImportingHardwareWallet {
+        message: String,
+    },
+    InvalidFileFormat {
+        message: String,
+    },
+    NoWalletSelected {
+        address: Arc<Address>,
+    },
+    InvalidFormat {
+        message: String,
+    },
+    NoUnsignedTransactionFound {
+        tx_id: Arc<TxId>,
+    },
+    UnableToGetAddress {
+        error: String,
+    },
     NoCameraPermission,
-    FailedToScanQr { error: String },
+    FailedToScanQr {
+        error: String,
+    },
     CantSendOnWatchOnlyWallet,
-    TapSignerSetupFailed { message: String },
-    TapSignerDeriveFailed { message: String },
+    TapSignerSetupFailed {
+        message: String,
+    },
+    TapSignerDeriveFailed {
+        message: String,
+    },
     TapSignerInvalidAuth,
-    TapSignerNoBackup { tap_signer: Arc<TapSigner> },
-    TapSignerWrongPin { tap_signer: Arc<TapSigner>, action: AfterPinAction },
+    TapSignerNoBackup {
+        tap_signer: Arc<TapSigner>,
+    },
+    TapSignerWrongPin {
+        tap_signer: Arc<TapSigner>,
+        action: AfterPinAction,
+    },
 
     // database corruption
-    WalletDatabaseCorrupted { wallet_id: WalletId, error: String },
+    WalletDatabaseCorrupted {
+        wallet_id: WalletId,
+        error: String,
+    },
 
     // generic message or error
-    General { title: String, message: String },
+    General {
+        title: String,
+        message: String,
+    },
 
     // loading popup with progress indicator
     Loading,
@@ -70,9 +113,25 @@ pub enum AppAlertState {
     WatchOnlyImportWords,
 
     // action
-    UninitializedTapSigner { tap_signer: Arc<TapSigner> },
-    TapSignerWalletFound { wallet_id: WalletId },
-    InitializedTapSigner { tap_signer: Arc<TapSigner> },
+    UninitializedTapSigner {
+        tap_signer: Arc<TapSigner>,
+    },
+    TapSignerWalletFound {
+        wallet_id: WalletId,
+    },
+    InitializedTapSigner {
+        tap_signer: Arc<TapSigner>,
+    },
+}
+
+/// Which of the user's wallets owns a scanned address, as the found address alert names it
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FoundAddressOwner {
+    /// The owning wallet, which the alert offers to open
+    pub wallet_id: WalletId,
+
+    /// One line telling the user the address is theirs, worded for the selected wallet
+    pub description: String,
 }
 
 /// The alert for a scanned address that is valid on the selected network
@@ -84,12 +143,12 @@ pub async fn found_address_alert(address: Arc<AddressWithNetwork>) -> AppAlertSt
     AppAlertState::FoundAddress {
         address: Arc::new(address.address.clone()),
         amount: address.amount.map(Arc::new),
-        ownership: selected_wallet_ownership(&address.address).await,
+        owner: selected_wallet_owner(&address.address).await,
     }
 }
 
 /// Which of the user's wallets owns `address`, worded for someone looking at the selected wallet
-async fn selected_wallet_ownership(address: &Address) -> Option<String> {
+async fn selected_wallet_owner(address: &Address) -> Option<FoundAddressOwner> {
     let database = Database::global();
     let config = &database.global_config;
     let selected = config.selected_wallet()?;
@@ -107,7 +166,10 @@ async fn selected_wallet_ownership(address: &Address) -> Option<String> {
         .and_then(|ownership| lookup.ensure_mode_is_active().map(|()| ownership));
 
     match found {
-        Ok(ownership) => ownership.owner_to_name(&selected).map(|owner| owner.describe(&selected)),
+        Ok(ownership) => ownership.owner_to_name(&selected).map(|owner| FoundAddressOwner {
+            wallet_id: owner.wallet_id.clone(),
+            description: owner.describe(&selected),
+        }),
 
         // the alert belongs to a mode the app has left
         Err(AddressOwnershipError::WalletModeChanged) => None,
