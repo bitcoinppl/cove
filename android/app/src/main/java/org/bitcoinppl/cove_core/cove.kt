@@ -789,6 +789,12 @@ internal interface UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod0 : 
 internal interface UniffiCallbackInterfaceKeyTeleportManagerReconcilerMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceOnboardingManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -916,6 +922,28 @@ internal open class UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler(
     ): UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,`reconcileMany`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `reconcile` = other.`reconcile`
+        `reconcileMany` = other.`reconcileMany`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "reconcile", "reconcileMany")
+internal open class UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `reconcile`: UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod0? = null,
+    @JvmField internal var `reconcileMany`: UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod1? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `reconcile`: UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod0? = null,
+        `reconcileMany`: UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod1? = null,
+    ): UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,`reconcileMany`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler) {
         `uniffiFree` = other.`uniffiFree`
         `uniffiClone` = other.`uniffiClone`
         `reconcile` = other.`reconcile`
@@ -1609,6 +1637,14 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustkeyteleportmanager_state(
     ): Short
+    external fun uniffi_cove_checksum_method_rustnodediscoverymanager_listen_for_updates(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodediscoverymanager_start(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodediscoverymanager_state(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustnodediscoverymanager_stop(
+    ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id(
     ): Short
     external fun uniffi_cove_checksum_method_rustonboardingmanager_dispatch(
@@ -2077,6 +2113,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_rustkeyteleportmanager_new(
     ): Short
+    external fun uniffi_cove_checksum_constructor_rustnodediscoverymanager_new(
+    ): Short
     external fun uniffi_cove_checksum_constructor_rustonboardingmanager_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustpendingwalletmanager_new(
@@ -2167,6 +2205,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile_many(
     ): Short
+    external fun uniffi_cove_checksum_method_nodediscoverymanagerreconciler_reconcile(
+    ): Short
+    external fun uniffi_cove_checksum_method_nodediscoverymanagerreconciler_reconcile_many(
+    ): Short
     external fun uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile(
     ): Short
     external fun uniffi_cove_checksum_method_pendingwalletmanagerreconciler_reconcile(
@@ -2207,6 +2249,7 @@ internal object UniffiLib {
         uniffiCallbackInterfaceCoinControlManagerReconciler.register(this)
         uniffiCallbackInterfaceFfiReconcile.register(this)
         uniffiCallbackInterfaceKeyTeleportManagerReconciler.register(this)
+        uniffiCallbackInterfaceNodeDiscoveryManagerReconciler.register(this)
         uniffiCallbackInterfaceOnboardingManagerReconciler.register(this)
         uniffiCallbackInterfacePendingWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
@@ -2811,6 +2854,20 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustkeyteleportmanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_clone_rustnodediscoverymanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_rustnodediscoverymanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_constructor_rustnodediscoverymanager_new(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_rustnodediscoverymanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustnodediscoverymanager_start(`ptr`: Long,`interfaces`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustnodediscoverymanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustnodediscoverymanager_stop(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_clone_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_rustonboardingmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3469,6 +3526,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_keyteleportmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceKeyTeleportManagerReconciler,
     ): Unit
+    external fun uniffi_cove_fn_init_callback_vtable_nodediscoverymanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler,
+    ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_onboardingmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceOnboardingManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_pendingwalletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfacePendingWalletManagerReconciler,
@@ -3600,6 +3659,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_nodeselection_to_node(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselectorerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodediscoveryerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_multiqrerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4757,6 +4818,18 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustkeyteleportmanager_state() != 37488.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustnodediscoverymanager_listen_for_updates() != 35524.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodediscoverymanager_start() != 37490.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodediscoverymanager_state() != 60474.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustnodediscoverymanager_stop() != 27630.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustonboardingmanager_current_wallet_id() != 41633.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5459,6 +5532,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustkeyteleportmanager_new() != 10345.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_rustnodediscoverymanager_new() != 60874.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_rustonboardingmanager_new() != 42858.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5592,6 +5668,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_keyteleportmanagerreconciler_reconcile_many() != 45107.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodediscoverymanagerreconciler_reconcile() != 49063.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_nodediscoverymanagerreconciler_reconcile_many() != 41328.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_onboardingmanagerreconciler_reconcile() != 11875.toShort()) {
@@ -22969,6 +23051,349 @@ public object FfiConverterTypeRustKeyTeleportManager: FfiConverter<RustKeyTelepo
 //
 
 
+/**
+ * Searches the local network for Electrum servers, one search at a time
+ */
+public interface RustNodeDiscoveryManagerInterface {
+
+    fun `listenForUpdates`(`reconciler`: NodeDiscoveryManagerReconciler)
+
+    /**
+     * Searches the given interfaces for servers on the selected network, unless a search is
+     * already running
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. The search
+     * writes only Electrum's `server.version`, `server.features` and block header 0 requests,
+     * so no server learns anything about the wallet until the person picks one and it goes
+     * through `check_and_save_node`
+     */
+    fun `start`(`interfaces`: List<LanInterface>)
+
+    /**
+     * The search as it stands, read once when the screen starts listening
+     */
+    fun `state`(): NodeDiscoveryState
+
+    /**
+     * Stops the running search, keeping the servers it found
+     */
+    fun `stop`()
+
+    companion object
+}
+
+/**
+ * Searches the local network for Electrum servers, one search at a time
+ */
+open class RustNodeDiscoveryManager: Disposable, AutoCloseable, RustNodeDiscoveryManagerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle,
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_rustnodediscoverymanager_new(
+
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_rustnodediscoverymanager(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_rustnodediscoverymanager(handle, status)
+        }
+    }
+
+    override fun `listenForUpdates`(`reconciler`: NodeDiscoveryManagerReconciler)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustnodediscoverymanager_listen_for_updates(
+        it,
+
+        FfiConverterTypeNodeDiscoveryManagerReconciler.lower(`reconciler`),_status)
+}
+    }
+
+
+
+
+    /**
+     * Searches the given interfaces for servers on the selected network, unless a search is
+     * already running
+     *
+     * Pass the device's Wi-Fi and Ethernet interfaces, never cellular or VPN ones. The search
+     * writes only Electrum's `server.version`, `server.features` and block header 0 requests,
+     * so no server learns anything about the wallet until the person picks one and it goes
+     * through `check_and_save_node`
+     */override fun `start`(`interfaces`: List<LanInterface>)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustnodediscoverymanager_start(
+        it,
+
+        FfiConverterSequenceTypeLanInterface.lower(`interfaces`),_status)
+}
+    }
+
+
+
+
+    /**
+     * The search as it stands, read once when the screen starts listening
+     */override fun `state`(): NodeDiscoveryState {
+            return FfiConverterTypeNodeDiscoveryState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustnodediscoverymanager_state(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Stops the running search, keeping the servers it found
+     */override fun `stop`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustnodediscoverymanager_stop(
+        it,
+        _status)
+}
+    }
+
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRustNodeDiscoveryManager: FfiConverter<RustNodeDiscoveryManager, Long> {
+    override fun lower(value: RustNodeDiscoveryManager): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RustNodeDiscoveryManager {
+        return RustNodeDiscoveryManager(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RustNodeDiscoveryManager {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RustNodeDiscoveryManager) = 8UL
+
+    override fun write(value: RustNodeDiscoveryManager, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface RustOnboardingManagerInterface {
 
     fun `currentWalletId`(): WalletId?
@@ -35651,6 +36076,70 @@ public object FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer<Diag
 
 
 
+/**
+ * A server found on the local network, which the person can pick as their node
+ */
+data class DiscoveredNode (
+    /**
+     * The node to check and save when the person picks it, addressed by IP so it connects
+     * without the platform resolving `.local` names
+     */
+    var `node`: Node
+    ,
+    /**
+     * The server's `.local` hostname, or its IP address when it has none
+     */
+    var `host`: kotlin.String
+    ,
+    /**
+     * The server's IP address and port, such as `192.168.1.10:50001`
+     */
+    var `address`: kotlin.String
+    ,
+    /**
+     * The node software known or reported to run there, such as `Umbrel Fulcrum`
+     */
+    var `software`: kotlin.String?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDiscoveredNode: FfiConverterRustBuffer<DiscoveredNode> {
+    override fun read(buf: ByteBuffer): DiscoveredNode {
+        return DiscoveredNode(
+            FfiConverterTypeNode.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DiscoveredNode) = (
+            FfiConverterTypeNode.allocationSize(value.`node`) +
+            FfiConverterString.allocationSize(value.`host`) +
+            FfiConverterString.allocationSize(value.`address`) +
+            FfiConverterOptionalString.allocationSize(value.`software`)
+    )
+
+    override fun write(value: DiscoveredNode, buf: ByteBuffer) {
+            FfiConverterTypeNode.write(value.`node`, buf)
+            FfiConverterString.write(value.`host`, buf)
+            FfiConverterString.write(value.`address`, buf)
+            FfiConverterOptionalString.write(value.`software`, buf)
+    }
+}
+
+
+
 data class FeeResponse (
     var `fastestFee`: kotlin.Float
     ,
@@ -36453,6 +36942,64 @@ public object FfiConverterTypeLabelExportResult: FfiConverterRustBuffer<LabelExp
     override fun write(value: LabelExportResult, buf: ByteBuffer) {
             FfiConverterString.write(value.`content`, buf)
             FfiConverterString.write(value.`filename`, buf)
+    }
+}
+
+
+
+/**
+ * A Wi-Fi or Ethernet interface address the app reports, the only network discovery sweeps
+ *
+ * The platform picks the interfaces, since only it knows which one is Wi-Fi or Ethernet rather
+ * than cellular or a VPN, which can also carry private addresses
+ */
+data class LanInterface (
+    /**
+     * The interface's IPv4 address, such as `192.168.1.18`
+     */
+    var `ipv4Address`: kotlin.String
+    ,
+    /**
+     * The interface's network prefix length, such as 24 for a `255.255.255.0` netmask
+     */
+    var `prefixLength`: kotlin.UByte
+    ,
+    /**
+     * The network every socket searching this interface's subnet is bound to
+     */
+    var `binding`: LanBinding
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLanInterface: FfiConverterRustBuffer<LanInterface> {
+    override fun read(buf: ByteBuffer): LanInterface {
+        return LanInterface(
+            FfiConverterString.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterTypeLanBinding.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LanInterface) = (
+            FfiConverterString.allocationSize(value.`ipv4Address`) +
+            FfiConverterUByte.allocationSize(value.`prefixLength`) +
+            FfiConverterTypeLanBinding.allocationSize(value.`binding`)
+    )
+
+    override fun write(value: LanInterface, buf: ByteBuffer) {
+            FfiConverterString.write(value.`ipv4Address`, buf)
+            FfiConverterUByte.write(value.`prefixLength`, buf)
+            FfiConverterTypeLanBinding.write(value.`binding`, buf)
     }
 }
 
@@ -57354,6 +57901,98 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
 
 
 
+/**
+ * The network an interface belongs to, which each discovery socket is bound to
+ */
+sealed class LanBinding {
+
+    /**
+     * An Android network, by `android.net.Network.getNetworkHandle()`
+     */
+    data class AndroidNetwork(
+        val `handle`: kotlin.ULong) : LanBinding()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A network interface by its index, such as `if_nametoindex("en0")` on iOS
+     */
+    data class InterfaceIndex(
+        val `index`: kotlin.UInt) : LanBinding()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLanBinding : FfiConverterRustBuffer<LanBinding>{
+    override fun read(buf: ByteBuffer): LanBinding {
+        return when(buf.getInt()) {
+            1 -> LanBinding.AndroidNetwork(
+                FfiConverterULong.read(buf),
+                )
+            2 -> LanBinding.InterfaceIndex(
+                FfiConverterUInt.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: LanBinding): ULong = when(value) {
+        is LanBinding.AndroidNetwork -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`handle`)
+            )
+        }
+        is LanBinding.InterfaceIndex -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`index`)
+            )
+        }
+    }
+
+    override fun write(value: LanBinding, buf: ByteBuffer) {
+        when(value) {
+            is LanBinding.AndroidNetwork -> {
+                buf.putInt(1)
+                FfiConverterULong.write(value.`handle`, buf)
+                Unit
+            }
+            is LanBinding.InterfaceIndex -> {
+                buf.putInt(2)
+                FfiConverterUInt.write(value.`index`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 enum class ListSortDirection {
 
@@ -58652,6 +59291,404 @@ public object FfiConverterTypeNewWalletRoute : FfiConverterRustBuffer<NewWalletR
             is NewWalletRoute.ColdWallet -> {
                 buf.putInt(3)
                 FfiConverterTypeColdWalletRoute.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+sealed class NodeDiscoveryException: kotlin.Exception() {
+
+    /**
+     * None of the interfaces the app reported is on a local network, such as when the phone is
+     * only on cellular data
+     */
+    class NoLocalNetwork(
+        ) : NodeDiscoveryException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The local network can't be searched directly, such as when a VPN that doesn't allow local
+     * network access covers the app; searching anyway would send the probes through the VPN
+     */
+    class LocalNetworkBlocked(
+        ) : NodeDiscoveryException() {
+        override val message
+            get() = ""
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_nodediscoveryerror_uniffi_trait_display(FfiConverterTypeNodeDiscoveryError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NodeDiscoveryException> {
+        override fun lift(error_buf: RustBuffer.ByValue): NodeDiscoveryException = FfiConverterTypeNodeDiscoveryError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeDiscoveryError : FfiConverterRustBuffer<NodeDiscoveryException> {
+    override fun read(buf: ByteBuffer): NodeDiscoveryException {
+
+
+        return when(buf.getInt()) {
+            1 -> NodeDiscoveryException.NoLocalNetwork()
+            2 -> NodeDiscoveryException.LocalNetworkBlocked()
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeDiscoveryException): ULong {
+        return when(value) {
+            is NodeDiscoveryException.NoLocalNetwork -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeDiscoveryException.LocalNetworkBlocked -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: NodeDiscoveryException, buf: ByteBuffer) {
+        when(value) {
+            is NodeDiscoveryException.NoLocalNetwork -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NodeDiscoveryException.LocalNetworkBlocked -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+/**
+ * A change to the search, applied in order to the state the screen started from
+ */
+sealed class NodeDiscoveryReconcileMessage {
+
+    /**
+     * A new search started, clearing the previous one's servers
+     */
+    object Started : NodeDiscoveryReconcileMessage()
+
+
+    /**
+     * A server passed its check; insert it at `index` in the found servers
+     */
+    data class Found(
+        val `index`: kotlin.UInt,
+        val `server`: org.bitcoinppl.cove_core.DiscoveredNode) : NodeDiscoveryReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The person stopped the search, which keeps its servers
+     */
+    object Stopped : NodeDiscoveryReconcileMessage()
+
+
+    /**
+     * The search ended, keeping its servers
+     */
+    object Finished : NodeDiscoveryReconcileMessage()
+
+
+    /**
+     * The search couldn't run
+     */
+    data class Failed(
+        val `error`: org.bitcoinppl.cove_core.NodeDiscoveryException) : NodeDiscoveryReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeDiscoveryReconcileMessage : FfiConverterRustBuffer<NodeDiscoveryReconcileMessage>{
+    override fun read(buf: ByteBuffer): NodeDiscoveryReconcileMessage {
+        return when(buf.getInt()) {
+            1 -> NodeDiscoveryReconcileMessage.Started
+            2 -> NodeDiscoveryReconcileMessage.Found(
+                FfiConverterUInt.read(buf),
+                FfiConverterTypeDiscoveredNode.read(buf),
+                )
+            3 -> NodeDiscoveryReconcileMessage.Stopped
+            4 -> NodeDiscoveryReconcileMessage.Finished
+            5 -> NodeDiscoveryReconcileMessage.Failed(
+                FfiConverterTypeNodeDiscoveryError.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeDiscoveryReconcileMessage): ULong = when(value) {
+        is NodeDiscoveryReconcileMessage.Started -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is NodeDiscoveryReconcileMessage.Found -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUInt.allocationSize(value.`index`)
+                + FfiConverterTypeDiscoveredNode.allocationSize(value.`server`)
+            )
+        }
+        is NodeDiscoveryReconcileMessage.Stopped -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is NodeDiscoveryReconcileMessage.Finished -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is NodeDiscoveryReconcileMessage.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNodeDiscoveryError.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: NodeDiscoveryReconcileMessage, buf: ByteBuffer) {
+        when(value) {
+            is NodeDiscoveryReconcileMessage.Started -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NodeDiscoveryReconcileMessage.Found -> {
+                buf.putInt(2)
+                FfiConverterUInt.write(value.`index`, buf)
+                FfiConverterTypeDiscoveredNode.write(value.`server`, buf)
+                Unit
+            }
+            is NodeDiscoveryReconcileMessage.Stopped -> {
+                buf.putInt(3)
+                Unit
+            }
+            is NodeDiscoveryReconcileMessage.Finished -> {
+                buf.putInt(4)
+                Unit
+            }
+            is NodeDiscoveryReconcileMessage.Failed -> {
+                buf.putInt(5)
+                FfiConverterTypeNodeDiscoveryError.write(value.`error`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Where a search stands, with the servers it has found
+ */
+sealed class NodeDiscoveryState {
+
+    /**
+     * No search has started
+     */
+    object Idle : NodeDiscoveryState()
+
+
+    /**
+     * A search is running, and has found these servers so far
+     */
+    data class Searching(
+        val `found`: List<org.bitcoinppl.cove_core.DiscoveredNode>) : NodeDiscoveryState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The person stopped the search, which keeps the servers it had found
+     */
+    data class Stopped(
+        val `found`: List<org.bitcoinppl.cove_core.DiscoveredNode>) : NodeDiscoveryState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The search checked everything it found, or reached its time limit
+     */
+    data class Finished(
+        val `found`: List<org.bitcoinppl.cove_core.DiscoveredNode>) : NodeDiscoveryState()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The search couldn't run
+     */
+    data class Failed(
+        val `error`: org.bitcoinppl.cove_core.NodeDiscoveryException) : NodeDiscoveryState()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeDiscoveryState : FfiConverterRustBuffer<NodeDiscoveryState>{
+    override fun read(buf: ByteBuffer): NodeDiscoveryState {
+        return when(buf.getInt()) {
+            1 -> NodeDiscoveryState.Idle
+            2 -> NodeDiscoveryState.Searching(
+                FfiConverterSequenceTypeDiscoveredNode.read(buf),
+                )
+            3 -> NodeDiscoveryState.Stopped(
+                FfiConverterSequenceTypeDiscoveredNode.read(buf),
+                )
+            4 -> NodeDiscoveryState.Finished(
+                FfiConverterSequenceTypeDiscoveredNode.read(buf),
+                )
+            5 -> NodeDiscoveryState.Failed(
+                FfiConverterTypeNodeDiscoveryError.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeDiscoveryState): ULong = when(value) {
+        is NodeDiscoveryState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is NodeDiscoveryState.Searching -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeDiscoveredNode.allocationSize(value.`found`)
+            )
+        }
+        is NodeDiscoveryState.Stopped -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeDiscoveredNode.allocationSize(value.`found`)
+            )
+        }
+        is NodeDiscoveryState.Finished -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterSequenceTypeDiscoveredNode.allocationSize(value.`found`)
+            )
+        }
+        is NodeDiscoveryState.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNodeDiscoveryError.allocationSize(value.`error`)
+            )
+        }
+    }
+
+    override fun write(value: NodeDiscoveryState, buf: ByteBuffer) {
+        when(value) {
+            is NodeDiscoveryState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is NodeDiscoveryState.Searching -> {
+                buf.putInt(2)
+                FfiConverterSequenceTypeDiscoveredNode.write(value.`found`, buf)
+                Unit
+            }
+            is NodeDiscoveryState.Stopped -> {
+                buf.putInt(3)
+                FfiConverterSequenceTypeDiscoveredNode.write(value.`found`, buf)
+                Unit
+            }
+            is NodeDiscoveryState.Finished -> {
+                buf.putInt(4)
+                FfiConverterSequenceTypeDiscoveredNode.write(value.`found`, buf)
+                Unit
+            }
+            is NodeDiscoveryState.Failed -> {
+                buf.putInt(5)
+                FfiConverterTypeNodeDiscoveryError.write(value.`error`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -72878,6 +73915,81 @@ public object FfiConverterTypeKeyTeleportManagerReconciler: FfiConverterCallback
 
 
 
+public interface NodeDiscoveryManagerReconciler {
+
+    fun `reconcile`(`message`: NodeDiscoveryReconcileMessage)
+
+    fun `reconcileMany`(`messages`: List<NodeDiscoveryReconcileMessage>)
+
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceNodeDiscoveryManagerReconciler {
+    internal object `reconcile`: UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod0 {
+        override fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeNodeDiscoveryManagerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcile`(
+                    FfiConverterTypeNodeDiscoveryReconcileMessage.lift(`message`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `reconcileMany`: UniffiCallbackInterfaceNodeDiscoveryManagerReconcilerMethod1 {
+        override fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeNodeDiscoveryManagerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcileMany`(
+                    FfiConverterSequenceTypeNodeDiscoveryReconcileMessage.lift(`messages`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeNodeDiscoveryManagerReconciler.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeNodeDiscoveryManagerReconciler.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceNodeDiscoveryManagerReconciler.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `reconcile`,
+        `reconcileMany`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_fn_init_callback_vtable_nodediscoverymanagerreconciler(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeNodeDiscoveryManagerReconciler: FfiConverterCallbackInterface<NodeDiscoveryManagerReconciler>()
+
+
+
+
+
 public interface OnboardingManagerReconciler {
 
     fun `reconcile`(`message`: OnboardingReconcileMessage)
@@ -75584,6 +76696,34 @@ public object FfiConverterSequenceTypeDiagnosticsReportRecord: FfiConverterRustB
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeDiscoveredNode: FfiConverterRustBuffer<List<DiscoveredNode>> {
+    override fun read(buf: ByteBuffer): List<DiscoveredNode> {
+        val len = buf.getInt()
+        return List<DiscoveredNode>(len) {
+            FfiConverterTypeDiscoveredNode.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<DiscoveredNode>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDiscoveredNode.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<DiscoveredNode>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDiscoveredNode.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeFoundAddress: FfiConverterRustBuffer<List<FoundAddress>> {
     override fun read(buf: ByteBuffer): List<FoundAddress> {
         val len = buf.getInt()
@@ -75630,6 +76770,34 @@ public object FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer<List<G
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeGroupedWord.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeLanInterface: FfiConverterRustBuffer<List<LanInterface>> {
+    override fun read(buf: ByteBuffer): List<LanInterface> {
+        val len = buf.getInt()
+        return List<LanInterface>(len) {
+            FfiConverterTypeLanInterface.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<LanInterface>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeLanInterface.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<LanInterface>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeLanInterface.write(it, buf)
         }
     }
 }
@@ -76106,6 +77274,34 @@ public object FfiConverterSequenceTypeKeyTeleportMessageItem: FfiConverterRustBu
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeKeyTeleportMessageItem.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeNodeDiscoveryReconcileMessage: FfiConverterRustBuffer<List<NodeDiscoveryReconcileMessage>> {
+    override fun read(buf: ByteBuffer): List<NodeDiscoveryReconcileMessage> {
+        val len = buf.getInt()
+        return List<NodeDiscoveryReconcileMessage>(len) {
+            FfiConverterTypeNodeDiscoveryReconcileMessage.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<NodeDiscoveryReconcileMessage>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNodeDiscoveryReconcileMessage.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<NodeDiscoveryReconcileMessage>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNodeDiscoveryReconcileMessage.write(it, buf)
         }
     }
 }
