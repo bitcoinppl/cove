@@ -43644,7 +43644,10 @@ public enum SendFlowManagerAction {
     )
     case notifyCoinControlAmountChanged(Amount
     )
-    case notifyCoinControlEnteredAmountChanged(String,Bool
+    /**
+     * The custom amount sheet's text, with the unit the sheet showed when it was typed
+     */
+    case notifyCoinControlEnteredAmountChanged(text: String, unit: BitcoinUnit
     )
     case changeFeeRateOptions(FeeRateOptionsWithTotalFee
     )
@@ -43721,7 +43724,7 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 18: return .notifyCoinControlAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 19: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
+        case 19: return .notifyCoinControlEnteredAmountChanged(text: try FfiConverterString.read(from: &buf), unit: try FfiConverterTypeBitcoinUnit.read(from: &buf)
         )
 
         case 20: return .changeFeeRateOptions(try FfiConverterTypeFeeRateOptionsWithTotalFee.read(from: &buf)
@@ -43828,10 +43831,10 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
-        case let .notifyCoinControlEnteredAmountChanged(v1,v2):
+        case let .notifyCoinControlEnteredAmountChanged(text,unit):
             writeInt(&buf, Int32(19))
-            FfiConverterString.write(v1, into: &buf)
-            FfiConverterBool.write(v2, into: &buf)
+            FfiConverterString.write(text, into: &buf)
+            FfiConverterTypeBitcoinUnit.write(unit, into: &buf)
 
 
         case let .changeFeeRateOptions(v1):

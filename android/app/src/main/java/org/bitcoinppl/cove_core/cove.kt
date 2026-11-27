@@ -63477,9 +63477,12 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
+    /**
+     * The custom amount sheet's text, with the unit the sheet showed when it was typed
+     */
     data class NotifyCoinControlEnteredAmountChanged(
-        val v1: kotlin.String,
-        val v2: kotlin.Boolean) : SendFlowManagerAction()
+        val `text`: kotlin.String,
+        val `unit`: org.bitcoinppl.cove_core.types.BitcoinUnit) : SendFlowManagerAction()
 
     {
 
@@ -63620,8 +63623,8 @@ sealed class SendFlowManagerAction: Disposable  {
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
 
     Disposable.destroy(
-        this.v1,
-        this.v2
+        this.`text`,
+        this.`unit`
     )
 
             }
@@ -63707,7 +63710,7 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 )
             19 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                 FfiConverterString.read(buf),
-                FfiConverterBoolean.read(buf),
+                FfiConverterTypeBitcoinUnit.read(buf),
                 )
             20 -> SendFlowManagerAction.ChangeFeeRateOptions(
                 FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
@@ -63849,8 +63852,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
-                + FfiConverterBoolean.allocationSize(value.v2)
+                + FfiConverterString.allocationSize(value.`text`)
+                + FfiConverterTypeBitcoinUnit.allocationSize(value.`unit`)
             )
         }
         is SendFlowManagerAction.ChangeFeeRateOptions -> {
@@ -63967,8 +63970,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             }
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
                 buf.putInt(19)
-                FfiConverterString.write(value.v1, buf)
-                FfiConverterBoolean.write(value.v2, buf)
+                FfiConverterString.write(value.`text`, buf)
+                FfiConverterTypeBitcoinUnit.write(value.`unit`, buf)
                 Unit
             }
             is SendFlowManagerAction.ChangeFeeRateOptions -> {
