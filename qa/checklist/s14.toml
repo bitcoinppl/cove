@@ -592,3 +592,29 @@ coverage = [
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # the rust tests run the scan against an in-process electrum server; the node screen's parsing and submit stay with the agent
+
+[[row]]
+id = "s14-transfer-between-wallets-labels-both-sides"
+section = "14"
+title = "Send between the user's wallets is labelled in both"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/transfer_labels.rs",
+    "rust/src/address_ownership.rs",
+    "rust/src/address_ownership/**",
+    "rust/src/label_manager.rs",
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/manager/wallet_manager/actor/transactions.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+]
+coverage = [
+    "ios-ui:ios/CoveUITests/TransferLabelsFullLaunchUITests.swift::testSendBetweenWalletsIsLabelledInBoth",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/TransferLabelsFullLaunchTest.kt::sendBetweenWalletsIsLabelledInBoth",
+    "rust:rust/src/transfer_labels.rs::a_send_to_another_wallet_is_labelled_on_both_sides",
+    "rust:rust/src/transfer_labels.rs::labels_already_on_the_transaction_are_kept",
+    "rust:rust/src/transfer_labels.rs::change_a_copy_of_the_sender_also_owns_gets_no_label",
+]
+# the ui tests send Max from the test mnemonic's wallet to the second wallet's first receive address, check the sender's list shows "Transfer to" the receiver, then mine and check the receiver's list shows "Transfer from" the sender
+# the rust tests cover a label the user already wrote surviving, sends to no other wallet, change a copy of the sender owns, and mode switches
