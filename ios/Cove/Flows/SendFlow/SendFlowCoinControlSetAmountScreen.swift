@@ -176,7 +176,8 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     private func screenAppeared() {
-        if validate(), utxos == sendFlowManager.utxos() {
+        // the same coins sorted another way keep the draft in Rust, so order doesn't matter here
+        if validate(), sendFlowManager.utxos().map(Set.init) == Set(utxos) {
             isLoading = false
             loadingOpacity = 0
             presenter.focusField = .none
