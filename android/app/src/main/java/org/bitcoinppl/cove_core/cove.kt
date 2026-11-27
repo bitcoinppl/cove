@@ -35885,14 +35885,15 @@ public object FfiConverterTypeFoundAddress: FfiConverterRustBuffer<FoundAddress>
  */
 data class FoundAddressOwner (
     /**
-     * The owning wallet, which the alert offers to open
-     */
-    var `walletId`: WalletId
-    ,
-    /**
      * One line telling the user the address is theirs, worded for the selected wallet
      */
     var `description`: kotlin.String
+    ,
+    /**
+     * The owning wallet when it is not the selected one, which the alert offers to open; the
+     * selected wallet's own address would only lead back to the screen the user is on
+     */
+    var `walletToOpen`: WalletId?
 
 ){
 
@@ -35909,19 +35910,19 @@ data class FoundAddressOwner (
 public object FfiConverterTypeFoundAddressOwner: FfiConverterRustBuffer<FoundAddressOwner> {
     override fun read(buf: ByteBuffer): FoundAddressOwner {
         return FoundAddressOwner(
-            FfiConverterTypeWalletId.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalTypeWalletId.read(buf),
         )
     }
 
     override fun allocationSize(value: FoundAddressOwner) = (
-            FfiConverterTypeWalletId.allocationSize(value.`walletId`) +
-            FfiConverterString.allocationSize(value.`description`)
+            FfiConverterString.allocationSize(value.`description`) +
+            FfiConverterOptionalTypeWalletId.allocationSize(value.`walletToOpen`)
     )
 
     override fun write(value: FoundAddressOwner, buf: ByteBuffer) {
-            FfiConverterTypeWalletId.write(value.`walletId`, buf)
             FfiConverterString.write(value.`description`, buf)
+            FfiConverterOptionalTypeWalletId.write(value.`walletToOpen`, buf)
     }
 }
 

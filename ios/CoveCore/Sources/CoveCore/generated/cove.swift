@@ -19786,25 +19786,27 @@ public func FfiConverterTypeFoundAddress_lower(_ value: FoundAddress) -> RustBuf
  */
 public struct FoundAddressOwner: Equatable, Hashable {
     /**
-     * The owning wallet, which the alert offers to open
-     */
-    public var walletId: WalletId
-    /**
      * One line telling the user the address is theirs, worded for the selected wallet
      */
     public var description: String
+    /**
+     * The owning wallet when it is not the selected one, which the alert offers to open; the
+     * selected wallet's own address would only lead back to the screen the user is on
+     */
+    public var walletToOpen: WalletId?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
-         * The owning wallet, which the alert offers to open
-         */walletId: WalletId,
-        /**
          * One line telling the user the address is theirs, worded for the selected wallet
-         */description: String) {
-        self.walletId = walletId
+         */description: String,
+        /**
+         * The owning wallet when it is not the selected one, which the alert offers to open; the
+         * selected wallet's own address would only lead back to the screen the user is on
+         */walletToOpen: WalletId?) {
         self.description = description
+        self.walletToOpen = walletToOpen
     }
 
 
@@ -19823,14 +19825,14 @@ public struct FfiConverterTypeFoundAddressOwner: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FoundAddressOwner {
         return
             try FoundAddressOwner(
-                walletId: FfiConverterTypeWalletId.read(from: &buf),
-                description: FfiConverterString.read(from: &buf)
+                description: FfiConverterString.read(from: &buf),
+                walletToOpen: FfiConverterOptionTypeWalletId.read(from: &buf)
         )
     }
 
     public static func write(_ value: FoundAddressOwner, into buf: inout [UInt8]) {
-        FfiConverterTypeWalletId.write(value.walletId, into: &buf)
         FfiConverterString.write(value.description, into: &buf)
+        FfiConverterOptionTypeWalletId.write(value.walletToOpen, into: &buf)
     }
 }
 
