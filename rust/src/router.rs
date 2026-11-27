@@ -380,20 +380,25 @@ impl RouteFactory {
         Self
     }
 
-    /// The nested routes once `route` is pushed onto `routes`
+    /// The nested routes once `route` is pushed onto `routes`, when the push replaces an open
+    /// send, or none when `route` is pushed as usual
     ///
     /// Each platform keeps one send session per wallet, so a send of one kind pushed over a send
     /// of the other kind for the same wallet, such as a scanned payment address over a coin
     /// control send, replaces it: the old send's screens, from the coin control list it was opened
-    /// from on, leave with its session instead of staying over a closed one
-    pub fn routes_after_push(&self, routes: Vec<Route>, route: Route) -> Vec<Route> {
-        let mut routes = routes;
-        if let Some(replaced_from) = replaced_send_start(&routes, &route) {
-            routes.truncate(replaced_from);
-        }
+    /// from on, leave with its session instead of staying over a closed one. Rust answers whether
+    /// that happened, since route values that crossed the bridge can't be compared reliably
+    pub fn routes_replacing_open_send(
+        &self,
+        routes: Vec<Route>,
+        route: Route,
+    ) -> Option<Vec<Route>> {
+        let replaced_from = replaced_send_start(&routes, &route)?;
 
+        let mut routes = routes;
+        routes.truncate(replaced_from);
         routes.push(route);
-        routes
+        Some(routes)
     }
 
     pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
@@ -610,32 +615,24 @@ mod tests {
         let coin_control_open =
             vec![settings.clone(), coin_list.clone(), coin_control_send.clone()];
         assert_eq!(
-            factory.routes_after_push(coin_control_open, normal.clone()),
-            vec![settings, normal.clone()]
+            factory.routes_replacing_open_send(coin_control_open, normal.clone()),
+            Some(vec![settings, normal.clone()])
         );
 
         // over the coin list alone there is no send to replace
         let list_open = vec![coin_list.clone()];
-        assert_eq!(
-            factory.routes_after_push(list_open, normal.clone()),
-            vec![coin_list.clone(), normal.clone()]
-        );
+        assert_eq!(factory.routes_replacing_open_send(list_open, normal.clone()), None);
 
         // a send of the same kind, a send screen that continues one, and another wallet's send
-        // are pushed on top
+        // are pushed as usual
         let normal_open = vec![normal.clone()];
-        assert_eq!(
-            factory.routes_after_push(normal_open, normal.clone()),
-            vec![normal.clone(), normal]
-        );
+        assert_eq!(factory.routes_replacing_open_send(normal_open, normal), None);
 
         let other_wallet_send =
             Route::Send(SendRoute::SetAmount { id: other_wallet, address: None, amount: None });
-        let pushed_other = factory.routes_after_push(
-            vec![coin_list.clone(), coin_control_send.clone()],
-            other_wallet_send.clone(),
-        );
-        assert_eq!(pushed_other, vec![coin_list, coin_control_send, other_wallet_send]);
+        let pushed_other = factory
+            .routes_replacing_open_send(vec![coin_list, coin_control_send], other_wallet_send);
+        assert_eq!(pushed_other, None);
     }
 
     // regression for #916: a cold launch must not route to a wallet from another network

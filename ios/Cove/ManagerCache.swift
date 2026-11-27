@@ -509,9 +509,7 @@ extension Router {
     /// replaces that send's screens, or nil when the route is pushed as usual
     func routesReplacingOpenSend(with route: Route) -> [Route]? {
         guard case .send = route else { return nil }
-
-        let pushed = RouteFactory().routesAfterPush(routes: routes, route: route)
-        return Array(pushed.dropLast()) == routes ? nil : pushed
+        return RouteFactory().routesReplacingOpenSend(routes: routes, route: route)
     }
 
     /// Whether the wallet's send flow is still in use: a send route, or, for a coin control send,
