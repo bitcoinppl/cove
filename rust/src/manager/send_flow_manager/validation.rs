@@ -1,5 +1,32 @@
 use super::{EnterMode, SendFlowAlertState, SendFlowError};
 
+/// How a failed amount check reaches the user
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum AmountAlert {
+    /// Logged only, for checks that decide focus or whether Next is enabled
+    Silent,
+
+    /// Alerted, since the user asked to go on, such as by tapping Next
+    Shown,
+
+    /// Alerted, except that a fee total still being calculated holds the check until the total
+    /// lands, for checks the user didn't ask for, such as on an amount Send opened with; the fee
+    /// shows a moment later, so alerting that it is still loading would only cover Next
+    ShownOnceFeeLoads,
+}
+
+impl AmountAlert {
+    pub(crate) const fn shown_once_fee_loads_if(show: bool) -> Self {
+        if show { Self::ShownOnceFeeLoads } else { Self::Silent }
+    }
+}
+
+impl From<bool> for AmountAlert {
+    fn from(display_alert: bool) -> Self {
+        if display_alert { Self::Shown } else { Self::Silent }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum SpendableBalanceCheck {
     WithinBalance,

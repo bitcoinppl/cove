@@ -38,6 +38,9 @@ pub struct SendFlowManagerState {
     pub(crate) mode: EnterMode,
     /// Last fee update failure, kept so recalculations on every edit log only when it changes
     pub(crate) last_fee_failure: Option<String>,
+    /// The amount, in sats, of an alerting check that found no fee total and runs again once one
+    /// lands, see `AmountAlert::ShownOnceFeeLoads`
+    pub(crate) amount_check_awaiting_fee: Option<u64>,
 
     // public
     pub entering_btc_amount: String,
@@ -173,6 +176,7 @@ impl SendFlowManagerState {
             selected_fiat_currency,
             has_base_fees: false,
             last_fee_failure: None,
+            amount_check_awaiting_fee: None,
             payjoin_endpoint: None,
         }
     }

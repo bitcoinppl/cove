@@ -22,6 +22,7 @@ protocol SendFlowRustManaging: AnyObject, Sendable {
     func listenForUpdates(reconciler: SendFlowManagerReconciler)
     func validateAddress(displayAlert: Bool) -> Bool
     func validateAmount(displayAlert: Bool) -> Bool
+    func checkPrefilledAmount() -> Bool
     func getCustomFeeOption(
         feeRate: FeeRate,
         feeSpeed: FeeSpeed
@@ -124,6 +125,11 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
     func validateAmount(displayAlert: Bool = false) -> Bool {
         withRustOr(false) { $0.validateAmount(displayAlert: displayAlert) }
+    }
+
+    /// Checks an amount Send opened with, alerting on what is wrong with it once its fee is known
+    func checkPrefilledAmount() -> Bool {
+        withRustOr(false) { $0.checkPrefilledAmount() }
     }
 
     init(_ rust: SendFlowRustManaging, presenter: SendFlowPresenter) {

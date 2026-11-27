@@ -10121,6 +10121,15 @@ public func FfiConverterTypeRustPendingWalletManager_lower(_ value: RustPendingW
 public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
 
     /**
+     * Checks an amount Send opened with, such as one from a scanned payment request, and alerts
+     * on what is wrong with it
+     *
+     * The screen can open before the fee total is calculated, so while it is still loading the
+     * check waits for it and runs when it lands, instead of alerting that the fee is still loading
+     */
+    func checkPrefilledAmount()  -> Bool
+
+    /**
      * action from the frontend to change the state of the view model
      */
     func dispatch(action: SendFlowManagerAction)
@@ -10229,6 +10238,22 @@ open class RustSendFlowManager: RustSendFlowManagerProtocol, @unchecked Sendable
 
 
 
+
+    /**
+     * Checks an amount Send opened with, such as one from a scanned payment request, and alerts
+     * on what is wrong with it
+     *
+     * The screen can open before the fee total is calculated, so while it is still loading the
+     * check waits for it and runs when it lands, instead of alerting that the fee is still loading
+     */
+open func checkPrefilledAmount() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustsendflowmanager_check_prefilled_amount(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
 
     /**
      * action from the frontend to change the state of the view model
@@ -56042,6 +56067,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 9073) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_check_prefilled_amount() != 29753) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_dispatch() != 60263) {

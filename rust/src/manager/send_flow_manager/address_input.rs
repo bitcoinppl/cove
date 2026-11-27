@@ -3,7 +3,9 @@ use std::sync::Arc;
 use cove_types::address::AddressWithNetwork;
 use tracing::debug;
 
-use super::{Message, RustSendFlowManager, SendFlowError, SetAmountFocusField};
+use super::{
+    Message, RustSendFlowManager, SendFlowError, SetAmountFocusField, validation::AmountAlert,
+};
 
 impl RustSendFlowManager {
     /// Called when the user types or pastes into the address field.
@@ -59,7 +61,7 @@ impl RustSendFlowManager {
 
         // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
         if self.validate_address_internal(false) {
-            let focus_field = if self.validate_amount_internal(false) {
+            let focus_field = if self.validate_amount_internal(AmountAlert::Silent) {
                 None
             } else {
                 Some(SetAmountFocusField::Amount)
@@ -190,15 +192,19 @@ impl RustSendFlowManager {
             self.handle_amount_changed(amount);
         }
 
-        // if amount is invalid, go to amount field
-        if !self.validate_amount_internal(should_show_amount_error) {
+        // if amount is invalid, go to amount field; a scan doesn't ask to send, so a fee still
+        // loading isn't alerted
+        let amount_alert = AmountAlert::shown_once_fee_loads_if(should_show_amount_error);
+        if !self.validate_amount_internal(amount_alert) {
             let focus_field = SetAmountFocusField::Amount;
             self.state.lock().focus_field = Some(focus_field);
             sender.queue(Message::UpdateFocusField(Some(focus_field)));
         }
 
         // if both address and amount are valid, then clear the focus field
-        if self.validate_amount_internal(false) && self.validate_address_internal(false) {
+        if self.validate_amount_internal(AmountAlert::Silent)
+            && self.validate_address_internal(false)
+        {
             self.state.lock().focus_field = None;
             sender.queue(Message::UpdateFocusField(None));
         }

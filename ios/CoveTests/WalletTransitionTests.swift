@@ -613,6 +613,7 @@ private final class TestSendFlowRustManager: SendFlowRustManaging {
     func listenForUpdates(reconciler _: SendFlowManagerReconciler) {}
     func validateAddress(displayAlert _: Bool) -> Bool { false }
     func validateAmount(displayAlert _: Bool) -> Bool { false }
+    func checkPrefilledAmount() -> Bool { false }
 
     func getCustomFeeOption(
         feeRate _: FeeRate,

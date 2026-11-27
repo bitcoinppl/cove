@@ -100,6 +100,10 @@ paths = ["ios/CoveUITests/SendFlowUnitFullLaunchUITests.swift"]
 suites = ["CoveUITests/SendFlowUnitFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/SendFlowPrefilledAmountFullLaunchUITests.swift"]
+suites = ["CoveUITests/SendFlowPrefilledAmountFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/UtxoLockFullLaunchUITests.swift"]
 suites = ["CoveUITests/UtxoLockFullLaunchUITests"]
 

@@ -1631,6 +1631,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet(
     ): Short
+    external fun uniffi_cove_checksum_method_rustsendflowmanager_check_prefilled_amount(
+    ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_dispatch(
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_listen_for_updates(
@@ -2849,6 +2851,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_rustsendflowmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustsendflowmanager_check_prefilled_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_rustsendflowmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustsendflowmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4788,6 +4792,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustpendingwalletmanager_save_wallet() != 9073.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_check_prefilled_amount() != 29753.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_dispatch() != 60263.toShort()) {
@@ -23641,6 +23648,15 @@ public object FfiConverterTypeRustPendingWalletManager: FfiConverter<RustPending
 public interface RustSendFlowManagerInterface {
 
     /**
+     * Checks an amount Send opened with, such as one from a scanned payment request, and alerts
+     * on what is wrong with it
+     *
+     * The screen can open before the fee total is calculated, so while it is still loading the
+     * check waits for it and runs when it lands, instead of alerting that the fee is still loading
+     */
+    fun `checkPrefilledAmount`(): kotlin.Boolean
+
+    /**
      * action from the frontend to change the state of the view model
      */
     fun `dispatch`(`action`: SendFlowManagerAction)
@@ -23799,6 +23815,26 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
             UniffiLib.uniffi_cove_fn_clone_rustsendflowmanager(handle, status)
         }
     }
+
+
+    /**
+     * Checks an amount Send opened with, such as one from a scanned payment request, and alerts
+     * on what is wrong with it
+     *
+     * The screen can open before the fee total is calculated, so while it is still loading the
+     * check waits for it and runs when it lands, instead of alerting that the fee is still loading
+     */override fun `checkPrefilledAmount`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_check_prefilled_amount(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
 
 
     /**

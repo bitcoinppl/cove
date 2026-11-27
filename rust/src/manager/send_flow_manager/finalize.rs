@@ -10,7 +10,7 @@ use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
 
 use super::{
     EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError,
-    amount_input::MaxTrigger,
+    amount_input::MaxTrigger, validation::AmountAlert,
 };
 
 #[derive(Clone)]
@@ -24,7 +24,9 @@ struct FinalizeSnapshot {
 impl RustSendFlowManager {
     /// Create the PSBT and everything is valid go to the next screen
     pub(crate) fn finalize_and_go_to_next_screen(self: &Arc<Self>) {
-        if !self.validate_amount_internal(true) || !self.validate_address_internal(true) {
+        if !self.validate_amount_internal(AmountAlert::Shown)
+            || !self.validate_address_internal(true)
+        {
             return;
         }
 
