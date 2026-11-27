@@ -128,29 +128,7 @@ impl RustSendFlowManager {
 
         // format on blur
         if old == Some(SetAmountFocusField::Amount) {
-            let amount = self.state.lock().amount_sats.map(Amount::from_sat);
-            let amount_fiat = self.state.lock().amount_fiat;
-
-            if let Some(amount_fiat) = amount_fiat {
-                let currency = self.state.lock().selected_fiat_currency;
-                let entering_fiat_amount = fiat_entry_text(amount_fiat, currency);
-
-                self.state.lock().amount_entry.fiat_text = entering_fiat_amount.clone();
-                sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
-            }
-
-            let unit = self.state.lock().amount_entry.mode.unit;
-            match (amount, unit) {
-                (Some(amount), BitcoinUnit::Sat) => {
-                    let entering_btc_amount = amount.as_sats().thousands_int();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-                }
-                (Some(amount_sats), BitcoinUnit::Btc) => {
-                    let entering_btc_amount = amount_sats.as_btc().thousands();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-                }
-                _ => {}
-            }
+            format_entered_amounts(&mut self.state.lock(), &mut sender);
         }
 
         self.state.lock().focus_field = new;
@@ -499,6 +477,24 @@ fn apply_fiat_edit(
 fn resend_stale_field(text: &str, sender: &mut DeferredSender, message: fn(String) -> Message) {
     debug!("dropping an amount edit typed before the entry mode changed");
     sender.queue(message(text.to_string()));
+}
+
+/// Rewrites both amount fields from the committed amount once the amount field loses focus, in
+/// one critical section so the bitcoin text is written in the unit the entry is in
+fn format_entered_amounts(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
+    if let Some(amount_fiat) = state.amount_fiat {
+        let text = fiat_entry_text(amount_fiat, state.selected_fiat_currency);
+        state.amount_entry.fiat_text.clone_from(&text);
+        sender.queue(Message::UpdateEnteringFiatAmount(text));
+    }
+
+    let Some(amount) = state.amount_sats.map(Amount::from_sat) else { return };
+    let text = match state.amount_entry.mode.unit {
+        BitcoinUnit::Sat => amount.as_sats().thousands_int(),
+        BitcoinUnit::Btc => amount.as_btc().thousands(),
+    };
+
+    set_entering_btc_amount(state, text, sender);
 }
 
 fn unset_max_selected(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
