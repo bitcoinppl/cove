@@ -21,8 +21,11 @@ private struct AppAlertMessage: View {
         let text = alert.message()
 
         if case let .foundAddress(_, _, owner?) = alert {
+            // a system alert shows only the first Text of its message, so the owner line has to join
+            // the address in one Text, where a two-line limit would cut the owner line off
             let address = Text(text).font(.system(.caption2, design: .monospaced))
             Text("\(address)\n\n\(owner.description)")
+                .minimumScaleFactor(0.5)
         } else if case .foundAddress = alert {
             Text(text)
                 .font(.system(.caption2, design: .monospaced))
