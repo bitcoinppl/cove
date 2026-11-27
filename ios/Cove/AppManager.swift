@@ -70,7 +70,13 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
     var asyncRuntimeReady = false
 
-    var alertState: TaggedItem<AppAlertState>? = .none
+    var alertState: TaggedItem<AppAlertState>? = .none {
+        didSet { alertChanges &+= 1 }
+    }
+
+    /// Counts every alert change, dismissals included, so async work can tell an alert came and went
+    @ObservationIgnored private(set) var alertChanges = 0
+
     var sheetState: TaggedItem<AppSheetState>? = .none
     var corruptedWalletDeletionRetry: CorruptedWalletDeletionRetry?
 
@@ -267,6 +273,9 @@ struct CorruptedWalletDeletionRetry: Equatable {
         // a mode switch must not leave the previous mode's NFC session running
         tapSignerNfc?.cancel()
         tapSignerNfc = nil
+
+        // an open alert can name the previous mode's wallets
+        alertState = .none
     }
 
     func deleteCorruptedWallet(id: WalletId, databaseError: String) {

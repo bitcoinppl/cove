@@ -112,6 +112,10 @@ paths = ["ios/CoveUITests/AddressOwnershipSendFullLaunchUITests.swift"]
 suites = ["CoveUITests/AddressOwnershipSendFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/AddressOwnershipScanFullLaunchUITests.swift"]
+suites = ["CoveUITests/AddressOwnershipScanFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift"]
 suites = ["CoveUITests/WatchOnlyUpgradeFullLaunchUITests"]
 

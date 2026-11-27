@@ -20,7 +20,13 @@ private struct AppAlertMessage: View {
     var body: some View {
         let text = alert.message()
 
-        if case .foundAddress = alert {
+        if case let .foundAddress(_, _, owner?) = alert {
+            // a system alert shows only the first Text of its message, so the owner line has to join
+            // the address in one Text, where a two-line limit would cut the owner line off
+            let address = Text(text).font(.system(.caption2, design: .monospaced))
+            Text("\(address)\n\n\(owner.description)")
+                .minimumScaleFactor(0.5)
+        } else if case .foundAddress = alert {
             Text(text)
                 .font(.system(.caption2, design: .monospaced))
                 .minimumScaleFactor(0.5)
@@ -241,8 +247,13 @@ private struct AddressAlertActions: View {
         case let .addressWrongNetwork(address, _, _), let .noWalletSelected(address):
             CopyAddressActions(address: address, app: app)
 
-        case let .foundAddress(address, amount):
-            FoundAddressActions(address: address, amount: amount, app: app)
+        case let .foundAddress(address, amount, owner):
+            FoundAddressActions(
+                address: address,
+                amount: amount,
+                walletToOpen: owner?.walletToOpen,
+                app: app
+            )
 
         case .noCameraPermission:
             CameraPermissionActions(app: app)
@@ -271,9 +282,22 @@ private struct CopyAddressActions: View {
 private struct FoundAddressActions: View {
     let address: Address
     let amount: Amount?
+    let walletToOpen: WalletId?
     let app: AppManager
 
     var body: some View {
+        if let walletToOpen {
+            Button("Go to Wallet") {
+                app.alertState = .none
+                do {
+                    try app.selectWalletOrThrow(walletToOpen)
+                } catch {
+                    Log.error("Unable to select wallet \(walletToOpen), error: \(error)")
+                    app.alertState = TaggedItem(.unableToSelectWallet)
+                }
+            }
+        }
+
         Button("Copy Address") {
             UIPasteboard.general.string = String(address)
         }

@@ -202,8 +202,24 @@ private fun GlobalAlertDialog(
 
         is AppAlertState.FoundAddress -> {
             val selectedWallet = Database().globalConfig().selectedWallet()
+            val owner = state.owner
+            val walletToOpen = owner?.walletToOpen
             val choices =
                 buildList {
+                    if (walletToOpen != null) {
+                        add(
+                            DialogChoice("Go to Wallet") {
+                                onDismiss()
+                                try {
+                                    app.selectWalletOrThrow(walletToOpen)
+                                    app.resetRoute(Route.SelectedWallet(walletToOpen))
+                                } catch (e: Exception) {
+                                    Log.e("GlobalAlert", "Failed to select wallet", e)
+                                    app.alertState = TaggedItem(AppAlertState.UnableToSelectWallet)
+                                }
+                            },
+                        )
+                    }
                     if (selectedWallet != null) {
                         add(
                             DialogChoice(
@@ -226,7 +242,7 @@ private fun GlobalAlertDialog(
                 }
             ChoiceAlertDialog(
                 title = state.title(),
-                message = state.message(),
+                message = listOfNotNull(state.message(), owner?.description).joinToString("\n\n"),
                 choices = choices,
                 onDismiss = onDismiss,
             )

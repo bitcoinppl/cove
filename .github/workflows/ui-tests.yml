@@ -78,6 +78,7 @@ env:
     CoveUITests/VerifyWordsFullLaunchUITests,
     CoveUITests/RenameWalletFullLaunchUITests,
     CoveUITests/AddressOwnershipSendFullLaunchUITests,
+    CoveUITests/AddressOwnershipScanFullLaunchUITests,
     CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
     CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,

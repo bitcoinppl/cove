@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bdk_wallet::{
     KeychainKind, bitcoin::bip32::Xpriv, descriptor::ExtendedDescriptor,
     descriptor::IntoWalletDescriptor as _,
@@ -13,6 +15,7 @@ use super::{
     check_address_ownership_with,
 };
 use crate::{
+    app::alert_state::{AppAlertState, FoundAddressOwner, found_address_alert},
     bdk_store::BdkStore,
     database::Database,
     manager::import_wallet_manager::import_mnemonic_with_target,
@@ -528,5 +531,46 @@ fn a_store_path_that_cannot_be_checked_is_reported_as_unchecked() {
     assert_eq!(
         ownership,
         AddressOwnership::NotFound { unchecked_wallets: vec![UncheckedWallet::from(&wallet)] }
+    );
+}
+
+#[test]
+fn a_scanned_address_alert_names_the_wallet_that_owns_it() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let selected_keys = random_mnemonic();
+    let selected =
+        import_mnemonic_with_target(selected_keys.clone(), Network::Bitcoin, WalletMode::Main)
+            .unwrap();
+    let other_keys = random_mnemonic();
+    let other = import_mnemonic_with_target(other_keys.clone(), Network::Bitcoin, WalletMode::Main)
+        .unwrap();
+    Database::global().global_config.select_wallet(selected.id.clone()).unwrap();
+
+    let owner = |address: AddressWithNetwork| {
+        let alert = cove_tokio::task::block_on(found_address_alert(Arc::new(address)));
+        let AppAlertState::FoundAddress { owner, .. } = alert else {
+            panic!("a scanned address shows the found address alert, got {alert:?}");
+        };
+
+        owner
+    };
+
+    assert_eq!(
+        owner(address_at(&selected_keys, Network::Bitcoin, KeychainKind::External, 3)),
+        Some(FoundAddressOwner {
+            description: format!("This address belongs to this wallet, “{}”", selected.name),
+            wallet_to_open: None,
+        })
+    );
+    assert_eq!(
+        owner(address_at(&other_keys, Network::Bitcoin, KeychainKind::Internal, 2)),
+        Some(FoundAddressOwner {
+            description: format!("This address belongs to your wallet “{}”", other.name),
+            wallet_to_open: Some(other.id),
+        })
+    );
+    assert_eq!(
+        owner(address_at(&random_mnemonic(), Network::Bitcoin, KeychainKind::External, 0)),
+        None
     );
 }

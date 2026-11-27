@@ -19782,6 +19782,77 @@ public func FfiConverterTypeFoundAddress_lower(_ value: FoundAddress) -> RustBuf
 
 
 /**
+ * Which of the user's wallets owns a scanned address, as the found address alert names it
+ */
+public struct FoundAddressOwner: Equatable, Hashable {
+    /**
+     * One line telling the user the address is theirs, worded for the selected wallet
+     */
+    public var description: String
+    /**
+     * The owning wallet when it is not the selected one, which the alert offers to open; the
+     * selected wallet's own address would only lead back to the screen the user is on
+     */
+    public var walletToOpen: WalletId?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * One line telling the user the address is theirs, worded for the selected wallet
+         */description: String,
+        /**
+         * The owning wallet when it is not the selected one, which the alert offers to open; the
+         * selected wallet's own address would only lead back to the screen the user is on
+         */walletToOpen: WalletId?) {
+        self.description = description
+        self.walletToOpen = walletToOpen
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FoundAddressOwner: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFoundAddressOwner: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FoundAddressOwner {
+        return
+            try FoundAddressOwner(
+                description: FfiConverterString.read(from: &buf),
+                walletToOpen: FfiConverterOptionTypeWalletId.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FoundAddressOwner, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterOptionTypeWalletId.write(value.walletToOpen, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFoundAddressOwner_lift(_ buf: RustBuffer) throws -> FoundAddressOwner {
+    return try FfiConverterTypeFoundAddressOwner.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFoundAddressOwner_lower(_ value: FoundAddressOwner) -> RustBuffer {
+    return FfiConverterTypeFoundAddressOwner.lower(value)
+}
+
+
+/**
  * Committed app and authentication state after a successful full wipe
  *
  * Frontends apply this synchronously before releasing authentication, so no frontend has
@@ -23598,7 +23669,7 @@ public enum AppAlertState {
     )
     case addressWrongNetwork(address: Address, network: Network, currentNetwork: Network
     )
-    case foundAddress(address: Address, amount: Amount?
+    case foundAddress(address: Address, amount: Amount?, owner: FoundAddressOwner?
     )
     case unableToSelectWallet
     case errorImportingHardwareWallet(message: String
@@ -23716,7 +23787,7 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
         case 7: return .addressWrongNetwork(address: try FfiConverterTypeAddress.read(from: &buf), network: try FfiConverterTypeNetwork.read(from: &buf), currentNetwork: try FfiConverterTypeNetwork.read(from: &buf)
         )
 
-        case 8: return .foundAddress(address: try FfiConverterTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf)
+        case 8: return .foundAddress(address: try FfiConverterTypeAddress.read(from: &buf), amount: try FfiConverterOptionTypeAmount.read(from: &buf), owner: try FfiConverterOptionTypeFoundAddressOwner.read(from: &buf)
         )
 
         case 9: return .unableToSelectWallet
@@ -23825,10 +23896,11 @@ public struct FfiConverterTypeAppAlertState: FfiConverterRustBuffer {
             FfiConverterTypeNetwork.write(currentNetwork, into: &buf)
 
 
-        case let .foundAddress(address,amount):
+        case let .foundAddress(address,amount,owner):
             writeInt(&buf, Int32(8))
             FfiConverterTypeAddress.write(address, into: &buf)
             FfiConverterOptionTypeAmount.write(amount, into: &buf)
+            FfiConverterOptionTypeFoundAddressOwner.write(owner, into: &buf)
 
 
         case .unableToSelectWallet:
@@ -53030,6 +53102,30 @@ fileprivate struct FfiConverterOptionTypeFiatAmount: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFoundAddressOwner: FfiConverterRustBuffer {
+    typealias SwiftType = FoundAddressOwner?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFoundAddressOwner.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFoundAddressOwner.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeSendConfirmationLock: FfiConverterRustBuffer {
     typealias SwiftType = SendConfirmationLock?
 
@@ -55125,6 +55221,27 @@ public func initializeApp()  {try! rustCall() {
 }
 }
 /**
+ * The alert for a scanned address that is valid on the selected network
+ *
+ * It names which of the user's wallets owns the address when one does. The lookup searches only
+ * wallets on the selected wallet's network and in its wallet mode, and nothing leaves the device
+ */
+public func foundAddressAlert(address: AddressWithNetwork)async  -> AppAlertState  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_func_found_address_alert(FfiConverterTypeAddressWithNetwork_lower(address)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAppAlertState_lift,
+            errorHandler: nil
+
+        )
+}
+/**
  * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
  * (encryption key derivation + redb migrations) on a blocking thread, then
  * attempts BDK migration. BDK migration failures are non-blocking — the app
@@ -55791,6 +55908,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_initialize_app() != 18498) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_found_address_alert() != 10583) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_bootstrap() != 63544) {

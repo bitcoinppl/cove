@@ -1,9 +1,19 @@
 use std::sync::Arc;
 
 use cove_tap_card::TapSigner;
-use cove_types::{Network, TxId, WalletId, address::Address, amount::Amount};
+use cove_types::{
+    Network, TxId, WalletId,
+    address::{Address, AddressWithNetwork},
+    amount::Amount,
+};
+use tracing::warn;
 
-use crate::{database::Database, router::AfterPinAction, wallet::metadata::WalletMode};
+use crate::{
+    address_ownership::{AddressOwnershipError, AddressOwnershipLookup},
+    database::Database,
+    router::AfterPinAction,
+    wallet::metadata::WalletMode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum AlertDisplayType {
@@ -18,35 +28,79 @@ pub enum AppAlertState {
     ImportedLabelsSuccessfully,
 
     // warn
-    DuplicateWallet { wallet_id: WalletId },
-    HotWalletKeyMissing { wallet_id: WalletId },
+    DuplicateWallet {
+        wallet_id: WalletId,
+    },
+    HotWalletKeyMissing {
+        wallet_id: WalletId,
+    },
 
     // errors
     InvalidWordGroup,
-    ErrorImportingHotWallet { message: String },
-    AddressWrongNetwork { address: Arc<Address>, network: Network, current_network: Network },
-    FoundAddress { address: Arc<Address>, amount: Option<Arc<Amount>> },
+    ErrorImportingHotWallet {
+        message: String,
+    },
+    AddressWrongNetwork {
+        address: Arc<Address>,
+        network: Network,
+        current_network: Network,
+    },
+    // `owner` is the user's wallet that owns the address, when one does
+    FoundAddress {
+        address: Arc<Address>,
+        amount: Option<Arc<Amount>>,
+        owner: Option<FoundAddressOwner>,
+    },
     UnableToSelectWallet,
-    ErrorImportingHardwareWallet { message: String },
-    InvalidFileFormat { message: String },
-    NoWalletSelected { address: Arc<Address> },
-    InvalidFormat { message: String },
-    NoUnsignedTransactionFound { tx_id: Arc<TxId> },
-    UnableToGetAddress { error: String },
+    ErrorImportingHardwareWallet {
+        message: String,
+    },
+    InvalidFileFormat {
+        message: String,
+    },
+    NoWalletSelected {
+        address: Arc<Address>,
+    },
+    InvalidFormat {
+        message: String,
+    },
+    NoUnsignedTransactionFound {
+        tx_id: Arc<TxId>,
+    },
+    UnableToGetAddress {
+        error: String,
+    },
     NoCameraPermission,
-    FailedToScanQr { error: String },
+    FailedToScanQr {
+        error: String,
+    },
     CantSendOnWatchOnlyWallet,
-    TapSignerSetupFailed { message: String },
-    TapSignerDeriveFailed { message: String },
+    TapSignerSetupFailed {
+        message: String,
+    },
+    TapSignerDeriveFailed {
+        message: String,
+    },
     TapSignerInvalidAuth,
-    TapSignerNoBackup { tap_signer: Arc<TapSigner> },
-    TapSignerWrongPin { tap_signer: Arc<TapSigner>, action: AfterPinAction },
+    TapSignerNoBackup {
+        tap_signer: Arc<TapSigner>,
+    },
+    TapSignerWrongPin {
+        tap_signer: Arc<TapSigner>,
+        action: AfterPinAction,
+    },
 
     // database corruption
-    WalletDatabaseCorrupted { wallet_id: WalletId, error: String },
+    WalletDatabaseCorrupted {
+        wallet_id: WalletId,
+        error: String,
+    },
 
     // generic message or error
-    General { title: String, message: String },
+    General {
+        title: String,
+        message: String,
+    },
 
     // loading popup with progress indicator
     Loading,
@@ -59,9 +113,73 @@ pub enum AppAlertState {
     WatchOnlyImportWords,
 
     // action
-    UninitializedTapSigner { tap_signer: Arc<TapSigner> },
-    TapSignerWalletFound { wallet_id: WalletId },
-    InitializedTapSigner { tap_signer: Arc<TapSigner> },
+    UninitializedTapSigner {
+        tap_signer: Arc<TapSigner>,
+    },
+    TapSignerWalletFound {
+        wallet_id: WalletId,
+    },
+    InitializedTapSigner {
+        tap_signer: Arc<TapSigner>,
+    },
+}
+
+/// Which of the user's wallets owns a scanned address, as the found address alert names it
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FoundAddressOwner {
+    /// One line telling the user the address is theirs, worded for the selected wallet
+    pub description: String,
+
+    /// The owning wallet when it is not the selected one, which the alert offers to open; the
+    /// selected wallet's own address would only lead back to the screen the user is on
+    pub wallet_to_open: Option<WalletId>,
+}
+
+/// The alert for a scanned address that is valid on the selected network
+///
+/// It names which of the user's wallets owns the address when one does. The lookup searches only
+/// wallets on the selected wallet's network and in its wallet mode, and nothing leaves the device
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn found_address_alert(address: Arc<AddressWithNetwork>) -> AppAlertState {
+    AppAlertState::FoundAddress {
+        address: Arc::new(address.address.clone()),
+        amount: address.amount.map(Arc::new),
+        owner: selected_wallet_owner(&address.address).await,
+    }
+}
+
+/// Which of the user's wallets owns `address`, worded for someone looking at the selected wallet
+async fn selected_wallet_owner(address: &Address) -> Option<FoundAddressOwner> {
+    let database = Database::global();
+    let config = &database.global_config;
+    let selected = config.selected_wallet()?;
+    let metadata = database
+        .wallets
+        .get(&selected, config.selected_network(), config.wallet_mode())
+        .ok()
+        .flatten()?;
+
+    let lookup = AddressOwnershipLookup::for_wallet(&metadata);
+    let script = address.script_pubkey();
+    let found = cove_tokio::unblock::run_blocking(move || lookup.find_script_owners(&script))
+        .await
+        // the mode can switch while this task waits to resume
+        .and_then(|ownership| lookup.ensure_mode_is_active().map(|()| ownership));
+
+    match found {
+        Ok(ownership) => ownership.owner_to_name(&selected).map(|owner| FoundAddressOwner {
+            description: owner.describe(&selected),
+            wallet_to_open: (owner.wallet_id != selected).then(|| owner.wallet_id.clone()),
+        }),
+
+        // the alert belongs to a mode the app has left
+        Err(AddressOwnershipError::WalletModeChanged) => None,
+
+        Err(error) => {
+            warn!(id = %selected, %error, "unable to check whether the scanned address is owned");
+            None
+        }
+    }
 }
 
 #[uniffi::export]

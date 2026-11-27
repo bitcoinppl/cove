@@ -1081,6 +1081,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_initialize_app(
     ): Short
+    external fun uniffi_cove_checksum_func_found_address_alert(
+    ): Short
     external fun uniffi_cove_checksum_func_bootstrap(
     ): Short
     external fun uniffi_cove_checksum_func_bootstrap_progress(
@@ -3715,6 +3717,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_func_initialize_app(uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_func_found_address_alert(`address`: Long,
+    ): Long
     external fun uniffi_cove_fn_func_bootstrap(
     ): Long
     external fun uniffi_cove_fn_func_bootstrap_progress(uniffi_out_err: UniffiRustCallStatus,
@@ -3973,6 +3977,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_initialize_app() != 18498.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_found_address_alert() != 10583.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_bootstrap() != 63544.toShort()) {
@@ -35874,6 +35881,54 @@ public object FfiConverterTypeFoundAddress: FfiConverterRustBuffer<FoundAddress>
 
 
 /**
+ * Which of the user's wallets owns a scanned address, as the found address alert names it
+ */
+data class FoundAddressOwner (
+    /**
+     * One line telling the user the address is theirs, worded for the selected wallet
+     */
+    var `description`: kotlin.String
+    ,
+    /**
+     * The owning wallet when it is not the selected one, which the alert offers to open; the
+     * selected wallet's own address would only lead back to the screen the user is on
+     */
+    var `walletToOpen`: WalletId?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFoundAddressOwner: FfiConverterRustBuffer<FoundAddressOwner> {
+    override fun read(buf: ByteBuffer): FoundAddressOwner {
+        return FoundAddressOwner(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalTypeWalletId.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FoundAddressOwner) = (
+            FfiConverterString.allocationSize(value.`description`) +
+            FfiConverterOptionalTypeWalletId.allocationSize(value.`walletToOpen`)
+    )
+
+    override fun write(value: FoundAddressOwner, buf: ByteBuffer) {
+            FfiConverterString.write(value.`description`, buf)
+            FfiConverterOptionalTypeWalletId.write(value.`walletToOpen`, buf)
+    }
+}
+
+
+
+/**
  * Committed app and authentication state after a successful full wipe
  *
  * Frontends apply this synchronously before releasing authentication, so no frontend has
@@ -39297,7 +39352,8 @@ sealed class AppAlertState: Disposable  {
 
     data class FoundAddress(
         val `address`: org.bitcoinppl.cove_core.types.Address,
-        val `amount`: org.bitcoinppl.cove_core.types.Amount?) : AppAlertState()
+        val `amount`: org.bitcoinppl.cove_core.types.Amount?,
+        val `owner`: org.bitcoinppl.cove_core.FoundAddressOwner?) : AppAlertState()
 
     {
 
@@ -39521,7 +39577,8 @@ sealed class AppAlertState: Disposable  {
 
     Disposable.destroy(
         this.`address`,
-        this.`amount`
+        this.`amount`,
+        this.`owner`
     )
 
             }
@@ -39734,6 +39791,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
             8 -> AppAlertState.FoundAddress(
                 FfiConverterTypeAddress.read(buf),
                 FfiConverterOptionalTypeAmount.read(buf),
+                FfiConverterOptionalTypeFoundAddressOwner.read(buf),
                 )
             9 -> AppAlertState.UnableToSelectWallet
             10 -> AppAlertState.ErrorImportingHardwareWallet(
@@ -39853,6 +39911,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
                 + FfiConverterTypeAddress.allocationSize(value.`address`)
                 + FfiConverterOptionalTypeAmount.allocationSize(value.`amount`)
+                + FfiConverterOptionalTypeFoundAddressOwner.allocationSize(value.`owner`)
             )
         }
         is AppAlertState.UnableToSelectWallet -> {
@@ -40060,6 +40119,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 buf.putInt(8)
                 FfiConverterTypeAddress.write(value.`address`, buf)
                 FfiConverterOptionalTypeAmount.write(value.`amount`, buf)
+                FfiConverterOptionalTypeFoundAddressOwner.write(value.`owner`, buf)
                 Unit
             }
             is AppAlertState.UnableToSelectWallet -> {
@@ -74806,6 +74866,38 @@ public object FfiConverterOptionalTypeFiatAmount: FfiConverterRustBuffer<FiatAmo
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeFoundAddressOwner: FfiConverterRustBuffer<FoundAddressOwner?> {
+    override fun read(buf: ByteBuffer): FoundAddressOwner? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFoundAddressOwner.read(buf)
+    }
+
+    override fun allocationSize(value: FoundAddressOwner?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFoundAddressOwner.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FoundAddressOwner?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFoundAddressOwner.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeSendConfirmationLock: FfiConverterRustBuffer<SendConfirmationLock?> {
     override fun read(buf: ByteBuffer): SendConfirmationLock? {
         if (buf.get().toInt() == 0) {
@@ -77137,6 +77229,27 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 }
 
 
+
+        /**
+         * The alert for a scanned address that is valid on the selected network
+         *
+         * It names which of the user's wallets owns the address when one does. The lookup searches only
+         * wallets on the selected wallet's network and in its wallet mode, and nothing leaves the device
+         */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+     suspend fun `foundAddressAlert`(`address`: AddressWithNetwork) : AppAlertState {
+        return uniffiRustCallAsync(
+        UniffiLib.uniffi_cove_fn_func_found_address_alert(
+        FfiConverterTypeAddressWithNetwork.lower(`address`),),
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeAppAlertState.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
+    }
 
         /**
          * Async bootstrap: initializes the tokio runtime, runs critical storage bootstrap
