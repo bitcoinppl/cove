@@ -6,11 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
@@ -61,8 +58,6 @@ class CoinControlManager internal constructor(
 
     var unit by mutableStateOf(BitcoinUnit.SAT)
         private set
-
-    private var updateSendFlowManagerTask: Job? = null
 
     init {
         logDebug("Initializing CoinControlManager")
@@ -158,22 +153,6 @@ class CoinControlManager internal constructor(
         app.pushRoute(Route.Send(sendRoute))
     }
 
-    private fun updateSendFlowManager() {
-        val sfm = AppManager.getInstance().sendFlowManager ?: return
-        updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask =
-            mainScope.launch {
-                delay(SEND_FLOW_UPDATE_DELAY_MS)
-                if (!isActive) return@launch
-
-                val selectedUtxos =
-                    withRustOr(emptyList()) {
-                        selectedUtxos()
-                    }
-                sfm.dispatch(SendFlowManagerAction.SetCoinControlMode(selectedUtxos))
-            }
-    }
-
     private fun apply(message: CoinControlManagerReconcileMessage) {
         when (message) {
             is CoinControlManagerReconcileMessage.UpdateSort -> {
@@ -192,8 +171,9 @@ class CoinControlManager internal constructor(
                 search = message.v1
             }
 
+            // the send applies the selection from its route on Continue, as on iOS, so picking
+            // coins one at a time never resets a kept coin control draft's amount
             is CoinControlManagerReconcileMessage.UpdateSelectedUtxos -> {
-                updateSendFlowManager()
                 selected = message.utxos.map { it.hashToUint() }.toSet()
                 totalSelected = message.totalValue
             }
@@ -252,20 +232,8 @@ class CoinControlManager internal constructor(
     override fun close() {
         rustGuard.closeOnce {
             logDebug("Closing CoinControlManager")
-            updateSendFlowManagerTask?.cancel()
             mainScope.cancel()
             rust.close()
         }
-    }
-
-    companion object {
-
-        /**
-         * delay before propagating coin control selection to SendFlowManager
-         *
-         * batches rapid UTXO selection changes into a single update
-         * prevents excessive dispatch and recomputation during multi-select
-         */
-        private const val SEND_FLOW_UPDATE_DELAY_MS = 100L
     }
 }
