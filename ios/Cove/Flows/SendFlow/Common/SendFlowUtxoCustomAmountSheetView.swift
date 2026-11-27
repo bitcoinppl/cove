@@ -89,8 +89,8 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(SendFlowManager.self) private var manager
     @Environment(\.dismiss) private var dismiss
 
-    /// The wallet's metadata in the send flow's unit, so the typed amount is parsed, labelled and
-    /// shown in the unit Rust parses it in
+    /// The wallet's metadata in the send flow's unit, so the typed amount is labelled, shown and
+    /// sent to Rust in one unit, which Rust parses it in
     var metadata: WalletMetadata {
         var metadata = walletManager.walletMetadata
         metadata.selectedUnit = manager.amountEntryMode.unit
@@ -200,7 +200,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             get: { displayAmount(enteringAmount) },
             set: {
                 enteringAmount = $0
-                manager.dispatch(.notifyCoinControlEnteredAmountChanged($0, isFocused))
+                manager.dispatch(.notifyCoinControlEnteredAmountChanged(text: $0, unit: metadata.selectedUnit))
             }
         )
     }

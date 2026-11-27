@@ -298,7 +298,7 @@ fun CoinControlCustomAmountSheet(
                                 sendFlowManager.dispatch(
                                     SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                                         newValue,
-                                        true,
+                                        sendFlowManager.amountEntryMode.unit,
                                     ),
                                 )
                             },

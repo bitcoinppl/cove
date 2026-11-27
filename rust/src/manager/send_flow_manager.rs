@@ -190,7 +190,12 @@ pub enum SendFlowManagerAction {
 
     // notify coin control custom amount changed
     NotifyCoinControlAmountChanged(Arc<Amount>),
-    NotifyCoinControlEnteredAmountChanged(String, bool),
+
+    /// The custom amount sheet's text, with the unit the sheet showed when it was typed
+    NotifyCoinControlEnteredAmountChanged {
+        text: String,
+        unit: BitcoinUnit,
+    },
 
     // custom fee selection
     ChangeFeeRateOptions(Arc<FeeRateOptionsWithTotalFee>),
@@ -637,8 +642,8 @@ impl RustSendFlowManager {
             Action::NotifyCoinControlAmountChanged(amount) => {
                 self.handle_coin_control_amount_changed(*amount);
             }
-            Action::NotifyCoinControlEnteredAmountChanged(amount, is_focused) => {
-                self.handle_coin_control_entered_amount_changed(amount, is_focused);
+            Action::NotifyCoinControlEnteredAmountChanged { text, unit } => {
+                self.handle_coin_control_entered_amount_changed(text, unit);
             }
         }
     }
@@ -994,7 +999,9 @@ mod tests {
         set_coin_control_mode(&manager);
 
         assert!(
-            manager.handle_coin_control_entered_amount_changed("300".to_string(), true).is_some()
+            manager
+                .handle_coin_control_entered_amount_changed("300".to_string(), BitcoinUnit::Sat)
+                .is_some()
         );
 
         let state = manager.state.lock();
@@ -1060,7 +1067,10 @@ mod tests {
 
         assert!(
             manager
-                .handle_coin_control_entered_amount_changed("0.00117716".to_string(), true)
+                .handle_coin_control_entered_amount_changed(
+                    "0.00117716".to_string(),
+                    BitcoinUnit::Btc
+                )
                 .is_some()
         );
 
@@ -1075,12 +1085,29 @@ mod tests {
 
         assert!(
             manager
-                .handle_coin_control_entered_amount_changed("117,716".to_string(), true)
+                .handle_coin_control_entered_amount_changed("117,716".to_string(), BitcoinUnit::Sat)
                 .is_some()
         );
 
         let state = manager.state.lock();
         assert_eq!(state.amount_sats, Some(117_716));
+    }
+
+    /// A display preference change can land between a keystroke in the custom amount sheet and
+    /// Rust handling it, so the text is parsed in the unit the sheet showed, not the new one
+    #[test]
+    fn coin_control_entered_text_is_parsed_in_the_unit_it_was_typed_in() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 435_558);
+        show_bitcoin_unit(&manager, BitcoinUnit::Btc);
+
+        assert!(
+            manager
+                .handle_coin_control_entered_amount_changed("117,716".to_string(), BitcoinUnit::Sat)
+                .is_some()
+        );
+
+        assert_eq!(manager.state.lock().amount_sats, Some(117_716));
     }
 
     #[test]
@@ -1094,7 +1121,10 @@ mod tests {
 
         assert!(
             manager
-                .handle_coin_control_entered_amount_changed("0.001177161".to_string(), true)
+                .handle_coin_control_entered_amount_changed(
+                    "0.001177161".to_string(),
+                    BitcoinUnit::Btc
+                )
                 .is_none()
         );
 
