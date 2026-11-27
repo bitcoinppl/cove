@@ -5,6 +5,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SendConfirmationInput
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.SendRouteConfirmArgs
+import org.bitcoinppl.cove_core.SendSessionKind
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.NoHandle
@@ -91,6 +92,28 @@ class SendFlowRouteLifecycleTest {
                 default = Route.SelectedWallet(walletId),
                 routes = backAtTheList,
                 walletId = walletId,
+                sessionKind = SendSessionKind.COIN_CONTROL,
+            ),
+        )
+
+        // a normal send opened over the list ends when the user goes back to the list, so the
+        // next send never inherits its amount
+        assertFalse(
+            routeStackKeepsSendFlow(
+                default = Route.SelectedWallet(walletId),
+                routes = backAtTheList,
+                walletId = walletId,
+                sessionKind = SendSessionKind.NORMAL,
+            ),
+        )
+
+        // while it is still on screen, the normal send keeps its session
+        assertTrue(
+            routeStackKeepsSendFlow(
+                default = Route.SelectedWallet(walletId),
+                routes = backAtTheList + Route.Send(SendRoute.SetAmount(walletId, null, null)),
+                walletId = walletId,
+                sessionKind = SendSessionKind.NORMAL,
             ),
         )
 
@@ -109,6 +132,7 @@ class SendFlowRouteLifecycleTest {
                 default = Route.SelectedWallet("wallet-b"),
                 routes = listOf(Route.CoinControl(CoinControlRoute.List("wallet-b"))),
                 walletId = walletId,
+                sessionKind = SendSessionKind.COIN_CONTROL,
             ),
         )
 
@@ -118,6 +142,7 @@ class SendFlowRouteLifecycleTest {
                 default = Route.SelectedWallet(walletId),
                 routes = emptyList(),
                 walletId = walletId,
+                sessionKind = SendSessionKind.COIN_CONTROL,
             ),
         )
     }

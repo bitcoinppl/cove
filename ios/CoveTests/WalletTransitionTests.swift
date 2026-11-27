@@ -579,12 +579,28 @@ final class WalletTransitionTests: XCTestCase {
         XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === manager)
         XCTAssertTrue(manager.canApplyReconcileMessages)
 
-        // back from the coin control send to its utxo list keeps the recipient and fee
+        // a normal send opened over coin control's utxo list ends once the user is back at the
+        // list, so the next send never inherits its amount and fee
         var coinControlList = router()
         coinControlList.routes = [.coinControl(.list(walletManager.id))]
         cache.reconcileRouteOwnedManagers(router: coinControlList)
-        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === manager)
-        XCTAssertTrue(manager.canApplyReconcileMessages)
+        XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
+        XCTAssertFalse(manager.canApplyReconcileMessages)
+
+        // back from a coin control send to its utxo list keeps the recipient and fee
+        let coinControlSend = SendRoute.coinControlSetAmount(id: walletManager.id, utxos: [])
+        var continued = router()
+        continued.routes = [.coinControl(.list(walletManager.id)), .send(coinControlSend)]
+        let coinControlManager = try XCTUnwrap(cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: continued,
+            for: coinControlSend
+        ))
+
+        cache.reconcileRouteOwnedManagers(router: coinControlList)
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === coinControlManager)
+        XCTAssertTrue(coinControlManager.canApplyReconcileMessages)
 
         // but a screen there can't start a send flow of its own
         cache.clearSendFlowManager()

@@ -442,7 +442,7 @@ struct WalletManagerCacheState: Equatable {
 
     func reconcileSendFlowManagerOwnership(router: Router) {
         guard let sendFlowManager else { return }
-        guard !router.keepsSendFlow(for: sendFlowManager.id) else { return }
+        guard !router.keepsSendFlow(for: sendFlowManager.id, kind: sendFlowSessionKind) else { return }
 
         clearSendFlowManager()
     }
@@ -499,12 +499,17 @@ extension Router {
         self.default.isSendRoute(for: id) || routes.contains { $0.isSendRoute(for: id) }
     }
 
-    /// Whether the wallet's send flow is still in use: a send route, or the coin control list it
-    /// was opened from, which goes back to the same send with its recipient and fee kept
-    func keepsSendFlow(for id: WalletId) -> Bool {
-        containsSendRoute(for: id)
-            || self.default.isCoinControlRoute(for: id)
-            || routes.contains { $0.isCoinControlRoute(for: id) }
+    /// Whether the wallet's send flow is still in use: a send route, or, for a coin control send,
+    /// the coin control list it was opened from, which goes back to the same send with its
+    /// recipient and fee kept
+    ///
+    /// A normal send opened over the list, such as from a payment link, ends when the user goes
+    /// back to the list, so the next send never inherits its amount and fee
+    func keepsSendFlow(for id: WalletId, kind: SendSessionKind?) -> Bool {
+        if containsSendRoute(for: id) { return true }
+        guard kind == .coinControl else { return false }
+
+        return self.default.isCoinControlRoute(for: id) || routes.contains { $0.isCoinControlRoute(for: id) }
     }
 }
 
