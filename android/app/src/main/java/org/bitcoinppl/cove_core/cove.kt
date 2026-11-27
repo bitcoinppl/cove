@@ -1859,7 +1859,7 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_qr_import(
     ): Short
-    external fun uniffi_cove_checksum_method_routefactory_routes_after_push(
+    external fun uniffi_cove_checksum_method_routefactory_routes_replacing_open_send(
     ): Short
     external fun uniffi_cove_checksum_method_routefactory_secret_words(
     ): Short
@@ -3145,7 +3145,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_qr_import(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_routefactory_routes_after_push(`ptr`: Long,`routes`: RustBuffer.ByValue,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_routefactory_routes_replacing_open_send(`ptr`: Long,`routes`: RustBuffer.ByValue,`route`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_secret_words(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -5146,7 +5146,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_qr_import() != 52134.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_routes_after_push() != 63522.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_routes_replacing_open_send() != 33032.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_secret_words() != 29505.toShort()) {
@@ -19594,14 +19594,16 @@ public interface RouteFactoryInterface {
     fun `qrImport`(): Route
 
     /**
-     * The nested routes once `route` is pushed onto `routes`
+     * The nested routes once `route` is pushed onto `routes`, when the push replaces an open
+     * send, or none when `route` is pushed as usual
      *
      * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
      * of the other kind for the same wallet, such as a scanned payment address over a coin
      * control send, replaces it: the old send's screens, from the coin control list it was opened
-     * from on, leave with its session instead of staying over a closed one
+     * from on, leave with its session instead of staying over a closed one. Rust answers whether
+     * that happened, since route values that crossed the bridge can't be compared reliably
      */
-    fun `routesAfterPush`(`routes`: List<Route>, `route`: Route): List<Route>
+    fun `routesReplacingOpenSend`(`routes`: List<Route>, `route`: Route): List<Route>?
 
     fun `secretWords`(`walletId`: WalletId): Route
 
@@ -19928,17 +19930,19 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
 
 
     /**
-     * The nested routes once `route` is pushed onto `routes`
+     * The nested routes once `route` is pushed onto `routes`, when the push replaces an open
+     * send, or none when `route` is pushed as usual
      *
      * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
      * of the other kind for the same wallet, such as a scanned payment address over a coin
      * control send, replaces it: the old send's screens, from the coin control list it was opened
-     * from on, leave with its session instead of staying over a closed one
-     */override fun `routesAfterPush`(`routes`: List<Route>, `route`: Route): List<Route> {
-            return FfiConverterSequenceTypeRoute.lift(
+     * from on, leave with its session instead of staying over a closed one. Rust answers whether
+     * that happened, since route values that crossed the bridge can't be compared reliably
+     */override fun `routesReplacingOpenSend`(`routes`: List<Route>, `route`: Route): List<Route>? {
+            return FfiConverterOptionalSequenceTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_routefactory_routes_after_push(
+    UniffiLib.uniffi_cove_fn_method_routefactory_routes_replacing_open_send(
         it,
 
         FfiConverterSequenceTypeRoute.lower(`routes`),
@@ -75323,6 +75327,38 @@ public object FfiConverterOptionalSequenceTypeUtxo: FfiConverterRustBuffer<List<
         } else {
             buf.put(1)
             FfiConverterSequenceTypeUtxo.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalSequenceTypeRoute: FfiConverterRustBuffer<List<Route>?> {
+    override fun read(buf: ByteBuffer): List<Route>? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterSequenceTypeRoute.read(buf)
+    }
+
+    override fun allocationSize(value: List<Route>?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterSequenceTypeRoute.allocationSize(value)
+        }
+    }
+
+    override fun write(value: List<Route>?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterSequenceTypeRoute.write(value, buf)
         }
     }
 }

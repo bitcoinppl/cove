@@ -7658,14 +7658,16 @@ public protocol RouteFactoryProtocol: AnyObject, Sendable {
     func qrImport()  -> Route
 
     /**
-     * The nested routes once `route` is pushed onto `routes`
+     * The nested routes once `route` is pushed onto `routes`, when the push replaces an open
+     * send, or none when `route` is pushed as usual
      *
      * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
      * of the other kind for the same wallet, such as a scanned payment address over a coin
      * control send, replaces it: the old send's screens, from the coin control list it was opened
-     * from on, leave with its session instead of staying over a closed one
+     * from on, leave with its session instead of staying over a closed one. Rust answers whether
+     * that happened, since route values that crossed the bridge can't be compared reliably
      */
-    func routesAfterPush(routes: [Route], route: Route)  -> [Route]
+    func routesReplacingOpenSend(routes: [Route], route: Route)  -> [Route]?
 
     func secretWords(walletId: WalletId)  -> Route
 
@@ -7885,17 +7887,19 @@ open func qrImport() -> Route  {
 }
 
     /**
-     * The nested routes once `route` is pushed onto `routes`
+     * The nested routes once `route` is pushed onto `routes`, when the push replaces an open
+     * send, or none when `route` is pushed as usual
      *
      * Each platform keeps one send session per wallet, so a send of one kind pushed over a send
      * of the other kind for the same wallet, such as a scanned payment address over a coin
      * control send, replaces it: the old send's screens, from the coin control list it was opened
-     * from on, leave with its session instead of staying over a closed one
+     * from on, leave with its session instead of staying over a closed one. Rust answers whether
+     * that happened, since route values that crossed the bridge can't be compared reliably
      */
-open func routesAfterPush(routes: [Route], route: Route) -> [Route]  {
-    return try!  FfiConverterSequenceTypeRoute.lift(try! rustCall() {
+open func routesReplacingOpenSend(routes: [Route], route: Route) -> [Route]?  {
+    return try!  FfiConverterOptionSequenceTypeRoute.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_method_routefactory_routes_after_push(
+    uniffi_cove_fn_method_routefactory_routes_replacing_open_send(
             self.uniffiCloneHandle(),
         FfiConverterSequenceTypeRoute.lower(routes),
         FfiConverterTypeRoute_lower(route),uniffiCallStatus
@@ -53384,6 +53388,30 @@ fileprivate struct FfiConverterOptionSequenceTypeUtxo: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceTypeRoute: FfiConverterRustBuffer {
+    typealias SwiftType = [Route]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceTypeRoute.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceTypeRoute.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletId: FfiConverterRustBuffer {
     typealias SwiftType = WalletId?
 
@@ -56644,7 +56672,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_routefactory_qr_import() != 52134) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_routefactory_routes_after_push() != 63522) {
+    if (uniffi_cove_checksum_method_routefactory_routes_replacing_open_send() != 33032) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_routefactory_secret_words() != 29505) {
