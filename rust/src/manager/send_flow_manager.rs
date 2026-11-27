@@ -42,6 +42,7 @@ use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+    unit::BitcoinUnit,
     utxo::Utxo,
 };
 use error::SendFlowError;
@@ -161,14 +162,27 @@ pub enum SendFlowManagerAction {
     SelectFeeRate(Arc<FeeRateOptionWithTotalFee>),
 
     // front end changing text fields
-    NotifyEnteringBtcAmountChanged(String),
+    /// The bitcoin amount field's text, with the unit the field showed when it was typed, so an
+    /// edit still on its way when the unit changes is never parsed in the new unit
+    NotifyEnteringBtcAmountChanged {
+        text: String,
+        unit: BitcoinUnit,
+    },
+
+    /// The fiat amount field's text, which only means a fiat value while amounts are typed in fiat
     NotifyEnteringFiatAmountChanged(String),
     NotifyEnteringAddressChanged(String),
 
     // front end lets the one of the values were changed
-    NotifyScanCodeChanged { old: String, new: String },
+    NotifyScanCodeChanged {
+        old: String,
+        new: String,
+    },
     NotifyPricesChanged(Arc<PriceResponse>),
-    NotifyFocusFieldChanged { old: Option<SetAmountFocusField>, new: Option<SetAmountFocusField> },
+    NotifyFocusFieldChanged {
+        old: Option<SetAmountFocusField>,
+        new: Option<SetAmountFocusField>,
+    },
 
     // starting with an amount and address from scan
     NotifyAddressChanged(Arc<Address>),
@@ -508,7 +522,7 @@ impl RustSendFlowManager {
         old_value: &str,
         new_value: &str,
     ) -> Option<String> {
-        let on_change_handler = BtcOnChangeHandler::new(self.state.clone());
+        let on_change_handler = BtcOnChangeHandler::new(&self.state.lock());
         let changeset = on_change_handler.on_change(old_value, new_value);
         let entering_amount_btc = changeset.entering_amount_btc?;
 
@@ -547,15 +561,11 @@ impl RustSendFlowManager {
         trace!("dispatch: {}", <&'static str>::from(&action));
 
         match action {
-            Action::NotifyEnteringBtcAmountChanged(string) => {
-                let old_value = self.state.lock().amount_entry.btc_text.clone();
-                self.handle_btc_field_changed(old_value, string);
+            Action::NotifyEnteringBtcAmountChanged { text, unit } => {
+                self.handle_btc_field_changed(text, unit);
             }
 
-            Action::NotifyEnteringFiatAmountChanged(string) => {
-                let old_value = self.state.lock().amount_entry.fiat_text.clone();
-                self.handle_fiat_field_changed(old_value, string);
-            }
+            Action::NotifyEnteringFiatAmountChanged(text) => self.handle_fiat_field_changed(text),
 
             Action::NotifyEnteringAddressChanged(address) => {
                 self.handle_entering_address_changed(address);
@@ -2394,7 +2404,10 @@ mod tests {
             request: manager.state.lock().max_send_request().expect("address and rate are set"),
         };
 
-        manager.clone().dispatch(super::Action::NotifyEnteringBtcAmountChanged("99500".into()));
+        manager.clone().dispatch(super::Action::NotifyEnteringBtcAmountChanged {
+            text: "99500".into(),
+            unit: BitcoinUnit::Sat,
+        });
         assert_eq!(manager.state.lock().amount_sats, Some(99_500));
 
         // the fee update typing schedules runs while Max is still selected, so it prices a drain

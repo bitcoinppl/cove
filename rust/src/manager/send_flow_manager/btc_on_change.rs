@@ -7,7 +7,7 @@ use tracing::debug;
 
 use super::{
     sanitize,
-    state::{AmountEntryMode, State},
+    state::{AmountEntryMode, SendFlowManagerState},
 };
 
 #[derive(Debug, Clone)]
@@ -26,10 +26,8 @@ pub struct Changeset {
 }
 
 impl BtcOnChangeHandler {
-    pub fn new(state: impl Into<State>) -> Self {
-        let state = state.into();
-        let state = state.lock();
-
+    /// A handler that parses in the state's entry mode, against its Max and price
+    pub fn new(state: &SendFlowManagerState) -> Self {
         let mode = state.amount_entry.mode;
         let max_selected = state.max_selected.as_ref().map(|max| max.amount.clone());
         let btc_price_in_fiat = state.btc_price_in_fiat;

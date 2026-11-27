@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use parking_lot::{Mutex, MutexGuard};
+use parking_lot::Mutex;
 
 use cove_types::{
     Network, WalletId,
@@ -77,7 +77,8 @@ pub struct SendFlowWallet {
 /// The amount as the user enters it: the unit and field it is typed in, and the text in each field
 ///
 /// Parsing and rendering both read it, and a display preference change rewrites the text in the
-/// same step as the mode, so the text is never parsed in a unit it was not written in
+/// same step as the mode. An edit names the mode it was typed in and is checked, parsed and
+/// committed in one step too, so the text is never parsed in a unit it was not written in
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AmountEntry {
     pub mode: AmountEntryMode,
@@ -195,10 +196,6 @@ impl State {
 
     pub fn into_inner(self) -> Arc<Mutex<SendFlowManagerState>> {
         self.0
-    }
-
-    pub fn lock(&self) -> MutexGuard<'_, SendFlowManagerState> {
-        self.0.lock()
     }
 }
 
@@ -323,18 +320,6 @@ impl FeeSelection {
         selected: impl Into<Arc<FeeRateOptionWithTotalFee>>,
     ) -> Self {
         Self { options: options.into(), selected: selected.into() }
-    }
-}
-
-impl From<SendFlowManagerState> for State {
-    fn from(state: SendFlowManagerState) -> Self {
-        Self(Arc::new(Mutex::new(state)))
-    }
-}
-
-impl From<Arc<Mutex<SendFlowManagerState>>> for State {
-    fn from(state: Arc<Mutex<SendFlowManagerState>>) -> Self {
-        Self(state)
     }
 }
 

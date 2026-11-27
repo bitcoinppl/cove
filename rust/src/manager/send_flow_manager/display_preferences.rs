@@ -17,8 +17,9 @@ use super::{
 impl RustSendFlowManager {
     /// Applies the wallet's display preferences after the wallet manager changed them
     ///
-    /// The unit or field and the entered text change in one critical section, so a keystroke can
-    /// never be parsed in the new unit against text written in the old one. Sensitive visibility
+    /// The unit or field and the entered text change in one critical section, the same one an
+    /// amount edit is checked, parsed and committed in, and an edit typed in the old mode is
+    /// dropped, so a keystroke is never parsed in a unit it was not typed in. Sensitive visibility
     /// is read live when amounts render, so any change only needs the presenters refreshed
     pub(crate) fn apply_display_preferences(&self, preferences: WalletDisplayPreferences) {
         let mut sender = self.reconciler.deferred_sender();
@@ -134,7 +135,13 @@ mod tests {
     }
 
     fn type_btc_amount(send: &Arc<RustSendFlowManager>, text: &str) {
-        let action = SendFlowManagerAction::NotifyEnteringBtcAmountChanged(text.to_string());
+        type_btc_amount_in(send, text, send.amount_entry_mode().unit);
+    }
+
+    /// An edit the platform sends for text typed while the field showed `unit`
+    fn type_btc_amount_in(send: &Arc<RustSendFlowManager>, text: &str, unit: BitcoinUnit) {
+        let action =
+            SendFlowManagerAction::NotifyEnteringBtcAmountChanged { text: text.to_string(), unit };
         send.clone().dispatch(action);
     }
 
@@ -210,6 +217,41 @@ mod tests {
             !messages.iter().any(|message| matches!(message, Message::UpdateAmountEntryMode(_)))
         );
         assert_eq!(send.display_fiat_amount(10.0, true), "**************");
+    }
+
+    /// Android sends a keystroke after a short delay, so an edit typed in sats can reach Rust
+    /// after the wallet moved to BTC; parsed in BTC it would make 500,001 sats 500,001 BTC
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_edit_typed_before_a_unit_change_is_dropped_not_parsed_in_the_new_unit() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let (wallet, send) = send_flow_over_btc_wallet();
+
+        wallet_dispatch(&wallet, WalletManagerAction::UpdateUnit(BitcoinUnit::Sat)).await;
+        messages_until_refresh(&send).await;
+        type_btc_amount(&send, "50000");
+        assert_eq!(send.amount_sats(), 50_000);
+
+        wallet_dispatch(&wallet, WalletManagerAction::UpdateUnit(BitcoinUnit::Btc)).await;
+        messages_until_refresh(&send).await;
+        assert_eq!(send.state.lock().amount_entry.btc_text, "0.0005");
+
+        // the sats keystroke still on its way lands after the switch
+        type_btc_amount_in(&send, "500001", BitcoinUnit::Sat);
+        assert_eq!(send.amount_sats(), 50_000);
+        assert_eq!(send.state.lock().amount_entry.btc_text, "0.0005");
+
+        // and the field is told what Rust holds, so the platform drops the stale text too
+        let resent = std::iter::from_fn(|| send.reconciler.receiver().try_recv().ok())
+            .flat_map(|message| match message {
+                SingleOrMany::Single(message) => vec![message],
+                SingleOrMany::Many(batch) => batch,
+            })
+            .collect::<Vec<_>>();
+        assert!(resent.contains(&Message::UpdateEnteringBtcAmount("0.0005".to_string())));
+
+        // an edit typed in BTC is parsed as one
+        type_btc_amount(&send, "0.00051");
+        assert_eq!(send.amount_sats(), 51_000);
     }
 
     #[tokio::test(flavor = "current_thread")]

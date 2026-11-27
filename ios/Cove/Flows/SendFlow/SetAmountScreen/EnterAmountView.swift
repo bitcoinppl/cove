@@ -76,7 +76,9 @@ struct EnterAmountView: View {
 
         if sendFlowManager.enteringBtcAmount != newValue {
             sendFlowManager.enteringBtcAmount = newValue
-            sendFlowManager.dispatch(action: .notifyEnteringBtcAmountChanged(newValue))
+            // the unit goes with the text so Rust never parses it in a unit changed since
+            let unit = sendFlowManager.amountEntryMode.unit
+            sendFlowManager.dispatch(action: .notifyEnteringBtcAmountChanged(text: newValue, unit: unit))
         }
     }
 
