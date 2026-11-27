@@ -576,6 +576,15 @@ class AppManager private constructor() : FfiReconcile {
             return
         }
 
+        // a send of another kind than the one open for its wallet replaces that send's screens
+        if (route is Route.Send) {
+            val routes = RouteFactory().routesAfterPush(router.routes, route)
+            if (routes.dropLast(1) != router.routes) {
+                router.setRoute(routes)
+                return
+            }
+        }
+
         router.pushRoute(route)
     }
 
