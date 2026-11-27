@@ -43619,8 +43619,15 @@ public enum SendFlowManagerAction {
     case disableCoinControlMode
     case selectFeeRate(FeeRateOptionWithTotalFee
     )
-    case notifyEnteringBtcAmountChanged(String
+    /**
+     * The bitcoin amount field's text, with the unit the field showed when it was typed, so an
+     * edit still on its way when the unit changes is never parsed in the new unit
+     */
+    case notifyEnteringBtcAmountChanged(text: String, unit: BitcoinUnit
     )
+    /**
+     * The fiat amount field's text, which only means a fiat value while amounts are typed in fiat
+     */
     case notifyEnteringFiatAmountChanged(String
     )
     case notifyEnteringAddressChanged(String
@@ -43687,7 +43694,7 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 9: return .selectFeeRate(try FfiConverterTypeFeeRateOptionWithTotalFee.read(from: &buf)
         )
 
-        case 10: return .notifyEnteringBtcAmountChanged(try FfiConverterString.read(from: &buf)
+        case 10: return .notifyEnteringBtcAmountChanged(text: try FfiConverterString.read(from: &buf), unit: try FfiConverterTypeBitcoinUnit.read(from: &buf)
         )
 
         case 11: return .notifyEnteringFiatAmountChanged(try FfiConverterString.read(from: &buf)
@@ -43773,9 +43780,10 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
             FfiConverterTypeFeeRateOptionWithTotalFee.write(v1, into: &buf)
 
 
-        case let .notifyEnteringBtcAmountChanged(v1):
+        case let .notifyEnteringBtcAmountChanged(text,unit):
             writeInt(&buf, Int32(10))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterString.write(text, into: &buf)
+            FfiConverterTypeBitcoinUnit.write(unit, into: &buf)
 
 
         case let .notifyEnteringFiatAmountChanged(v1):

@@ -63386,8 +63386,13 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
+    /**
+     * The bitcoin amount field's text, with the unit the field showed when it was typed, so an
+     * edit still on its way when the unit changes is never parsed in the new unit
+     */
     data class NotifyEnteringBtcAmountChanged(
-        val v1: kotlin.String) : SendFlowManagerAction()
+        val `text`: kotlin.String,
+        val `unit`: org.bitcoinppl.cove_core.types.BitcoinUnit) : SendFlowManagerAction()
 
     {
 
@@ -63395,6 +63400,9 @@ sealed class SendFlowManagerAction: Disposable  {
         companion object
     }
 
+    /**
+     * The fiat amount field's text, which only means a fiat value while amounts are typed in fiat
+     */
     data class NotifyEnteringFiatAmountChanged(
         val v1: kotlin.String) : SendFlowManagerAction()
 
@@ -63546,7 +63554,8 @@ sealed class SendFlowManagerAction: Disposable  {
             is SendFlowManagerAction.NotifyEnteringBtcAmountChanged -> {
 
     Disposable.destroy(
-        this.v1
+        this.`text`,
+        this.`unit`
     )
 
             }
@@ -63668,6 +63677,7 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 )
             10 -> SendFlowManagerAction.NotifyEnteringBtcAmountChanged(
                 FfiConverterString.read(buf),
+                FfiConverterTypeBitcoinUnit.read(buf),
                 )
             11 -> SendFlowManagerAction.NotifyEnteringFiatAmountChanged(
                 FfiConverterString.read(buf),
@@ -63773,7 +63783,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterString.allocationSize(value.`text`)
+                + FfiConverterTypeBitcoinUnit.allocationSize(value.`unit`)
             )
         }
         is SendFlowManagerAction.NotifyEnteringFiatAmountChanged -> {
@@ -63908,7 +63919,8 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             }
             is SendFlowManagerAction.NotifyEnteringBtcAmountChanged -> {
                 buf.putInt(10)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterString.write(value.`text`, buf)
+                FfiConverterTypeBitcoinUnit.write(value.`unit`, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyEnteringFiatAmountChanged -> {
