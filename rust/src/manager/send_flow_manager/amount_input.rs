@@ -283,20 +283,11 @@ impl RustSendFlowManager {
         self.reconciler.send(Message::UpdateAmountFiat(amount_fiat));
     }
 
-    pub(crate) fn set_and_send_entering_btc_amount(
-        self: &Arc<Self>,
-        new_entering_btc_amount: String,
-        deferred_sender: &mut DeferredSender,
-    ) {
-        set_entering_btc_amount(&mut self.state.lock(), new_entering_btc_amount, deferred_sender);
-    }
-
-    pub(crate) fn set_and_send_entering_fiat_amount(
-        self: &Arc<Self>,
-        new_entering_fiat_amount: String,
-        deferred_sender: &mut DeferredSender,
-    ) {
-        set_entering_fiat_amount(&mut self.state.lock(), new_entering_fiat_amount, deferred_sender);
+    /// Clears the amount, both fields' text and Max in one transition, so a Max drain finishing
+    /// meanwhile cannot leave its amount behind empty fields
+    pub(crate) fn clear_send_amount(self: &Arc<Self>) {
+        self.update_state(clear_amount);
+        self.schedule_fee_rate_update();
     }
 }
 
@@ -580,6 +571,22 @@ fn apply_amount(
     }
 
     amount_changed
+}
+
+fn clear_amount(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
+    if state.amount_sats.is_some() {
+        state.clear_warning_acknowledgements();
+    }
+
+    state.amount_sats = None;
+    state.amount_fiat = None;
+    sender.queue(Message::UpdateAmountFiat(0.0));
+    sender.queue(Message::UpdateAmountSats(0));
+
+    let fiat_text = state.selected_fiat_currency.symbol().to_string();
+    set_entering_fiat_amount(state, fiat_text, sender);
+    set_entering_btc_amount(state, String::new(), sender);
+    unset_max_selected(state, sender);
 }
 
 fn set_entering_btc_amount(

@@ -83,35 +83,6 @@ impl RustSendFlowManager {
         });
     }
 
-    pub(crate) fn clear_send_amount(self: &Arc<Self>) {
-        {
-            let mut state = self.state.lock();
-            if state.amount_sats.is_some() {
-                state.clear_warning_acknowledgements();
-            }
-            state.amount_sats = None;
-            state.amount_fiat = None;
-        }
-
-        let mut sender = self.reconciler.deferred_sender();
-        sender.queue(Message::UpdateAmountFiat(0.0));
-        sender.queue(Message::UpdateAmountSats(0));
-        self.schedule_fee_rate_update();
-
-        // fiat
-        let currency = self.state.lock().selected_fiat_currency;
-        let entering_fiat_amount = currency.symbol().to_string();
-        self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
-
-        // btc
-        self.set_and_send_entering_btc_amount(String::new(), &mut sender);
-
-        let was_max_selected = self.state.lock().max_selected.take().is_some();
-        if was_max_selected {
-            sender.queue(Message::UnsetMaxSelected);
-        }
-    }
-
     pub(crate) fn clear_address(self: &Arc<Self>) {
         let mut sender = self.reconciler.deferred_sender();
         {
