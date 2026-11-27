@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
@@ -136,6 +137,10 @@ fun SendFlowContainer(
                     ),
                 )
             app.popRoute()
+        } catch (e: CancellationException) {
+            // the screen left, such as when another send replaced it, which is no wallet error and
+            // must not pop the route now on top
+            throw e
         } catch (e: Exception) {
             Log.e(tag, "unable to initialize send flow", e)
             app.alertState =
