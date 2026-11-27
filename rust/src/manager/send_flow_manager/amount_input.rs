@@ -22,12 +22,10 @@ impl RustSendFlowManager {
     /// the same one a display preference change takes, so the text, the unit it is parsed in and
     /// the amount it commits always agree
     pub(crate) fn handle_btc_field_changed(self: Arc<Self>, new: String, unit: BitcoinUnit) {
-        let mut sender = self.reconciler.deferred_sender();
-        let (edit, needs_fee_rate_options_base) = {
-            let mut state = self.state.lock();
-            let edit = apply_btc_edit(&mut state, new, unit, &mut sender);
+        let (edit, needs_fee_rate_options_base) = self.update_state(|state, sender| {
+            let edit = apply_btc_edit(state, new, unit, sender);
             (edit, state.fee_rate_options_base.is_none())
-        };
+        });
 
         if edit == AmountEdit::Unchanged {
             return;
@@ -49,8 +47,7 @@ impl RustSendFlowManager {
     /// section like a bitcoin amount edit
     pub(crate) fn handle_fiat_field_changed(self: &Arc<Self>, new: String) {
         let prices = self.app.prices();
-        let mut sender = self.reconciler.deferred_sender();
-        let edit = apply_fiat_edit(&mut self.state.lock(), new, prices, &mut sender);
+        let edit = self.update_state(|state, sender| apply_fiat_edit(state, new, prices, sender));
 
         if edit == AmountEdit::Amount {
             self.schedule_fee_rate_update();
@@ -80,8 +77,7 @@ impl RustSendFlowManager {
         // the amount can be a pasted PIN parsed as sats, so it stays out of the log
         debug!("handle_amount_changed");
 
-        let mut sender = self.reconciler.deferred_sender();
-        let amount_changed = apply_amount(&mut self.state.lock(), amount, &mut sender);
+        let amount_changed = self.update_state(|state, sender| apply_amount(state, amount, sender));
         if amount_changed {
             self.schedule_fee_rate_update();
         }
@@ -128,7 +124,7 @@ impl RustSendFlowManager {
 
         // format on blur
         if old == Some(SetAmountFocusField::Amount) {
-            format_entered_amounts(&mut self.state.lock(), &mut sender);
+            self.update_state(format_entered_amounts);
         }
 
         self.state.lock().focus_field = new;
@@ -234,16 +230,14 @@ impl RustSendFlowManager {
         trigger: MaxTrigger,
         selection: MaxSelection,
     ) -> MaxCommit {
-        let mut sender = self.reconciler.deferred_sender();
         let amount = selection.amount.clone();
-        let (commit, needs_fee_update) = {
-            let mut state = self.state.lock();
+        let (commit, needs_fee_update) = self.update_state(|state, sender| {
             if trigger == MaxTrigger::Refresh && state.max_selected.is_none() {
-                return MaxCommit::Dropped;
+                return (MaxCommit::Dropped, false);
             }
 
             if state.max_send_request().ok().as_ref() != Some(&selection.request) {
-                return MaxCommit::Stale;
+                return (MaxCommit::Stale, false);
             }
 
             // typing at or above the old Max kept it selected, but the new Max can land above
@@ -255,15 +249,15 @@ impl RustSendFlowManager {
                 .and_then(|max| state.amount_sats.filter(|sats| *sats != max.amount.to_sat()));
 
             if typed_sats.is_some_and(|sats| sats < selection.amount.to_sat()) {
-                unset_max_selected(&mut state, &mut sender);
+                unset_max_selected(state, sender);
                 (MaxCommit::Dropped, true)
             } else {
                 state.max_selected = Some(selection);
                 sender.queue(Message::SetMaxSelected(amount.clone()));
-                let amount_changed = apply_amount(&mut state, *amount, &mut sender);
+                let amount_changed = apply_amount(state, *amount, sender);
                 (MaxCommit::Applied(amount), amount_changed)
             }
-        };
+        });
 
         // a new amount needs its own fee total, and a Max cleared for a typed amount leaves a
         // total priced as a drain; replacing the fee task also aborts a drain estimate in flight

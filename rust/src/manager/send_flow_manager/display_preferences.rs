@@ -22,9 +22,10 @@ impl RustSendFlowManager {
     /// dropped, so a keystroke is never parsed in a unit it was not typed in. Sensitive visibility
     /// is read live when amounts render, so any change only needs the presenters refreshed
     pub(crate) fn apply_display_preferences(&self, preferences: WalletDisplayPreferences) {
-        let mut sender = self.reconciler.deferred_sender();
-        apply_amount_entry_mode(&mut self.state.lock(), preferences.into(), &mut sender);
-        sender.queue(Message::RefreshPresenters);
+        self.update_state(|state, sender| {
+            apply_amount_entry_mode(state, preferences.into(), sender);
+            sender.queue(Message::RefreshPresenters);
+        });
     }
 
     /// Follows the wallet's display preferences until the send flow or the wallet manager is gone

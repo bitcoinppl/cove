@@ -754,6 +754,26 @@ impl RustSendFlowManager {
         Ok(())
     }
 
+    /// Applies a change to the state and sends the reconcile messages it queues before the lock
+    /// is released
+    ///
+    /// Each message is a delta the platform applies over the last one, so changes made on
+    /// different threads, such as a display preference change and an amount edit, must reach it
+    /// in the order they were made, or an older amount text overwrites a newer one. Sending
+    /// never blocks, since a full channel queues in order, so it is safe under the lock
+    fn update_state<R>(
+        &self,
+        change: impl FnOnce(&mut SendFlowManagerState, &mut DeferredSender) -> R,
+    ) -> R {
+        let mut state = self.state.lock();
+        let mut sender = self.reconciler.deferred_sender();
+        let result = change(&mut state, &mut sender);
+
+        // the sender flushes on drop, which must happen while the state is still locked
+        drop(sender);
+        result
+    }
+
     fn schedule_fee_rate_update(self: &Arc<Self>) {
         let me = self.clone();
         self.fee_check_task.replace(async move {
