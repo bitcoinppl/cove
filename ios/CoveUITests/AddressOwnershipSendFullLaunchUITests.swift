@@ -52,8 +52,8 @@ final class AddressOwnershipSendFullLaunchUITests: XCTestCase {
         let (sender, other) = try importBothWallets()
 
         // Set Amount, from the sender's own address to the other wallet's, then to a stranger's
-        // with no amount a whole address moves the focus to the amount, and the number pad then
-        // covers the note, so set one first and each whole address closes the keyboard instead
+        // with no amount a whole address moves the focus to the amount, so set one first and each
+        // whole address closes the keyboard, leaving the note under the address
         app.startSend(to: Self.senderReceive2)
         app.tapMax()
         assertOwnershipNote("This address belongs to this wallet, “\(sender)”")
@@ -71,6 +71,41 @@ final class AddressOwnershipSendFullLaunchUITests: XCTestCase {
         app.tapButton(named: "coinControl.continue")
         app.enterAddress(Self.otherChange0)
         assertOwnershipNote("This address belongs to your wallet “\(other)”")
+    }
+
+    /// With no amount yet, a whole address moves the focus to the amount, and the note has to stay
+    /// in sight above the number pad while the amount is typed
+    func testTheNoteStaysInSightWhileTheAmountIsTyped() throws {
+        try node.requireHealthy()
+        try node.reset()
+        _ = try node.fundWallet(mnemonic: XCUIApplication.testMnemonic, sats: [100_000])
+        try node.mine()
+
+        app.launchEnvironment["COVE_UI_TEST_ESPLORA_URL"] = Self.esploraUrl
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.importTestMnemonic()
+        app.assertBalance(sats: 100_000, timeout: 120)
+        let sender = app.selectedWalletName
+
+        app.startSend(to: Self.senderReceive2)
+        let amount = app.textFields["sendFlow.amount"]
+        waitUntil(amount, matches: NSPredicate(format: "hasKeyboardFocus == true"), timeout: 10, "a whole address didn't move the focus to the amount")
+        assertOwnershipNote("This address belongs to this wallet, “\(sender)”")
+
+        // the screen scrolls to the amount a moment after the focus moves
+        let note = settledFrame(of: ownershipNote)
+
+        // the keyboard's toolbar floats above the keyboard, so the note has to clear its top
+        let keyboardTop = ([app.keyboards.firstMatch] + app.buttons.matching(identifier: "Done").allElementsBoundByIndex)
+            .filter { $0.exists && !$0.frame.isEmpty }
+            .map(\.frame.minY)
+            .min() ?? app.windows.firstMatch.frame.maxY
+        let barBottom = app.navigationBars.firstMatch.frame.maxY
+
+        XCTAssertTrue(app.keyboards.count > 0, "the number pad closed, so this didn't check the note beside it")
+        XCTAssertLessThanOrEqual(note.maxY, keyboardTop, "the number pad covers the note: it lies at \(note), the keyboard starts at \(keyboardTop)")
+        XCTAssertGreaterThanOrEqual(note.minY, barBottom, "the note scrolled under the navigation bar: it lies at \(note)")
+        XCTAssertLessThanOrEqual(amount.frame.maxY, keyboardTop, "the number pad covers the amount being typed: it lies at \(amount.frame)")
     }
 
     // MARK: - Steps
@@ -131,6 +166,25 @@ final class AddressOwnershipSendFullLaunchUITests: XCTestCase {
 
     private var ownershipNote: XCUIElement {
         app.element("sendFlow.addressOwnership")
+    }
+
+    /// Where the element ends up once the screen stops scrolling
+    ///
+    /// The scroll starts a moment after the focus moves, so the frame has to hold still for a
+    /// second, not just between two looks
+    private func settledFrame(of element: XCUIElement) -> CGRect {
+        var frame = element.frame
+        var stillLooks = 0
+        for _ in 0 ..< 40 {
+            Thread.sleep(forTimeInterval: 0.25)
+            let next = element.frame
+            stillLooks = next == frame ? stillLooks + 1 : 0
+            frame = next
+            if stillLooks == 4 { return frame }
+        }
+
+        XCTFail("\(element) kept moving: it last lay at \(frame)")
+        return frame
     }
 
     private func assertOwnershipNote(_ expected: String) {
