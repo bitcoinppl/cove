@@ -6,12 +6,17 @@ import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.SendSessionKind
 import org.bitcoinppl.cove_core.types.WalletId
 
-/** Whether the route is on the stack, as its default or a pushed route */
+/**
+ * Whether the route is on the stack, as its default or a pushed route
+ *
+ * Rust compares them: Kotlin equality on the generated objects inside a route, such as an amount,
+ * is identity, so a stack Rust rebuilt would never hold a screen's route
+ */
 internal fun routeStackContains(
     default: Route,
     routes: List<Route>,
     route: Route,
-): Boolean = default == route || route in routes
+): Boolean = default.isEqual(route) || routes.any { it.isEqual(route) }
 
 internal fun routeStackContainsSendWallet(
     default: Route,
