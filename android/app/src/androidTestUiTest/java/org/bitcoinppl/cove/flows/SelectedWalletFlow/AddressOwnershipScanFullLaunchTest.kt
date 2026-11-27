@@ -50,6 +50,8 @@ class AddressOwnershipScanFullLaunchTest {
         const val SECOND_CHANGE_0 = "tb1qmapywu8v8uztsqk4j8f5sarjzm2j9r04n8lauv"
 
         const val ALERT_TITLE = "Found Address"
+
+        const val GO_TO_WALLET = "Go to Wallet"
     }
 
     @get:Rule
@@ -81,9 +83,9 @@ class AddressOwnershipScanFullLaunchTest {
     }
 
     /**
-     * Scanned from the second wallet, the first wallet's address names the first wallet, the second
-     * wallet's own change address says it is this wallet's, and an address no wallet owns shows the
-     * alert without either
+     * Scanned from the second wallet, its own change address says it is this wallet's, an address
+     * no wallet owns shows the alert without a note, and the first wallet's address names the first
+     * wallet and offers Go to Wallet, which opens it
      */
     @Test
     fun foundAddressAlertNamesTheWalletThatOwnsTheAddress() {
@@ -106,12 +108,9 @@ class AddressOwnershipScanFullLaunchTest {
         wallet.importFromAddWallet(SECOND_MNEMONIC, qr, sats = 0L)
         assertNotEquals("both wallets have the same name, so the alert can't tell them apart", first, wallet.selectedWalletName())
 
-        scanFoundAddress(FIRST_RECEIVE_0)
-        assertMessageContains("This is your address in “$first” (receive, index 0)")
-        dismissAlert()
-
         scanFoundAddress(SECOND_CHANGE_0)
         assertMessageContains("This is an address in this wallet (change, index 0)")
+        assertTrue("an owned address offers Go to Wallet\n${device.hierarchy()}", device.hasObject(By.text(GO_TO_WALLET)))
         dismissAlert()
 
         // the alert waits for the lookup, so it shows without a note once the lookup found no owner
@@ -120,7 +119,15 @@ class AddressOwnershipScanFullLaunchTest {
             "the alert named an owner for an address no wallet owns\n${device.hierarchy()}",
             device.hasObject(By.textContains("This is ")),
         )
+        assertFalse("an address no wallet owns offered Go to Wallet", device.hasObject(By.text(GO_TO_WALLET)))
         dismissAlert()
+
+        scanFoundAddress(FIRST_RECEIVE_0)
+        assertMessageContains("This is your address in “$first” (receive, index 0)")
+        device.waitFor(By.text(GO_TO_WALLET)).click()
+        wallet.waitUntil("expected Go to Wallet to close the alert and open “$first”") {
+            !device.hasObject(By.text(ALERT_TITLE)) && wallet.selectedWalletName() == first
+        }
     }
 
     /** Opens the wallet screen's scanner and scans [address], which raises the Found Address alert */

@@ -35,9 +35,9 @@ final class AddressOwnershipScanFullLaunchUITests: XCTestCase {
         super.tearDown()
     }
 
-    /// Scanned from the second wallet, the first wallet's address names the first wallet, the
-    /// second wallet's own change address says it is this wallet's, and an address no wallet
-    /// owns shows the alert without either
+    /// Scanned from the second wallet, its own change address says it is this wallet's, an address
+    /// no wallet owns shows the alert without a note, and the first wallet's address names the
+    /// first wallet and offers Go to Wallet, which opens it
     func testFoundAddressAlertNamesTheWalletThatOwnsTheAddress() throws {
         try node.requireHealthy()
         try node.reset()
@@ -50,21 +50,26 @@ final class AddressOwnershipScanFullLaunchUITests: XCTestCase {
 
         try app.importFromAddWallet(scanning: XCUIApplication.secondMnemonic, with: qr)
         app.assertBalance(sats: 0, timeout: 60)
-        XCTAssertNotEqual(app.selectedWalletName, first, "both wallets have the same name, so the alert can't tell them apart")
-
-        let firstsAddress = try scanFoundAddress(Self.firstReceive0)
-        assertMessage(firstsAddress, contains: "This is your address in “\(first)” (receive, index 0)")
-        dismiss(firstsAddress)
+        let second = app.selectedWalletName
+        XCTAssertNotEqual(second, first, "both wallets have the same name, so the alert can't tell them apart")
 
         let ownAddress = try scanFoundAddress(Self.secondChange0)
         assertMessage(ownAddress, contains: "This is an address in this wallet (change, index 0)")
+        XCTAssertTrue(ownAddress.buttons["Go to Wallet"].exists, "an owned address offers Go to Wallet: \(ownAddress.debugDescription)")
         dismiss(ownAddress)
 
         // the alert waits for the lookup, so it shows without a note once the lookup found no owner
         let strangersAddress = try scanFoundAddress(XCUIApplication.externalAddress)
         let note = strangersAddress.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "This is ")).firstMatch
         XCTAssertFalse(note.exists, "the alert named an owner for an address no wallet owns: \(note.label)")
+        XCTAssertFalse(strangersAddress.buttons["Go to Wallet"].exists, "an address no wallet owns offered Go to Wallet")
         dismiss(strangersAddress)
+
+        let firstsAddress = try scanFoundAddress(Self.firstReceive0)
+        assertMessage(firstsAddress, contains: "This is your address in “\(first)” (receive, index 0)")
+        firstsAddress.buttons["Go to Wallet"].tap()
+        XCTAssertTrue(firstsAddress.waitForNonExistence(timeout: 10), "Go to Wallet left the alert up")
+        waitForLabel(app.element("selectedWallet.title"), equalTo: first, timeout: 30)
     }
 
     // MARK: - Steps
