@@ -35881,6 +35881,53 @@ public object FfiConverterTypeFoundAddress: FfiConverterRustBuffer<FoundAddress>
 
 
 /**
+ * Which of the user's wallets owns a scanned address, as the found address alert names it
+ */
+data class FoundAddressOwner (
+    /**
+     * The owning wallet, which the alert offers to open
+     */
+    var `walletId`: WalletId
+    ,
+    /**
+     * One line telling the user the address is theirs, worded for the selected wallet
+     */
+    var `description`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFoundAddressOwner: FfiConverterRustBuffer<FoundAddressOwner> {
+    override fun read(buf: ByteBuffer): FoundAddressOwner {
+        return FoundAddressOwner(
+            FfiConverterTypeWalletId.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FoundAddressOwner) = (
+            FfiConverterTypeWalletId.allocationSize(value.`walletId`) +
+            FfiConverterString.allocationSize(value.`description`)
+    )
+
+    override fun write(value: FoundAddressOwner, buf: ByteBuffer) {
+            FfiConverterTypeWalletId.write(value.`walletId`, buf)
+            FfiConverterString.write(value.`description`, buf)
+    }
+}
+
+
+
+/**
  * Committed app and authentication state after a successful full wipe
  *
  * Frontends apply this synchronously before releasing authentication, so no frontend has
@@ -39305,7 +39352,7 @@ sealed class AppAlertState: Disposable  {
     data class FoundAddress(
         val `address`: org.bitcoinppl.cove_core.types.Address,
         val `amount`: org.bitcoinppl.cove_core.types.Amount?,
-        val `ownership`: kotlin.String?) : AppAlertState()
+        val `owner`: org.bitcoinppl.cove_core.FoundAddressOwner?) : AppAlertState()
 
     {
 
@@ -39530,7 +39577,7 @@ sealed class AppAlertState: Disposable  {
     Disposable.destroy(
         this.`address`,
         this.`amount`,
-        this.`ownership`
+        this.`owner`
     )
 
             }
@@ -39743,7 +39790,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
             8 -> AppAlertState.FoundAddress(
                 FfiConverterTypeAddress.read(buf),
                 FfiConverterOptionalTypeAmount.read(buf),
-                FfiConverterOptionalString.read(buf),
+                FfiConverterOptionalTypeFoundAddressOwner.read(buf),
                 )
             9 -> AppAlertState.UnableToSelectWallet
             10 -> AppAlertState.ErrorImportingHardwareWallet(
@@ -39863,7 +39910,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 4UL
                 + FfiConverterTypeAddress.allocationSize(value.`address`)
                 + FfiConverterOptionalTypeAmount.allocationSize(value.`amount`)
-                + FfiConverterOptionalString.allocationSize(value.`ownership`)
+                + FfiConverterOptionalTypeFoundAddressOwner.allocationSize(value.`owner`)
             )
         }
         is AppAlertState.UnableToSelectWallet -> {
@@ -40071,7 +40118,7 @@ public object FfiConverterTypeAppAlertState : FfiConverterRustBuffer<AppAlertSta
                 buf.putInt(8)
                 FfiConverterTypeAddress.write(value.`address`, buf)
                 FfiConverterOptionalTypeAmount.write(value.`amount`, buf)
-                FfiConverterOptionalString.write(value.`ownership`, buf)
+                FfiConverterOptionalTypeFoundAddressOwner.write(value.`owner`, buf)
                 Unit
             }
             is AppAlertState.UnableToSelectWallet -> {
@@ -74808,6 +74855,38 @@ public object FfiConverterOptionalTypeFiatAmount: FfiConverterRustBuffer<FiatAmo
         } else {
             buf.put(1)
             FfiConverterTypeFiatAmount.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeFoundAddressOwner: FfiConverterRustBuffer<FoundAddressOwner?> {
+    override fun read(buf: ByteBuffer): FoundAddressOwner? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFoundAddressOwner.read(buf)
+    }
+
+    override fun allocationSize(value: FoundAddressOwner?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFoundAddressOwner.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FoundAddressOwner?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFoundAddressOwner.write(value, buf)
         }
     }
 }
