@@ -31,6 +31,9 @@ import java.math.BigDecimal
  */
 const val EXTERNAL_ADDRESS = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
 
+/** BIP39's "legal winner" test vector, a second wallet for tests that need two of the user's own */
+const val SECOND_MNEMONIC = "legal winner thank year wave sausage worth useful legal winner thank yellow"
+
 /**
  * Drives a funded wallet in the full app against cove-fake-node: network selection, balances and sends
  *
@@ -111,6 +114,76 @@ class FullLaunchWalletRobot(
     private fun dismissWalletSelectionSheetIfShown() {
         device.findObject(By.text("Keep Current"))?.click()
     }
+
+    /** Opens the sidebar from the wallet screen */
+    fun openSidebar() {
+        // a font scale change recreates the activity, which can replace Menu between finding and
+        // clicking it
+        waitUntil("expected Menu to open the sidebar") {
+            try {
+                device.findObject(By.desc("Menu"))?.click()
+            } catch (_: StaleObjectException) {
+            }
+
+            device.wait(Until.hasObject(By.text("Add Wallet")), 2_000L)
+        }
+    }
+
+    /**
+     * Walks Add Wallet from the sidebar to the 12-word import, scans [words] in through the QR seam
+     * and lands on the new wallet, which holds [sats]
+     *
+     * Scanning fills every word at once, so a phrase the onboarding robot doesn't know needs no
+     * typing; [qr] must exist before the scanner opens
+     */
+    fun importFromAddWallet(
+        words: String,
+        qr: QrScript,
+        sats: Long,
+    ) {
+        openSidebar()
+        clickUntil(By.text("Add Wallet"), shows = By.res("newWalletSelect.onThisDevice"))
+        clickUntil(By.res("newWalletSelect.onThisDevice"), shows = By.res("hotWalletSelect.importWallet"))
+        clickUntil(By.res("hotWalletSelect.importWallet"), shows = By.text("12 Words"))
+        clickUntil(By.text("12 Words"), shows = By.desc("QR Code Import"))
+
+        device.waitFor(By.desc("QR Code Import")).click()
+        qr.show(listOf(words))
+        val lastWord = words.split(' ').last()
+        waitUntil("expected the scan to fill the recovery words") {
+            device.findText(By.res("hotWalletImport.word.12")) == lastWord
+        }
+
+        dismissKeyboard()
+        device.scrollTo(By.res("hotWalletImport.import")).click()
+        waitForBalance(sats)
+    }
+
+    // each Add Wallet step animates in, so a node found mid-transition can be replaced before the
+    // click lands, and a slow device can drop a click; click again until the next step shows
+    private fun clickUntil(
+        target: BySelector,
+        shows: BySelector,
+    ) {
+        waitUntil("expected tapping $target to show $shows") {
+            try {
+                device.findObject(target)?.click()
+            } catch (_: StaleObjectException) {
+            }
+
+            device.wait(Until.hasObject(shows), 3_000L)
+        }
+    }
+
+    /** Opens the wallet the sidebar lists as [name] and waits for its screen */
+    fun selectWallet(name: String) {
+        openSidebar()
+        device.waitFor(By.text(name)).click()
+        waitUntil("expected the sidebar to open $name") { selectedWalletName() == name }
+    }
+
+    /** The name of the wallet on screen */
+    fun selectedWalletName(): String? = device.findText(By.res("selectedWallet.title"))
 
     /** Opens Send from the wallet screen and enters the address */
     fun startSend(address: String = EXTERNAL_ADDRESS) {

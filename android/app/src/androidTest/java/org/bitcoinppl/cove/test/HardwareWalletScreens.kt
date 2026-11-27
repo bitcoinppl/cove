@@ -5,7 +5,6 @@ import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
-import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -62,17 +61,7 @@ class HardwareWalletScreens(
 
     /** Opens Add Wallet from the sidebar and starts its NFC scan, which the NFC seams answer */
     fun scanNfcFromAddWallet() {
-        // a font scale change recreates the activity, which can replace Menu between finding and
-        // clicking it
-        wallet.waitUntil("expected Menu to open the sidebar") {
-            try {
-                device.findObject(By.desc("Menu"))?.click()
-            } catch (_: StaleObjectException) {
-            }
-
-            device.wait(Until.hasObject(By.text("Add Wallet")), 2_000L)
-        }
-
+        wallet.openSidebar()
         device.waitFor(By.text("Add Wallet")).click()
         device.waitFor(By.desc("More wallet options")).click()
         device.waitFor(By.text("NFC")).click()

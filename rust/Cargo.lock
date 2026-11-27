@@ -1362,6 +1362,7 @@ dependencies = [
  "pretty_assertions",
  "pubport",
  "rand 0.10.1",
+ "rayon",
  "redb",
  "reqwest 0.13.3",
  "rusqlite",
