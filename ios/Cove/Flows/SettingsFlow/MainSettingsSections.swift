@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct MainSettingsGeneralSection: View {
+    @State private var tor = TorManager.shared
+
     var body: some View {
         Section(header: Text("General")) {
             SettingsRow(title: "Network", route: .network, symbol: "network")
@@ -16,6 +18,13 @@ struct MainSettingsGeneralSection: View {
                 title: "Node",
                 route: .node,
                 symbol: "point.3.filled.connected.trianglepath.dotted"
+            )
+            SettingsRow(
+                title: "Tor",
+                value: tor.mode?.settingsSummary,
+                valueIdentifier: "settings.tor.value",
+                route: .tor,
+                symbol: "network.badge.shield.half.filled"
             )
             SettingsRow(
                 title: "Block Explorer",

@@ -15,6 +15,8 @@ use tap::TapFallible as _;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
+use cove_http::NetworkRoute;
+
 use crate::node::Node;
 
 use super::{ESPLORA_BATCH_SIZE, Error, NodeClientOptions};
@@ -26,29 +28,31 @@ pub struct EsploraClient {
 }
 
 impl EsploraClient {
-    pub const fn new(client: Arc<AsyncClient>) -> Self {
-        Self { client, options: NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE } }
+    pub(crate) const fn default_options() -> NodeClientOptions {
+        NodeClientOptions { batch_size: ESPLORA_BATCH_SIZE }
     }
 
-    pub fn new_from_node(node: &Node) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(|error| Error::CreateEsploraClient(error.into()))?
-            .into();
-
-        Ok(Self::new(client))
-    }
-
-    pub fn new_from_node_and_options(
+    /// A client for `node` on `route`, through the SOCKS proxy when the route is Tor
+    #[allow(clippy::disallowed_methods, reason = "the one place that builds Esplora clients")]
+    pub fn new_from_node(
         node: &Node,
         options: NodeClientOptions,
+        route: &NetworkRoute,
     ) -> Result<Self, Error> {
-        let client = esplora_client::Builder::new(&node.url)
-            .build_async()
-            .map_err(|error| Error::CreateEsploraClient(error.into()))?
-            .into();
+        let builder = esplora_client::Builder::new(&node.url);
 
-        Ok(Self::new_with_options(client, options))
+        // `socks5h` has the proxy resolve the node's name, see `SocksProxy::url`
+        let builder = match route {
+            NetworkRoute::Direct => builder,
+            NetworkRoute::Tor(proxy) => {
+                builder.proxy(&proxy.url()).timeout(route.timeouts().request.as_secs())
+            }
+        };
+
+        let client =
+            builder.build_async().map_err(|error| Error::CreateEsploraClient(error.into()))?;
+
+        Ok(Self::new_with_options(client.into(), options))
     }
 
     pub const fn new_with_options(client: Arc<AsyncClient>, options: NodeClientOptions) -> Self {
@@ -162,21 +166,31 @@ impl EsploraClient {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
-    use bdk_esplora::esplora_client;
+    use cove_http::NetworkRoute;
+    use cove_types::network::Network;
 
     use super::EsploraClient;
+    use crate::node::Node;
 
     // a node URL can carry an access token, and node errors reach logs
     #[tokio::test]
     async fn request_errors_leave_out_the_node_url() {
         let token = "private-node-access-token";
-        let client = esplora_client::Builder::new(&format!("http://127.0.0.1:1/{token}/api"))
-            .build_async()
-            .unwrap();
+        let node = Node::new_esplora(
+            "Private".to_string(),
+            format!("http://127.0.0.1:1/{token}/api"),
+            Network::Signet,
+        );
 
-        let error = EsploraClient::new(Arc::new(client)).get_height().await.unwrap_err();
+        let client = EsploraClient::new_from_node(
+            &node,
+            EsploraClient::default_options(),
+            &NetworkRoute::Direct,
+        )
+        .unwrap();
+
+        let error = client.get_height().await.unwrap_err();
 
         assert!(!error.to_string().contains(token), "node error text quotes the node URL");
         assert!(!format!("{error:?}").contains(token), "node error debug quotes the node URL");

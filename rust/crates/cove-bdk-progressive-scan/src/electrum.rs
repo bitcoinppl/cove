@@ -189,6 +189,12 @@ where
                     continue;
                 }
 
+                // a batch with many transactions sends one request for each, so a cancelled
+                // scan, such as one whose route changed, stops before the next one
+                if cancel_token.is_cancelled() {
+                    return Err(Error::Cancelled);
+                }
+
                 partial_update.txs.push(client.fetch_tx(tx_res.tx_hash)?);
 
                 match tx_res.height.try_into() {
@@ -218,7 +224,7 @@ where
         }
 
         if !pending_anchors.is_empty() {
-            let anchors = batch_fetch_anchors(client, &pending_anchors)?;
+            let anchors = batch_fetch_anchors(client, &pending_anchors, cancel_token)?;
             for (txid, anchor) in anchors {
                 insert_tx_status(
                     &mut partial_update,
@@ -262,7 +268,8 @@ where
 fn batch_fetch_anchors<E>(
     client: &BdkElectrumClient<E>,
     txs_with_heights: &[(Txid, usize)],
-) -> std::result::Result<Vec<(Txid, ConfirmationBlockTime)>, electrum_client::Error>
+    cancel_token: &tokio_util::sync::CancellationToken,
+) -> Result<Vec<(Txid, ConfirmationBlockTime)>>
 where
     E: ElectrumApi,
 {
@@ -274,13 +281,20 @@ where
 
     let headers = client.inner.batch_block_header(needed_heights.iter())?;
     let height_to_header = needed_heights.into_iter().zip(headers).collect::<HashMap<u32, _>>();
+
+    // the header batch can take a while, and a scan cancelled meanwhile, such as by a route
+    // change, sends no proof requests
+    if cancel_token.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
+
     let proofs = client.inner.batch_transaction_get_merkle(txs_with_heights.iter())?;
     if proofs.len() != txs_with_heights.len() {
-        return Err(electrum_client::Error::Message(format!(
+        return Err(Error::Electrum(electrum_client::Error::Message(format!(
             "merkle proof batch returned {} proofs for {} requested transactions",
             proofs.len(),
             txs_with_heights.len()
-        )));
+        ))));
     }
 
     for ((txid, height), proof) in txs_with_heights.iter().copied().zip(proofs) {
@@ -292,6 +306,12 @@ where
         let mut valid =
             electrum_client::utils::validate_merkle_proof(&txid, &header.merkle_root, &proof);
         if !valid {
+            // a header asked for again after a reorg is a new request, so a scan cancelled
+            // during the proof batch doesn't send it
+            if cancel_token.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+
             header = client.inner.block_header(height)?;
             valid =
                 electrum_client::utils::validate_merkle_proof(&txid, &header.merkle_root, &proof);
@@ -412,7 +432,7 @@ fn chain_update(
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Borrow, collections::BTreeMap};
+    use std::{borrow::Borrow, collections::BTreeMap, sync::Arc};
 
     use bdk_electrum::{
         BdkElectrumClient,
@@ -451,6 +471,8 @@ mod tests {
         fetched_txids: SharedVec<Txid>,
         history_response_limit: Option<usize>,
         merkle_response_limit: Option<usize>,
+        /// Cancelled once a history batch answers, like a route change while the batch runs
+        cancel_on_history: Option<CancellationToken>,
     }
 
     impl FakeElectrum {
@@ -462,6 +484,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -473,6 +496,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -489,6 +513,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -504,6 +529,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -523,6 +549,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -538,6 +565,7 @@ mod tests {
                 fetched_txids: SharedVec::default(),
                 history_response_limit: None,
                 merkle_response_limit: None,
+                cancel_on_history: None,
             }
         }
 
@@ -675,6 +703,10 @@ mod tests {
                     QueuedResponse::Exhausted => Vec::new(),
                 };
                 histories.push(history);
+            }
+
+            if let Some(cancel_token) = &self.cancel_on_history {
+                cancel_token.cancel();
             }
 
             Ok(histories)
@@ -816,10 +848,10 @@ mod tests {
     fn missing_batch_header_returns_provider_error() {
         let client = BdkElectrumClient::new(FakeElectrum::empty_history());
 
-        let result = batch_fetch_anchors(&client, &[(txid(1), 2)]);
+        let result = batch_fetch_anchors(&client, &[(txid(1), 2)], &CancellationToken::new());
 
         assert!(
-            matches!(result, Err(electrum_client::Error::Message(message)) if message == "block header for height 2 not returned by server")
+            matches!(result, Err(Error::Electrum(electrum_client::Error::Message(message))) if message == "block header for height 2 not returned by server")
         );
     }
 
@@ -827,10 +859,10 @@ mod tests {
     fn short_merkle_batch_returns_provider_error() {
         let client = BdkElectrumClient::new(FakeElectrum::with_merkle_response_limit(0));
 
-        let result = batch_fetch_anchors(&client, &[(txid(1), 2)]);
+        let result = batch_fetch_anchors(&client, &[(txid(1), 2)], &CancellationToken::new());
 
         assert!(
-            matches!(result, Err(electrum_client::Error::Message(message)) if message == "merkle proof batch returned 0 proofs for 1 requested transactions")
+            matches!(result, Err(Error::Electrum(electrum_client::Error::Message(message))) if message == "merkle proof batch returned 0 proofs for 1 requested transactions")
         );
     }
 
@@ -991,6 +1023,7 @@ mod tests {
             fetched_txids: SharedVec::default(),
             history_response_limit: None,
             merkle_response_limit: None,
+            cancel_on_history: None,
         };
         let client = BdkElectrumClient::new(fake);
         let (events, receiver) = event_channel();
@@ -1164,6 +1197,33 @@ mod tests {
             .run();
 
         assert!(matches!(result, Err(Error::ChannelClosed)));
+    }
+
+    // a route change cancels the scan while a batch runs, and the batch used to fetch every
+    // transaction its histories named before it checked again
+    #[test]
+    fn a_scan_cancelled_during_a_batch_fetches_no_more_transactions() {
+        let request = external_request(7, 5);
+        let (events, _receiver) = event_channel();
+        let cancel_token = CancellationToken::new();
+        let fake = FakeElectrum {
+            cancel_on_history: Some(cancel_token.clone()),
+            ..FakeElectrum::with_mempool_transaction(test_transaction())
+        };
+        let client = Arc::new(BdkElectrumClient::new(fake));
+
+        let result = ProgressiveScanner::builder()
+            .request(request)
+            .stop_gap(2)
+            .events(events)
+            .cancel_token(cancel_token)
+            .electrum(client.clone())
+            .expect("scanner builds")
+            .batch_size(1)
+            .run();
+
+        assert!(matches!(result, Err(Error::Cancelled)));
+        assert_eq!(client.inner.fetched_txids(), Vec::new());
     }
 
     #[test]

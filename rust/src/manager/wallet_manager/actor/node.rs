@@ -18,8 +18,12 @@ use crate::{
         actor::{WalletActor, WalletScanGeneration},
     },
     node::{Node, NodeConnectionIdentity, client::NodeClient},
+    tor::RouteError,
     wallet::metadata::BlockSizeLast,
 };
+
+/// How long the wallet's connection check waits for a node on a direct route
+const DIRECT_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 
 const HEIGHT_CACHE_FRESH_SECS: u64 = 25;
 const HEIGHT_CACHE_BACKGROUND_REFRESH_SECS: u64 = 120;
@@ -449,7 +453,42 @@ async fn node_client_or_new(
         .map_err_prefix("failed to create node client", Error::NodeConnectionFailed)
 }
 
+/// Checks that `node` answers, checking again on the new route when a route change stops it
+///
+/// Turning Tor on while a wallet opens would otherwise fail the check that starts its scan
 async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
+    match check_node_connection_once(node).await {
+        Err(NodeCheckFailure::RouteChanged) => {
+            crate::tor::usable_route()
+                .with_timeout(crate::node::TOR_CHECK_URL_TIMEOUT)
+                .await
+                .map_err(|_| "unable to connect to node, Tor is not ready".to_string())?;
+
+            check_node_connection_once(node).await.map_err(String::from)
+        }
+
+        result => result.map_err(String::from),
+    }
+}
+
+/// Why one node check failed
+enum NodeCheckFailure {
+    /// The route changed while the check ran
+    RouteChanged,
+    /// A message the user can read
+    Failed(String),
+}
+
+impl From<NodeCheckFailure> for String {
+    fn from(failure: NodeCheckFailure) -> Self {
+        match failure {
+            NodeCheckFailure::RouteChanged => RouteError::Changed.to_string(),
+            NodeCheckFailure::Failed(message) => message,
+        }
+    }
+}
+
+async fn check_node_connection_once(node: &Node) -> Result<(), NodeCheckFailure> {
     // create a fresh client with its own TCP connection for connection probes
     // because the actor may continue processing messages with its cached client
     // while a background check is running. the underlying rust-electrum-client
@@ -463,15 +502,80 @@ async fn check_node_connection_inner(node: &Node) -> Result<(), String> {
     let node_client = NodeClient::new(node).await.map_err(|error| {
         let kind = error.kind();
         warn!("failed to create node client for connection check: {kind}");
-        "unable to create a connection to the node".to_string()
+        NodeCheckFailure::Failed("unable to create a connection to the node".to_string())
     })?;
 
-    node_client
-        .check_url()
-        .with_timeout(Duration::from_secs(5))
-        .await
-        .map_err(|_| "unable to connect to node, timeout".to_string())?
-        .map_err(|err| err.to_string())?;
+    // Tor's first request can take far longer than a direct one while Tor joins the network
+    let timeout = node_client.check_timeout(DIRECT_CHECK_TIMEOUT);
+    let checked =
+        node_client.check_url().with_timeout(timeout).await.map_err(|_| {
+            NodeCheckFailure::Failed("unable to connect to node, timeout".to_string())
+        })?;
 
-    Ok(())
+    match checked {
+        Ok(()) => Ok(()),
+        Err(error) if error.is_route_changed() => Err(NodeCheckFailure::RouteChanged),
+        Err(error) => Err(NodeCheckFailure::Failed(error.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use cove_http::ProxyAddress;
+
+    use crate::{
+        network::Network,
+        node::Node,
+        test_support::{
+            fake_node::{FakeNode, wait_until},
+            socks_proxy::{RecordingSocksProxy, TorTest},
+        },
+    };
+
+    // the check that starts a wallet's scan failed when Tor turned on while it ran, so a wallet
+    // opened just then never scanned
+    #[tokio::test]
+    async fn a_node_check_that_tor_interrupts_checks_again_through_tor() {
+        let tor = TorTest::start().await;
+        let node = FakeNode::start(bitcoin::Network::Bitcoin);
+        let esplora = node.esplora_node("esplora");
+
+        let (gate, rule) = node.on("/blocks/tip/height").hold();
+        let check = tokio::spawn(async move { super::check_node_connection_inner(&esplora).await });
+        wait_until("the check to reach the node directly", || gate.waiting() > 0).await;
+
+        let proxy = RecordingSocksProxy::start();
+        tor.use_proxy(proxy.proxy_address());
+        wait_until("the check to reach the node through Tor", || !proxy.targets().is_empty()).await;
+        drop(rule);
+        gate.open();
+
+        let result = check.await.unwrap();
+        assert_eq!(result, Ok(()), "the check gave up when Tor turned on");
+    }
+
+    // the check gave up after five seconds even over Tor, so a wallet opened while Tor was still
+    // joining the network never started its scan; paused time lets the wait run without delay
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn the_wallet_check_waits_longer_over_tor() {
+        let tor = TorTest::start().await;
+
+        // takes connections and never answers, like a Tor that's still joining the network
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = silent.local_addr().unwrap();
+        tor.use_proxy(ProxyAddress::new_ip(address.ip(), address.port()));
+
+        let node =
+            Node::new_esplora("esplora".into(), "http://node.invalid/api".into(), Network::Bitcoin);
+
+        let started = tokio::time::Instant::now();
+        let result = super::check_node_connection_inner(&node).await;
+        let waited = started.elapsed();
+
+        assert!(result.is_err(), "a proxy that never answers can't pass the check");
+        assert!(waited >= Duration::from_secs(30), "the check gave up over Tor after {waited:?}");
+        drop(silent);
+    }
 }

@@ -15,6 +15,7 @@ use crate::{
     manager::auth_manager::DuplicateTrickPin,
     network::Network,
     node::Node,
+    tor::TorSettings,
     wallet::metadata::{WalletId, WalletMode},
 };
 
@@ -49,6 +50,7 @@ pub enum GlobalConfigKey {
     OnboardingProgress,
     CustomBlockExplorer(Network),
     TrickPinNotice,
+    TorSettings,
 }
 
 impl From<GlobalConfigKey> for &'static str {
@@ -81,6 +83,7 @@ impl From<GlobalConfigKey> for &'static str {
             }
             GlobalConfigKey::CustomBlockExplorer(Network::Signet) => "custom_block_explorer_signet",
             GlobalConfigKey::TrickPinNotice => "trick_pin_notice",
+            GlobalConfigKey::TorSettings => "tor_settings",
         }
     }
 }
@@ -103,6 +106,7 @@ impl std::fmt::Display for GlobalConfigKey {
             }
             Self::OnboardingProgress => write!(f, "onboarding progress"),
             Self::CustomBlockExplorer(network) => write!(f, "{network} block explorer"),
+            Self::TorSettings => write!(f, "Tor"),
         }
     }
 }
@@ -338,6 +342,22 @@ impl GlobalConfigTable {
         let read = format!("custom block explorer for {network}");
         read_health::observe(read, self.get(GlobalConfigKey::CustomBlockExplorer(network)))
             .flatten()
+    }
+
+    /// The saved Tor setting, `None` when it was never set
+    ///
+    /// A read or parse failure stays an error instead of falling back to off, because the
+    /// caller must block connections rather than guess that Tor is off
+    pub(crate) fn tor_settings(&self) -> Result<Option<TorSettings>> {
+        let Some(json) = self.get(GlobalConfigKey::TorSettings)? else { return Ok(None) };
+
+        let settings = TorSettings::from_json(&json).map_err_str(GlobalConfigTableError::Read)?;
+
+        Ok(Some(settings))
+    }
+
+    pub(crate) fn set_tor_settings(&self, settings: &TorSettings) -> Result<()> {
+        self.set(GlobalConfigKey::TorSettings, settings.to_json())
     }
 
     /// Returns the configured node for `network`, independent of the globally selected network

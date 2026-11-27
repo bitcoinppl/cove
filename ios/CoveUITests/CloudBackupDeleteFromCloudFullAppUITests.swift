@@ -42,11 +42,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         robot.launch(scenario: "SC-U02")
         robot.restoreFromCloudBackup()
         robot.openSettings()
-
-        let cloudBackup = app.staticTexts["Cloud Backup Enabled"]
-        XCTAssertTrue(cloudBackup.waitForExistence(timeout: 15))
-        cloudBackup.tap()
-        XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
+        robot.openCloudBackupDetail()
 
         // the app's state is the proof, since the form builds only rows near the screen; the rows
         // are also scrolled to so the screen shows them

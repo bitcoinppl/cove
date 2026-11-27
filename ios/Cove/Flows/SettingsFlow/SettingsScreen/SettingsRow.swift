@@ -13,6 +13,10 @@ struct SettingsRow: View {
     let title: String
     var subtitle: String? = nil
 
+    /// The setting's current value, shown at the trailing edge as iOS Settings does
+    var value: String? = nil
+    var valueIdentifier: String? = nil
+
     var route: SettingsRoute? = nil
 
     var icon: SettingsIcon? = nil
@@ -34,6 +38,10 @@ struct SettingsRow: View {
 
             Spacer()
 
+            if let value {
+                SettingsRowValue(value: value, identifier: valueIdentifier)
+            }
+
             if route != nil {
                 Image(systemName: "chevron.right")
                     .foregroundColor(Color(UIColor.tertiaryLabel))
@@ -47,6 +55,20 @@ struct SettingsRow: View {
             if let onTapGesture { return onTapGesture() }
             if let route { return app.pushRoute(Route.settings(route)) }
         }
+    }
+}
+
+private struct SettingsRowValue: View {
+    let value: String
+    let identifier: String?
+
+    var body: some View {
+        Text(value)
+            .font(.subheadline)
+            .uiTestTruncationProbe()
+            .foregroundStyle(.secondary)
+            // an empty identifier is SwiftUI's default, so a row without one gets none
+            .accessibilityIdentifier(identifier ?? "")
     }
 }
 

@@ -1,3 +1,6 @@
+// these tests are the clients the fake node serves, so they dial it directly
+#![allow(clippy::disallowed_methods)]
+
 use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _, Param};
 use bdk_esplora::esplora_client;
 use bitcoin::{

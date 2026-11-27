@@ -251,7 +251,13 @@ internal class CloudBackupTurnOffRobot(
         waitUntil("Turn Off should go back to Settings") {
             AppManager.getInstance().currentRoute == Route.Settings(SettingsRoute.Main)
         }
-        device.clickText(OFF_ROW)
+        // the row is found by its tag, since other Settings rows such as Tor also say Off
+        device.scrollUntilShown(UiTarget.Tag(CLOUD_BACKUP_ROW))
+        assertTrue(
+            "the Cloud Backup row should say Off",
+            device.snapshot().containerOf(UiTarget.Tag(CLOUD_BACKUP_ROW), holding = UiTarget.Text(OFF_ROW)) != null,
+        )
+        device.clickTagged(CLOUD_BACKUP_ROW)
         waitUntil("the Off row should open Cloud Backup") {
             AppManager.getInstance().currentRoute == Route.Settings(SettingsRoute.CloudBackup)
         }
@@ -399,6 +405,7 @@ internal class CloudBackupTurnOffRobot(
         const val TRY_AGAIN = "Try Again"
         const val TURN_OFF_INCOMPLETE_ROW = "Turn off didn't finish — open to finish"
         const val OFF_ROW = "Off"
+        const val CLOUD_BACKUP_ROW = "settings.cloud_backup"
 
         // enough swipes to cross the detail screen from one end to the other
         const val SWIPES_PER_PASS = 6

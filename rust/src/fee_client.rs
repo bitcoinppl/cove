@@ -10,7 +10,6 @@ use std::{
 use arc_swap::ArcSwap;
 use backon::Retryable as _;
 use eyre::{Context as _, Result};
-use once_cell::sync::OnceCell;
 use tracing::{debug, error, warn};
 
 /// Guard to prevent multiple concurrent background refresh tasks
@@ -48,7 +47,7 @@ pub static FEES: LazyLock<ArcSwap<Option<CachedFeeResponse>>> =
 pub struct FeeClient {
     /// Fixed fee endpoint; `None` uses mempool.space, or `COVE_FEE_URL` in debug builds
     url: Option<String>,
-    client: OnceCell<reqwest::Client>,
+    client: cove_http::RoutedClient,
 }
 
 /// Errors raised while validating fee data from the remote service
@@ -68,6 +67,9 @@ pub enum FeeClientError {
 
     #[error(transparent)]
     Validation(#[from] FeeValidationError),
+
+    #[error(transparent)]
+    Route(#[from] crate::tor::RouteError),
 }
 
 /// Wall-clock time at which a fee snapshot was fetched
@@ -118,7 +120,7 @@ struct ValidatedFeeResponse(FeeResponse);
 
 impl FeeClient {
     pub fn new() -> Self {
-        Self { url: None, client: OnceCell::new() }
+        Self { url: None, client: cove_http::RoutedClient::new() }
     }
 
     fn fee_url(&self) -> Cow<'_, str> {
@@ -199,8 +201,9 @@ impl FeeClient {
         Ok(fees.try_into()?)
     }
 
-    fn client(&self) -> Result<&reqwest::Client, reqwest::Error> {
-        self.client.get_or_try_init(cove_http::new_client)
+    fn client(&self) -> Result<reqwest::Client, FeeClientError> {
+        let route = crate::tor::current_route()?;
+        Ok(self.client.get(&route)?)
     }
 
     fn cached_fees(&self) -> Option<CachedFeeResponse> {
@@ -582,7 +585,10 @@ mod tests {
                 .expect("response writes");
         });
 
-        let client = FeeClient { url: Some(format!("http://{address}")), client: OnceCell::new() };
+        let client = FeeClient {
+            url: Some(format!("http://{address}")),
+            client: cove_http::RoutedClient::new(),
+        };
         let error = client.get_new_fees().await.expect_err("HTTP errors are rejected");
 
         assert!(matches!(error, FeeClientError::Request(_)));
@@ -607,6 +613,47 @@ mod tests {
         // fractional rates mempool.space doesn't return, so a passing test can't be a real fetch
         assert_eq!(fees.fastest_fee, 7.5);
         assert_eq!(fees.economy_fee, 1.25);
+    }
+
+    // the fee server sees a Tor exit, and the proxy resolves its name
+    #[tokio::test]
+    async fn fee_requests_go_through_tor_with_names_resolved_there() {
+        use crate::test_support::socks_proxy::{
+            PROXY_ONLY_HOST, ProxiedTarget, RecordingSocksProxy, TorTest,
+        };
+
+        let tor = TorTest::start().await;
+        let node = crate::test_support::fake_node::FakeNode::start(bitcoin::Network::Signet);
+        let proxy = RecordingSocksProxy::start();
+        tor.use_proxy(proxy.proxy_address());
+
+        let url = node.esplora_url().replace("127.0.0.1", PROXY_ONLY_HOST);
+        let port = url::Url::parse(&url).unwrap().port().unwrap();
+        let client = FeeClient {
+            url: Some(format!("{url}/api/v1/fees/recommended")),
+            client: cove_http::RoutedClient::new(),
+        };
+
+        let fees = client.get_new_fees().await.expect("fees arrive through the proxy").0;
+        assert_eq!(fees.fastest_fee, 7.5);
+        assert_eq!(proxy.targets(), [ProxiedTarget::Name(PROXY_ONLY_HOST.to_string(), port)]);
+    }
+
+    #[tokio::test]
+    async fn fee_requests_fail_instead_of_going_direct_when_tor_is_down() {
+        use crate::test_support::socks_proxy::{ConnectionCounter, TorTest, closed_proxy_address};
+
+        let tor = TorTest::start().await;
+        let server = ConnectionCounter::start();
+        tor.use_proxy(closed_proxy_address());
+
+        let client = FeeClient {
+            url: Some(format!("http://{}/api/v1/fees/recommended", server.address())),
+            client: cove_http::RoutedClient::new(),
+        };
+
+        client.get_new_fees().await.expect_err("no fees without Tor");
+        assert_eq!(server.count(), 0, "the fee request reached the server outside Tor");
     }
 
     #[test]

@@ -54,6 +54,7 @@ fun Throwable.uniffiErrorText(): String? =
         is org.bitcoinppl.cove_core.SignedImportException -> message
         is org.bitcoinppl.cove_core.TapSignerCvcException -> toString()
         is org.bitcoinppl.cove_core.TapSignerReaderException -> toString()
+        is org.bitcoinppl.cove_core.TorManagerException -> toString()
         is org.bitcoinppl.cove_core.TransactionDetailException -> toString()
         is org.bitcoinppl.cove_core.TransportException -> toString()
         is org.bitcoinppl.cove_core.TrickPinException -> toString()

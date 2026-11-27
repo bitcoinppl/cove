@@ -39,6 +39,7 @@
 		C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */; };
 		C0F400022F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */; };
 		C0F700022F90000000000001 /* RenameWalletFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F700012F90000000000001 /* RenameWalletFullLaunchUITests.swift */; };
+		C0F800022F90000000000001 /* TorSettingsFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F800012F90000000000001 /* TorSettingsFullLaunchUITests.swift */; };
 		C0F600012F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */; };
 		F3F300022F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */; };
 		F3F400022F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F400012F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift */; };
@@ -166,6 +167,7 @@
 		C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSendFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargeTextWordBreakFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F700012F90000000000001 /* RenameWalletFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameWalletFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0F800012F90000000000001 /* TorSettingsFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TorSettingsFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportAppScannerFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcScanPrivacyCoverFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F3F400012F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrScanCameraPermissionFullLaunchUITests.swift; sourceTree = "<group>"; };
@@ -346,6 +348,7 @@
 				C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */,
 				C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */,
 				C0F700012F90000000000001 /* RenameWalletFullLaunchUITests.swift */,
+				C0F800012F90000000000001 /* TorSettingsFullLaunchUITests.swift */,
 				C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */,
 				F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */,
 				F3F400012F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift */,
@@ -682,6 +685,7 @@
 				C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */,
 				C0F400022F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift in Sources */,
 				C0F700022F90000000000001 /* RenameWalletFullLaunchUITests.swift in Sources */,
+				C0F800022F90000000000001 /* TorSettingsFullLaunchUITests.swift in Sources */,
 				C0F600012F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift in Sources */,
 				F3F300022F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift in Sources */,
 				F3F400022F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift in Sources */,

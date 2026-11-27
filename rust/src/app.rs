@@ -135,6 +135,8 @@ pub enum LocalDataResetStage {
     RootDirectorySync,
     /// Diagnostics logs
     Diagnostics,
+    /// Built-in Tor's network directory and guard state
+    Tor,
     /// Main database reset and reinitialization
     Database,
 }
@@ -748,6 +750,11 @@ async fn wipe_all_data_with_tier(
         crate::diagnostics::clear_diagnostics_logs()
             .map_err(|source| local_reset_error(LocalDataResetStage::Diagnostics, source))?;
 
+        // blocks connections until the database reset below, so a failed wipe can't leave Tor
+        crate::tor::TorService::global()
+            .stop_for_wipe()
+            .map_err(|source| local_reset_error(LocalDataResetStage::Tor, source))?;
+
         let completed_onboarding = database
             .dangerous_reset_all_data()
             .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))?;
@@ -759,8 +766,15 @@ async fn wipe_all_data_with_tier(
 
     let completed_onboarding = match wipe_result {
         Ok(completed_onboarding) => completed_onboarding,
-        Err(error) => return Err(failed_wipe_error(error, prepared.resume_after_failure().await)),
+        Err(error) => {
+            // the database kept its Tor setting, so Tor picks up where it was
+            crate::tor::TorService::global().restart();
+            return Err(failed_wipe_error(error, prepared.resume_after_failure().await));
+        }
     };
+
+    // the wiped database has no Tor setting, so this turns Tor off
+    crate::tor::TorService::global().restart();
 
     let completion = FullWipeCompletion::after_reset(completed_onboarding);
     completion.publish();

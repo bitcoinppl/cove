@@ -153,6 +153,8 @@ extension TapSignerCvcError: CustomStringConvertible {}
 
 extension TapSignerReaderError: CustomStringConvertible {}
 
+extension TorManagerError: CustomStringConvertible {}
+
 extension TransactionDetailError: CustomStringConvertible {}
 
 extension TransportError: CustomStringConvertible {}

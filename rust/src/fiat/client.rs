@@ -10,7 +10,6 @@ use arc_swap::ArcSwap;
 use backon::{ExponentialBuilder, Retryable as _};
 use eyre::{Context as _, Result};
 use jiff::Timestamp;
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, trace, warn};
 
@@ -35,13 +34,23 @@ const HARD_LIMIT: u64 = 30; // min seconds between fetches
 // Global client for getting prices
 pub static FIAT_CLIENT: LazyLock<FiatClient> = LazyLock::new(FiatClient::new);
 
+/// A failed price request
+#[derive(Debug, thiserror::Error)]
+pub enum FiatClientError {
+    #[error(transparent)]
+    Request(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    Route(#[from] crate::tor::RouteError),
+}
+
 pub static PRICES: LazyLock<ArcSwap<Option<PriceResponse>>> =
     LazyLock::new(|| ArcSwap::from_pointee(None));
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct FiatClient {
     url: String,
-    client: OnceCell<reqwest::Client>,
+    client: Arc<cove_http::RoutedClient>,
 
     /// Whether the last background refresh failed, so repeated failures log once
     refresh_failing: Arc<AtomicBool>,
@@ -93,7 +102,7 @@ impl FiatClient {
     fn new() -> Self {
         Self {
             url: CURRENCY_URL.to_string(),
-            client: OnceCell::new(),
+            client: Arc::new(cove_http::RoutedClient::new()),
             refresh_failing: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -129,7 +138,7 @@ impl FiatClient {
     pub async fn historical_prices(
         &self,
         timestamp: u64,
-    ) -> Result<HistoricalPricesResponse, reqwest::Error> {
+    ) -> Result<HistoricalPricesResponse, FiatClientError> {
         let url = format!("{HISTORICAL_PRICES_URL}?timestamp={timestamp}");
 
         let response = self.client()?.get(&url).send().await?;
@@ -165,7 +174,7 @@ impl FiatClient {
     }
 
     /// Always returns the latest prices, will also update the prices cache
-    pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, reqwest::Error> {
+    pub async fn get_or_fetch_prices(&self) -> Result<PriceResponse, FiatClientError> {
         trace!("get_or_fetch_prices");
         if let Some(prices) = PRICES.load().as_ref() {
             let now_secs = Timestamp::now().as_second() as u64;
@@ -194,7 +203,7 @@ impl FiatClient {
     }
 
     /// Get the current price for a currency
-    async fn price_for(&self, currency: FiatCurrency) -> Result<u64, reqwest::Error> {
+    async fn price_for(&self, currency: FiatCurrency) -> Result<u64, FiatClientError> {
         let prices = self.get_or_fetch_prices().await?;
 
         let price = match currency {
@@ -215,7 +224,7 @@ impl FiatClient {
         &self,
         amount: Amount,
         currency: FiatCurrency,
-    ) -> Result<f64, reqwest::Error> {
+    ) -> Result<f64, FiatClientError> {
         let btc = amount.as_btc();
         let price = self.price_for(currency).await?;
         let value_in_currency = btc * price as f64;
@@ -223,8 +232,9 @@ impl FiatClient {
         Ok(value_in_currency)
     }
 
-    fn client(&self) -> Result<&reqwest::Client, reqwest::Error> {
-        self.client.get_or_try_init(cove_http::new_client)
+    fn client(&self) -> Result<reqwest::Client, FiatClientError> {
+        let route = crate::tor::current_route()?;
+        Ok(self.client.get(&route)?)
     }
 }
 

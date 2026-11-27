@@ -801,6 +801,9 @@ internal interface UniffiCallbackInterfaceSendFlowManagerReconcilerMethod0 : com
 internal interface UniffiCallbackInterfaceSendFlowManagerReconcilerMethod1 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`messages`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceTorManagerReconcilerMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 internal interface UniffiCallbackInterfaceWalletManagerReconcilerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
@@ -980,6 +983,25 @@ internal open class UniffiVTableCallbackInterfaceSendFlowManagerReconciler(
         `uniffiClone` = other.`uniffiClone`
         `reconcile` = other.`reconcile`
         `reconcileMany` = other.`reconcileMany`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "reconcile")
+internal open class UniffiVTableCallbackInterfaceTorManagerReconciler(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `reconcile`: UniffiCallbackInterfaceTorManagerReconcilerMethod0? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `reconcile`: UniffiCallbackInterfaceTorManagerReconcilerMethod0? = null,
+    ): UniffiVTableCallbackInterfaceTorManagerReconciler(`uniffiFree`,`uniffiClone`,`reconcile`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceTorManagerReconciler) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `reconcile` = other.`reconcile`
     }
 
 }
@@ -1677,6 +1699,18 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_wallet_id(
     ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_check_connection(
+    ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_default_proxy_address(
+    ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_dispatch(
+    ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_listen_for_updates(
+    ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_state(
+    ): Short
+    external fun uniffi_cove_checksum_method_rusttormanager_validate_proxy_address(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_address_at(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_balance(
@@ -2083,6 +2117,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_rustpendingwalletmanager_new(
     ): Short
+    external fun uniffi_cove_checksum_constructor_rusttormanager_new(
+    ): Short
     external fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet_with_metadata(
@@ -2177,6 +2213,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many(
     ): Short
+    external fun uniffi_cove_checksum_method_tormanagerreconciler_reconcile(
+    ): Short
     external fun uniffi_cove_checksum_method_walletmanagerreconciler_reconcile(
     ): Short
     external fun uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many(
@@ -2213,6 +2251,7 @@ internal object UniffiLib {
         uniffiCallbackInterfacePendingWalletManagerReconciler.register(this)
         uniffiCallbackInterfaceSendFlowManagerReconciler.register(this)
         uniffiCallbackInterfaceTapcardTransportProtocol.register(this)
+        uniffiCallbackInterfaceTorManagerReconciler.register(this)
         uniffiCallbackInterfaceWalletManagerReconciler.register(this)
         org.bitcoinppl.cove_core.device.uniffiEnsureInitialized()
         org.bitcoinppl.cove_core.nfc.uniffiEnsureInitialized()
@@ -2901,6 +2940,24 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_sendflowmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_clone_rusttormanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_rusttormanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_constructor_rusttormanager_new(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_rusttormanager_check_connection(`ptr`: Long,
+    ): Long
+    external fun uniffi_cove_fn_method_rusttormanager_default_proxy_address(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rusttormanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rusttormanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rusttormanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rusttormanager_validate_proxy_address(`ptr`: Long,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_rustwalletmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3479,6 +3536,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_sendflowmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceSendFlowManagerReconciler,
     ): Unit
+    external fun uniffi_cove_fn_init_callback_vtable_tormanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceTorManagerReconciler,
+    ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_walletmanagerreconciler(`vtable`: UniffiVTableCallbackInterfaceWalletManagerReconciler,
     ): Unit
     external fun uniffi_cove_fn_init_callback_vtable_tapcardtransportprotocol(`vtable`: UniffiVTableCallbackInterfaceTapcardTransportProtocol,
@@ -3584,6 +3643,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_sendflowerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_sendflowfiatonchangeerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tormanagererror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_walletloadstate_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
@@ -4863,6 +4924,24 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 54313.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_check_connection() != 22520.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_default_proxy_address() != 17161.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_dispatch() != 29962.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_listen_for_updates() != 4082.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_state() != 2370.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rusttormanager_validate_proxy_address() != 16199.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5472,6 +5551,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_rustpendingwalletmanager_new() != 33880.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_constructor_rusttormanager_new() != 5084.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_constructor_rustwalletmanager_preview_new_wallet() != 39975.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5611,6 +5693,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_sendflowmanagerreconciler_reconcile_many() != 45190.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tormanagerreconciler_reconcile() != 31315.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_walletmanagerreconciler_reconcile() != 44576.toShort()) {
@@ -24293,6 +24378,384 @@ public object FfiConverterTypeRustSendFlowManager: FfiConverter<RustSendFlowMana
 //
 
 
+public interface RustTorManagerInterface {
+
+    /**
+     * Asks the Tor Project's check service, over Tor, whether traffic leaves through Tor
+     *
+     * Useful for a proxy, which Cove can't otherwise tell apart from a SOCKS proxy that isn't
+     * Tor. The request only ever goes over the Tor route
+     */
+    suspend fun `checkConnection`(): TorConnectionCheck
+
+    /**
+     * The proxy address the form starts with
+     */
+    fun `defaultProxyAddress`(): kotlin.String
+
+    fun `dispatch`(`action`: TorManagerAction)
+
+    fun `listenForUpdates`(`reconciler`: TorManagerReconciler)
+
+    /**
+     * The initial snapshot; later changes arrive as reconcile messages
+     */
+    fun `state`(): TorManagerState
+
+    /**
+     * Checks a typed proxy address, returning it in the form the app saves
+     */
+    fun `validateProxyAddress`(`input`: kotlin.String): kotlin.String
+
+    companion object
+}
+
+open class RustTorManager: Disposable, AutoCloseable, RustTorManagerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+    constructor() :
+        this(UniffiWithHandle,
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_rusttormanager_new(
+
+        _status)
+}
+    )
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_rusttormanager(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_rusttormanager(handle, status)
+        }
+    }
+
+
+    /**
+     * Asks the Tor Project's check service, over Tor, whether traffic leaves through Tor
+     *
+     * Useful for a proxy, which Cove can't otherwise tell apart from a SOCKS proxy that isn't
+     * Tor. The request only ever goes over the Tor route
+     */
+    @Throws(TorManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `checkConnection`() : TorConnectionCheck {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rusttormanager_check_connection(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeTorConnectionCheck.lift(it) },
+        // Error FFI converter
+        TorManagerException.ErrorHandler,
+    )
+    }
+
+
+    /**
+     * The proxy address the form starts with
+     */override fun `defaultProxyAddress`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rusttormanager_default_proxy_address(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `dispatch`(`action`: TorManagerAction)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rusttormanager_dispatch(
+        it,
+
+        FfiConverterTypeTorManagerAction.lower(`action`),_status)
+}
+    }
+
+
+
+    override fun `listenForUpdates`(`reconciler`: TorManagerReconciler)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rusttormanager_listen_for_updates(
+        it,
+
+        FfiConverterTypeTorManagerReconciler.lower(`reconciler`),_status)
+}
+    }
+
+
+
+
+    /**
+     * The initial snapshot; later changes arrive as reconcile messages
+     */override fun `state`(): TorManagerState {
+            return FfiConverterTypeTorManagerState.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rusttormanager_state(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Checks a typed proxy address, returning it in the form the app saves
+     */
+    @Throws(TorManagerException::class)override fun `validateProxyAddress`(`input`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(TorManagerException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_rusttormanager_validate_proxy_address(
+        it,
+
+        FfiConverterString.lower(`input`),_status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRustTorManager: FfiConverter<RustTorManager, Long> {
+    override fun lower(value: RustTorManager): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): RustTorManager {
+        return RustTorManager(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): RustTorManager {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: RustTorManager) = 8UL
+
+    override fun write(value: RustTorManager, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface RustWalletManagerInterface {
 
     /**
@@ -37456,6 +37919,86 @@ public object FfiConverterTypeTapSignerSetupComplete: FfiConverterRustBuffer<Tap
             FfiConverterByteArray.write(value.`backup`, buf)
             FfiConverterTypeDeriveInfo.write(value.`deriveInfo`, buf)
             FfiConverterTypeWalletBirthday.write(value.`birthday`, buf)
+    }
+}
+
+
+
+/**
+ * The answer from the Tor Project's check service
+ */
+data class TorConnectionCheck (
+    /**
+     * Whether the request left the network from a Tor exit relay
+     */
+    var `isTor`: kotlin.Boolean
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorConnectionCheck: FfiConverterRustBuffer<TorConnectionCheck> {
+    override fun read(buf: ByteBuffer): TorConnectionCheck {
+        return TorConnectionCheck(
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TorConnectionCheck) = (
+            FfiConverterBoolean.allocationSize(value.`isTor`)
+    )
+
+    override fun write(value: TorConnectionCheck, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`isTor`, buf)
+    }
+}
+
+
+
+data class TorManagerState (
+    /**
+     * The saved mode, `None` when the saved setting can't be read
+     */
+    var `mode`: TorMode?
+    ,
+    var `status`: TorStatus
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorManagerState: FfiConverterRustBuffer<TorManagerState> {
+    override fun read(buf: ByteBuffer): TorManagerState {
+        return TorManagerState(
+            FfiConverterOptionalTypeTorMode.read(buf),
+            FfiConverterTypeTorStatus.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TorManagerState) = (
+            FfiConverterOptionalTypeTorMode.allocationSize(value.`mode`) +
+            FfiConverterTypeTorStatus.allocationSize(value.`status`)
+    )
+
+    override fun write(value: TorManagerState, buf: ByteBuffer) {
+            FfiConverterOptionalTypeTorMode.write(value.`mode`, buf)
+            FfiConverterTypeTorStatus.write(value.`status`, buf)
     }
 }
 
@@ -54006,6 +54549,9 @@ sealed class GlobalConfigKey {
     object TrickPinNotice : GlobalConfigKey()
 
 
+    object TorSettings : GlobalConfigKey()
+
+
 
 
 
@@ -54041,6 +54587,7 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 FfiConverterTypeNetwork.read(buf),
                 )
             15 -> GlobalConfigKey.TrickPinNotice
+            16 -> GlobalConfigKey.TorSettings
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -54138,6 +54685,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 4UL
             )
         }
+        is GlobalConfigKey.TorSettings -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
     }
 
     override fun write(value: GlobalConfigKey, buf: ByteBuffer) {
@@ -54202,6 +54755,10 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             }
             is GlobalConfigKey.TrickPinNotice -> {
                 buf.putInt(15)
+                Unit
+            }
+            is GlobalConfigKey.TorSettings -> {
+                buf.putInt(16)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -57458,6 +58015,10 @@ enum class LocalDataResetStage {
      * Diagnostics logs
      */
     DIAGNOSTICS,
+    /**
+     * Built-in Tor's network directory and guard state
+     */
+    TOR,
     /**
      * Main database reset and reinitialization
      */
@@ -64739,6 +65300,9 @@ sealed class SettingsRoute {
     object Node : SettingsRoute()
 
 
+    object Tor : SettingsRoute()
+
+
     object BlockExplorer : SettingsRoute()
 
 
@@ -64784,15 +65348,16 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             2 -> SettingsRoute.Network
             3 -> SettingsRoute.Appearance
             4 -> SettingsRoute.Node
-            5 -> SettingsRoute.BlockExplorer
-            6 -> SettingsRoute.FiatCurrency
-            7 -> SettingsRoute.Wallet(
+            5 -> SettingsRoute.Tor
+            6 -> SettingsRoute.BlockExplorer
+            7 -> SettingsRoute.FiatCurrency
+            8 -> SettingsRoute.Wallet(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterTypeWalletSettingsRoute.read(buf),
                 )
-            8 -> SettingsRoute.AllWallets
-            9 -> SettingsRoute.About
-            10 -> SettingsRoute.CloudBackup
+            9 -> SettingsRoute.AllWallets
+            10 -> SettingsRoute.About
+            11 -> SettingsRoute.CloudBackup
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -64817,6 +65382,12 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
             )
         }
         is SettingsRoute.Node -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is SettingsRoute.Tor -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -64880,30 +65451,34 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
                 buf.putInt(4)
                 Unit
             }
-            is SettingsRoute.BlockExplorer -> {
+            is SettingsRoute.Tor -> {
                 buf.putInt(5)
                 Unit
             }
-            is SettingsRoute.FiatCurrency -> {
+            is SettingsRoute.BlockExplorer -> {
                 buf.putInt(6)
                 Unit
             }
-            is SettingsRoute.Wallet -> {
+            is SettingsRoute.FiatCurrency -> {
                 buf.putInt(7)
+                Unit
+            }
+            is SettingsRoute.Wallet -> {
+                buf.putInt(8)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterTypeWalletSettingsRoute.write(value.`route`, buf)
                 Unit
             }
             is SettingsRoute.AllWallets -> {
-                buf.putInt(8)
-                Unit
-            }
-            is SettingsRoute.About -> {
                 buf.putInt(9)
                 Unit
             }
-            is SettingsRoute.CloudBackup -> {
+            is SettingsRoute.About -> {
                 buf.putInt(10)
+                Unit
+            }
+            is SettingsRoute.CloudBackup -> {
+                buf.putInt(11)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -66868,6 +67443,574 @@ public object FfiConverterTypeTapSignerRoute : FfiConverterRustBuffer<TapSignerR
                 buf.putInt(10)
                 FfiConverterTypeTapSigner.write(value.`tapSigner`, buf)
                 FfiConverterTypeAfterPinAction.write(value.`action`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+sealed class TorManagerAction {
+
+    /**
+     * Save and apply a mode
+     */
+    data class SelectMode(
+        val v1: org.bitcoinppl.cove_core.TorMode) : TorManagerAction()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Start Tor again with the saved mode, such as after the built-in client failed
+     */
+    object Restart : TorManagerAction()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorManagerAction : FfiConverterRustBuffer<TorManagerAction>{
+    override fun read(buf: ByteBuffer): TorManagerAction {
+        return when(buf.getInt()) {
+            1 -> TorManagerAction.SelectMode(
+                FfiConverterTypeTorMode.read(buf),
+                )
+            2 -> TorManagerAction.Restart
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TorManagerAction): ULong = when(value) {
+        is TorManagerAction.SelectMode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTorMode.allocationSize(value.v1)
+            )
+        }
+        is TorManagerAction.Restart -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: TorManagerAction, buf: ByteBuffer) {
+        when(value) {
+            is TorManagerAction.SelectMode -> {
+                buf.putInt(1)
+                FfiConverterTypeTorMode.write(value.v1, buf)
+                Unit
+            }
+            is TorManagerAction.Restart -> {
+                buf.putInt(2)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+sealed class TorManagerException: kotlin.Exception() {
+
+    class InvalidProxy(
+
+        val v1: kotlin.String
+        ) : TorManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class OnionNodeSelected(
+
+        val `nodeName`: kotlin.String
+        ) : TorManagerException() {
+        override val message
+            get() = "nodeName=${ `nodeName` }"
+    }
+
+    class Save(
+
+        val v1: kotlin.String
+        ) : TorManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class TorOff(
+        ) : TorManagerException() {
+        override val message
+            get() = ""
+    }
+
+    class CheckFailed(
+
+        val v1: kotlin.String
+        ) : TorManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tormanagererror_uniffi_trait_display(FfiConverterTypeTorManagerError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TorManagerException> {
+        override fun lift(error_buf: RustBuffer.ByValue): TorManagerException = FfiConverterTypeTorManagerError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorManagerError : FfiConverterRustBuffer<TorManagerException> {
+    override fun read(buf: ByteBuffer): TorManagerException {
+
+
+        return when(buf.getInt()) {
+            1 -> TorManagerException.InvalidProxy(
+                FfiConverterString.read(buf),
+                )
+            2 -> TorManagerException.OnionNodeSelected(
+                FfiConverterString.read(buf),
+                )
+            3 -> TorManagerException.Save(
+                FfiConverterString.read(buf),
+                )
+            4 -> TorManagerException.TorOff()
+            5 -> TorManagerException.CheckFailed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TorManagerException): ULong {
+        return when(value) {
+            is TorManagerException.InvalidProxy -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is TorManagerException.OnionNodeSelected -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.`nodeName`)
+            )
+            is TorManagerException.Save -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is TorManagerException.TorOff -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is TorManagerException.CheckFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: TorManagerException, buf: ByteBuffer) {
+        when(value) {
+            is TorManagerException.InvalidProxy -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is TorManagerException.OnionNodeSelected -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`nodeName`, buf)
+                Unit
+            }
+            is TorManagerException.Save -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is TorManagerException.TorOff -> {
+                buf.putInt(4)
+                Unit
+            }
+            is TorManagerException.CheckFailed -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
+
+
+
+sealed class TorManagerReconcileMessage {
+
+    data class Mode(
+        val v1: org.bitcoinppl.cove_core.TorMode?) : TorManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    data class Status(
+        val v1: org.bitcoinppl.cove_core.TorStatus) : TorManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * A mode change was refused, and the saved mode is unchanged
+     */
+    data class ModeRejected(
+        val v1: org.bitcoinppl.cove_core.TorManagerException) : TorManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorManagerReconcileMessage : FfiConverterRustBuffer<TorManagerReconcileMessage>{
+    override fun read(buf: ByteBuffer): TorManagerReconcileMessage {
+        return when(buf.getInt()) {
+            1 -> TorManagerReconcileMessage.Mode(
+                FfiConverterOptionalTypeTorMode.read(buf),
+                )
+            2 -> TorManagerReconcileMessage.Status(
+                FfiConverterTypeTorStatus.read(buf),
+                )
+            3 -> TorManagerReconcileMessage.ModeRejected(
+                FfiConverterTypeTorManagerError.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TorManagerReconcileMessage): ULong = when(value) {
+        is TorManagerReconcileMessage.Mode -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeTorMode.allocationSize(value.v1)
+            )
+        }
+        is TorManagerReconcileMessage.Status -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTorStatus.allocationSize(value.v1)
+            )
+        }
+        is TorManagerReconcileMessage.ModeRejected -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTorManagerError.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: TorManagerReconcileMessage, buf: ByteBuffer) {
+        when(value) {
+            is TorManagerReconcileMessage.Mode -> {
+                buf.putInt(1)
+                FfiConverterOptionalTypeTorMode.write(value.v1, buf)
+                Unit
+            }
+            is TorManagerReconcileMessage.Status -> {
+                buf.putInt(2)
+                FfiConverterTypeTorStatus.write(value.v1, buf)
+                Unit
+            }
+            is TorManagerReconcileMessage.ModeRejected -> {
+                buf.putInt(3)
+                FfiConverterTypeTorManagerError.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * [`TorSettings`] as the apps see it, with the proxy as text they can show and edit
+ */
+sealed class TorMode {
+
+    object Off : TorMode()
+
+
+    object BuiltIn : TorMode()
+
+
+    data class Proxy(
+        val `address`: kotlin.String) : TorMode()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorMode : FfiConverterRustBuffer<TorMode>{
+    override fun read(buf: ByteBuffer): TorMode {
+        return when(buf.getInt()) {
+            1 -> TorMode.Off
+            2 -> TorMode.BuiltIn
+            3 -> TorMode.Proxy(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TorMode): ULong = when(value) {
+        is TorMode.Off -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is TorMode.BuiltIn -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is TorMode.Proxy -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`address`)
+            )
+        }
+    }
+
+    override fun write(value: TorMode, buf: ByteBuffer) {
+        when(value) {
+            is TorMode.Off -> {
+                buf.putInt(1)
+                Unit
+            }
+            is TorMode.BuiltIn -> {
+                buf.putInt(2)
+                Unit
+            }
+            is TorMode.Proxy -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`address`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * What Tor is doing, for the settings screen
+ */
+sealed class TorStatus {
+
+    object Off : TorStatus()
+
+
+    /**
+     * The built-in client is joining the Tor network, and connections wait for it
+     */
+    data class Starting(
+        val `percent`: kotlin.UByte) : TorStatus()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The built-in client is carrying traffic
+     */
+    object Ready : TorStatus()
+
+
+    /**
+     * Tor is on but can't carry traffic, so nothing connects until this clears
+     */
+    data class Failed(
+        val `message`: kotlin.String) : TorStatus()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Traffic goes to the user's SOCKS proxy, whose health only shows when a connection runs
+     */
+    object UsingProxy : TorStatus()
+
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTorStatus : FfiConverterRustBuffer<TorStatus>{
+    override fun read(buf: ByteBuffer): TorStatus {
+        return when(buf.getInt()) {
+            1 -> TorStatus.Off
+            2 -> TorStatus.Starting(
+                FfiConverterUByte.read(buf),
+                )
+            3 -> TorStatus.Ready
+            4 -> TorStatus.Failed(
+                FfiConverterString.read(buf),
+                )
+            5 -> TorStatus.UsingProxy
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TorStatus): ULong = when(value) {
+        is TorStatus.Off -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is TorStatus.Starting -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterUByte.allocationSize(value.`percent`)
+            )
+        }
+        is TorStatus.Ready -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is TorStatus.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+        is TorStatus.UsingProxy -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: TorStatus, buf: ByteBuffer) {
+        when(value) {
+            is TorStatus.Off -> {
+                buf.putInt(1)
+                Unit
+            }
+            is TorStatus.Starting -> {
+                buf.putInt(2)
+                FfiConverterUByte.write(value.`percent`, buf)
+                Unit
+            }
+            is TorStatus.Ready -> {
+                buf.putInt(3)
+                Unit
+            }
+            is TorStatus.Failed -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+            is TorStatus.UsingProxy -> {
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -73239,6 +74382,66 @@ public object FfiConverterTypeTapcardTransportProtocol: FfiConverterCallbackInte
 
 
 
+public interface TorManagerReconciler {
+
+    fun `reconcile`(`message`: TorManagerReconcileMessage)
+
+    companion object
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceTorManagerReconciler {
+    internal object `reconcile`: UniffiCallbackInterfaceTorManagerReconcilerMethod0 {
+        override fun callback(`uniffiHandle`: Long,`message`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeTorManagerReconciler.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`reconcile`(
+                    FfiConverterTypeTorManagerReconcileMessage.lift(`message`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeTorManagerReconciler.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeTorManagerReconciler.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceTorManagerReconciler.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `reconcile`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_cove_fn_init_callback_vtable_tormanagerreconciler(vtable)
+    }
+}
+
+/**
+ * The ffiConverter which transforms the Callbacks in to handles to pass to Rust.
+ *
+ * @suppress
+ */
+public object FfiConverterTypeTorManagerReconciler: FfiConverterCallbackInterface<TorManagerReconciler>()
+
+
+
+
+
 public interface WalletManagerReconciler {
 
     fun `reconcile`(`message`: WalletManagerReconcileMessage)
@@ -74970,6 +76173,38 @@ public object FfiConverterOptionalTypeTapSignerCmd: FfiConverterRustBuffer<TapSi
         } else {
             buf.put(1)
             FfiConverterTypeTapSignerCmd.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeTorMode: FfiConverterRustBuffer<TorMode?> {
+    override fun read(buf: ByteBuffer): TorMode? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeTorMode.read(buf)
+    }
+
+    override fun allocationSize(value: TorMode?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeTorMode.allocationSize(value)
+        }
+    }
+
+    override fun write(value: TorMode?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeTorMode.write(value, buf)
         }
     }
 }

@@ -23,17 +23,26 @@ use cove_bdk_progressive_scan::ScanEvent;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
-use crate::node::{Node, NodeConnectionIdentity};
+use cove_http::NetworkRoute;
+
+use crate::{
+    node::{Node, NodeConnectionIdentity},
+    tor::RouteError,
+};
 
 use super::ApiType;
 
 const ELECTRUM_BATCH_SIZE: usize = 10;
 const ESPLORA_BATCH_SIZE: usize = 1;
 
-/// A blockchain client bound to the node that created it
+/// A blockchain client bound to the node and the route that created it
+///
+/// Each request first checks that the route is still current, so a client built before Tor
+/// turned on stops instead of sending more requests outside Tor
 #[derive(Clone)]
 pub struct NodeClient {
     connection_identity: NodeConnectionIdentity,
+    route: NetworkRoute,
     backend: NodeClientBackend,
 }
 
@@ -97,6 +106,9 @@ pub enum Error {
 
     #[error("failed to get transaction: {0}")]
     ElectrumGetTransaction(electrum_client::Error),
+
+    #[error(transparent)]
+    Route(#[from] RouteError),
 }
 
 /// An esplora client error without the request URL
@@ -140,7 +152,16 @@ impl Error {
             Self::ElectrumBroadcast(_) => "electrum_broadcast",
             Self::EsploraGetTransaction(_) => "esplora_get_transaction",
             Self::ElectrumGetTransaction(_) => "electrum_get_transaction",
+            Self::Route(RouteError::TorUnavailable(_)) => "tor_unavailable",
+            Self::Route(RouteError::OnionNeedsTor) => "onion_needs_tor",
+            Self::Route(RouteError::Changed) => "route_changed",
         }
+    }
+
+    /// Whether the client's route stopped being current, so the same work can run again on a
+    /// client built for the new route
+    pub(crate) const fn is_route_changed(&self) -> bool {
+        matches!(self, Self::Route(RouteError::Changed))
     }
 }
 
@@ -150,69 +171,123 @@ pub struct NodeClientOptions {
 }
 
 impl NodeClient {
+    /// Connects to `node` on the current route, failing rather than leaving Tor when Tor is on
     pub async fn new(node: &Node) -> Result<Self, Error> {
-        let backend = match node.api_type {
-            ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node(node)?;
-                NodeClientBackend::Esplora(client)
-            }
-
-            ApiType::Electrum => {
-                let client = electrum::ElectrumClient::new_from_node(node).await?;
-                NodeClientBackend::Electrum(client)
-            }
+        let options = match node.api_type {
+            ApiType::Esplora => esplora::EsploraClient::default_options(),
+            ApiType::Electrum => electrum::ElectrumClient::default_options(),
         };
 
-        Ok(Self { connection_identity: node.connection_identity(), backend })
+        Self::new_with_options(node, options).await
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
+        let route = node.route()?;
         let backend = match node.api_type {
             ApiType::Esplora => {
-                let client = esplora::EsploraClient::new_from_node_and_options(node, options)?;
+                let client = esplora::EsploraClient::new_from_node(node, options, &route)?;
                 NodeClientBackend::Esplora(client)
             }
 
             ApiType::Electrum => {
-                let client =
-                    electrum::ElectrumClient::new_from_node_and_options(node, options).await?;
+                let client = electrum::ElectrumClient::new_from_node(node, options, &route).await?;
                 NodeClientBackend::Electrum(client)
             }
         };
 
-        Ok(Self { connection_identity: node.connection_identity(), backend })
+        let connection_identity = node.connection_identity_on(Some(route.clone()));
+        Ok(Self { connection_identity, route, backend })
     }
 
     pub(crate) fn connection_identity(&self) -> &NodeConnectionIdentity {
         &self.connection_identity
     }
 
-    pub async fn check_url(&self) -> Result<(), Error> {
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                client.get_height().await?;
-            }
+    /// How long a reachability check through this client may wait, given how long it waits
+    /// on a direct route
+    pub(crate) fn check_timeout(&self, direct: std::time::Duration) -> std::time::Duration {
+        if self.route.is_tor() { crate::node::TOR_CHECK_URL_TIMEOUT } else { direct }
+    }
 
-            NodeClientBackend::Electrum(client) => {
-                client.get_height().await?;
-            }
+    /// Fails with [`RouteError::Changed`] when the current route isn't the one this client was
+    /// built on, including when no route is available, so callers can tell a stale client from
+    /// a new one that couldn't connect
+    fn ensure_route(&self) -> Result<(), Error> {
+        if crate::tor::current_route().as_ref() != Ok(&self.route) {
+            return Err(RouteError::Changed.into());
         }
 
         Ok(())
     }
 
-    pub async fn get_height(&self) -> Result<usize, Error> {
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                let height = client.get_height().await?;
-                Ok(height as usize)
+    /// Resolves once the current route is no longer the one this client was built on
+    pub(crate) async fn route_changed(&self) {
+        let mut state = crate::tor::TorService::global().subscribe();
+        loop {
+            if state.borrow_and_update().route.as_ref().ok() != Some(&self.route) {
+                return;
             }
 
-            NodeClientBackend::Electrum(client) => {
-                let height = client.get_height().await?;
-                Ok(height)
+            // the service lives for the whole process, so its channel never closes
+            if state.changed().await.is_err() {
+                std::future::pending::<()>().await;
             }
         }
+    }
+
+    /// Runs a read, dropping it once the route changes
+    ///
+    /// A scan or sync can run for minutes, and some reads send a second request after the
+    /// first answers, so without this they would keep sending on a route that's no longer
+    /// current, outside Tor after Tor turns on
+    async fn on_route<T>(
+        &self,
+        call: impl std::future::Future<Output = Result<T, Error>>,
+    ) -> Result<T, Error> {
+        self.ensure_route()?;
+
+        // the route is checked first, so a call that becomes ready in the same poll as a route
+        // change isn't polled again, where it could start its next request on the old route
+        tokio::select! {
+            biased;
+
+            () = self.route_changed() => Err(RouteError::Changed.into()),
+            result = call => result,
+        }
+    }
+
+    pub async fn check_url(&self) -> Result<(), Error> {
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    client.get_height().await?;
+                }
+
+                NodeClientBackend::Electrum(client) => {
+                    client.get_height().await?;
+                }
+            }
+
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn get_height(&self) -> Result<usize, Error> {
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    let height = client.get_height().await?;
+                    Ok(height as usize)
+                }
+
+                NodeClientBackend::Electrum(client) => {
+                    let height = client.get_height().await?;
+                    Ok(height)
+                }
+            }
+        })
+        .await
     }
 
     pub async fn start_wallet_scan(
@@ -221,19 +296,22 @@ impl NodeClient {
         full_scan_request: FullScanRequest<KeychainKind>,
         stop_gap: usize,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
-        let full_scan_result = match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                debug!("starting esplora full scan");
-                client.full_scan(full_scan_request, stop_gap).await?
-            }
+        self.on_route(async {
+            let full_scan_result = match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    debug!("starting esplora full scan");
+                    client.full_scan(full_scan_request, stop_gap).await?
+                }
 
-            NodeClientBackend::Electrum(client) => {
-                debug!("starting electrum full scan");
-                client.full_scan(full_scan_request, tx_graph, stop_gap).await?
-            }
-        };
+                NodeClientBackend::Electrum(client) => {
+                    debug!("starting electrum full scan");
+                    client.full_scan(full_scan_request, tx_graph, stop_gap).await?
+                }
+            };
 
-        Ok(full_scan_result)
+            Ok(full_scan_result)
+        })
+        .await
     }
 
     pub async fn start_progressive_wallet_scan(
@@ -245,36 +323,44 @@ impl NodeClient {
         events: flume::Sender<ScanEvent<KeychainKind>>,
         cancel_token: CancellationToken,
     ) -> Result<FullScanResponse<KeychainKind>, Error> {
-        let full_scan_result = match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                debug!("starting progressive esplora full scan");
-                client
-                    .progressive_full_scan(
-                        full_scan_request,
-                        last_revealed_indices,
-                        stop_gap,
-                        events,
-                        cancel_token,
-                    )
-                    .await?
-            }
+        // dropping the scan can leave an Electrum batch running on a blocking thread, so the
+        // child token is cancelled when this returns and that batch is its last
+        let scan_token = cancel_token.child_token().drop_guard();
+        let scan = async {
+            let scan_token = scan_token.token().clone();
+            let result = match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    debug!("starting progressive esplora full scan");
+                    client
+                        .progressive_full_scan(
+                            full_scan_request,
+                            last_revealed_indices,
+                            stop_gap,
+                            events,
+                            scan_token,
+                        )
+                        .await
+                }
 
-            NodeClientBackend::Electrum(client) => {
-                debug!("starting progressive electrum full scan");
-                client
-                    .progressive_full_scan(
-                        full_scan_request,
-                        tx_graph,
-                        last_revealed_indices,
-                        stop_gap,
-                        events,
-                        cancel_token,
-                    )
-                    .await?
-            }
+                NodeClientBackend::Electrum(client) => {
+                    debug!("starting progressive electrum full scan");
+                    client
+                        .progressive_full_scan(
+                            full_scan_request,
+                            tx_graph,
+                            last_revealed_indices,
+                            stop_gap,
+                            events,
+                            scan_token,
+                        )
+                        .await
+                }
+            };
+
+            Ok(result?)
         };
 
-        Ok(full_scan_result)
+        self.on_route(scan).await
     }
 
     pub async fn sync(
@@ -282,53 +368,73 @@ impl NodeClient {
         tx_graph: &TxGraph<ConfirmationBlockTime>,
         scan_request: SyncRequest<(KeychainKind, u32)>,
     ) -> Result<SyncResponse, Error> {
-        let scan_result = match &self.backend {
-            NodeClientBackend::Esplora(client) => client.sync(scan_request).await?,
-            NodeClientBackend::Electrum(client) => client.sync(scan_request, tx_graph).await?,
-        };
-        Ok(scan_result)
+        self.on_route(async {
+            let scan_result = match &self.backend {
+                NodeClientBackend::Esplora(client) => client.sync(scan_request).await?,
+                NodeClientBackend::Electrum(client) => client.sync(scan_request, tx_graph).await?,
+            };
+
+            Ok(scan_result)
+        })
+        .await
     }
 
     pub async fn get_confirmed_transaction(
         &self,
         txid: Arc<Txid>,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => client.get_confirmed_transaction(&txid).await,
-            NodeClientBackend::Electrum(client) => client.get_confirmed_transaction(txid).await,
-        }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => client.get_confirmed_transaction(&txid).await,
+                NodeClientBackend::Electrum(client) => client.get_confirmed_transaction(txid).await,
+            }
+        })
+        .await
     }
 
     /// Fetches a transaction from the mempool or chain; returns `None` if not found.
     pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => client.get_transaction(txid).await,
-            NodeClientBackend::Electrum(client) => client.get_transaction(txid).await,
-        }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => client.get_transaction(txid).await,
+                NodeClientBackend::Electrum(client) => client.get_transaction(txid).await,
+            }
+        })
+        .await
     }
 
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => client.get_block_id().await,
-            NodeClientBackend::Electrum(client) => client.get_block_id().await,
-        }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => client.get_block_id().await,
+                NodeClientBackend::Electrum(client) => client.get_block_id().await,
+            }
+        })
+        .await
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
-        match &self.backend {
-            NodeClientBackend::Esplora(client) => {
-                let address = client.check_address_for_txn(address).await?;
-                Ok(address)
-            }
+        self.on_route(async {
+            match &self.backend {
+                NodeClientBackend::Esplora(client) => {
+                    let address = client.check_address_for_txn(address).await?;
+                    Ok(address)
+                }
 
-            NodeClientBackend::Electrum(client) => {
-                let address = client.check_address_for_txn(address).await?;
-                Ok(address)
+                NodeClientBackend::Electrum(client) => {
+                    let address = client.check_address_for_txn(address).await?;
+                    Ok(address)
+                }
             }
-        }
+        })
+        .await
     }
 
     pub async fn broadcast_transaction(&self, txn: Transaction) -> Result<Txid, Error> {
+        // one request whose outcome the user needs, so it isn't dropped midway, where it may
+        // already have reached the node
+        self.ensure_route()?;
+
         match &self.backend {
             NodeClientBackend::Esplora(client) => client.broadcast_transaction(txn).await,
             NodeClientBackend::Electrum(client) => client.broadcast_transaction(txn).await,

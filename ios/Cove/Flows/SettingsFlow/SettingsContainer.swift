@@ -119,6 +119,8 @@ private struct SettingsRouteContent: View {
             ))
         case .node:
             AnyView(NodeSelectionView())
+        case .tor:
+            AnyView(TorSettingsScreen())
         case .blockExplorer:
             AnyView(BlockExplorerSettingsView())
         case .fiatCurrency:

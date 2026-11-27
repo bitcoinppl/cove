@@ -36,6 +36,11 @@ pub fn install_runtime(handle: Handle) -> Result<(), Handle> {
     TOKIO.set(handle)
 }
 
+/// The process runtime, once [`init`] or [`install_runtime`] has run
+pub fn handle() -> Option<Handle> {
+    TOKIO.get().cloned()
+}
+
 pub fn is_tokio_initialized() -> bool {
     TOKIO.get().is_some()
 }

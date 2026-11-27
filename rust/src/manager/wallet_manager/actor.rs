@@ -54,8 +54,8 @@ use tracing::{debug, error, warn};
 
 use self::scan::{
     EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, PreparedProgressiveScan,
-    RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, ScanRequestOrder, WalletScanActor,
-    WalletScanEvent, WalletScanEventKind, should_update_full_scan_metadata,
+    RETURNING_WALLET_SCAN_PROGRESS_DELAY, RunningScan, ScanProgressStart, ScanRequestOrder,
+    WalletScanActor, WalletScanEvent, WalletScanEventKind, should_update_full_scan_metadata,
 };
 use super::WalletManagerReconcileMessage;
 
@@ -1163,6 +1163,31 @@ impl WalletActor {
         self.send(WalletManagerReconcileMessage::UpdatedTransactions(transactions));
     }
 
+    /// Runs a scan stopped by a route change again on the new route
+    ///
+    /// The restart waits until a route is available, since turning Tor on blocks connections
+    /// briefly, and then reconnects so the node client is rebuilt on the new route
+    fn rescan_after_route_change(&mut self, error: &NodeError, scan: RunningScan) {
+        if !error.is_route_changed() {
+            return;
+        }
+
+        debug!("scan stopped because the route changed, scanning again on the new route");
+        self.addr.send_fut_with(|addr| async move {
+            crate::tor::usable_route().await;
+
+            match scan {
+                RunningScan::Full(FullScanType::Rescan(gap_limit)) => {
+                    send!(addr.perform_rescan_full_scan(gap_limit));
+                }
+
+                RunningScan::Full(FullScanType::Full) | RunningScan::Incremental => {
+                    send!(addr.start_wallet_scan_in_task(true, ScanProgressStart::Immediate, true));
+                }
+            }
+        });
+    }
+
     async fn handle_full_scan_complete(
         &mut self,
         full_scan_result: Result<FullScanResponse<KeychainKind>, NodeError>,
@@ -1178,6 +1203,7 @@ impl WalletActor {
             Err(error) => {
                 self.state = ActorState::FailedFullScan(full_scan_type);
                 self.send_scan_idle_status();
+                self.rescan_after_route_change(&error, RunningScan::Full(full_scan_type));
                 return Err(error.into());
             }
         }
@@ -1213,6 +1239,7 @@ impl WalletActor {
             Err(error) => {
                 self.state = ActorState::FailedIncrementalScan;
                 self.send_scan_idle_status();
+                self.rescan_after_route_change(&error, RunningScan::Incremental);
                 return Err(error.into());
             }
         };

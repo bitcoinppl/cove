@@ -404,6 +404,65 @@ mod tests {
         }
     }
 
+    // Arti needs a newer rusqlite than released BDK allowed, which also moved the bundled
+    // SQLCipher from 4.5.3 to 4.10. The fixture is a wallet store written by bdk_wallet 3.0.0 on
+    // rusqlite 0.31 with SQLCipher 4.5.3, the versions shipped before Tor support, keyed the way
+    // `open_persistent_connection` keys stores. It holds a confirmed receive and an unconfirmed one
+    // whose last-seen time needs more than 32 bits, so both timestamp columns are read back
+    #[test]
+    fn wallet_store_from_sqlcipher_4_5_3_loads_and_keeps_working() {
+        use bdk_wallet::{
+            KeychainKind, Wallet, bitcoin::Amount, test_utils::get_test_wpkh_and_change_desc,
+        };
+
+        let fixture = include_bytes!("../test/data/sqlcipher_4_5_3_wallet.sqlite");
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("wallet.db");
+        std::fs::write(&path, fixture).expect("fixture is written");
+
+        let open = || {
+            let conn = bdk_wallet::rusqlite::Connection::open(&path).expect("store opens");
+            conn.pragma_update(None, "key", format!("x'{}'", "c0".repeat(32)))
+                .expect("store is keyed");
+            conn
+        };
+
+        let (descriptor, change) = get_test_wpkh_and_change_desc();
+        let mut conn = open();
+        let mut wallet = Wallet::load()
+            .descriptor(KeychainKind::External, Some(descriptor))
+            .descriptor(KeychainKind::Internal, Some(change))
+            .load_wallet(&mut conn)
+            .expect("store loads")
+            .expect("store holds a wallet");
+
+        let balance = wallet.balance();
+        assert_eq!(balance.confirmed, Amount::from_sat(50_000));
+        assert_eq!(balance.untrusted_pending, Amount::from_sat(7_000));
+        assert_eq!(wallet.derivation_index(KeychainKind::External), Some(4));
+
+        let unconfirmed = wallet
+            .transactions()
+            .find(|tx| !tx.chain_position.is_confirmed())
+            .expect("unconfirmed transaction is kept");
+        let bdk_wallet::chain::ChainPosition::Unconfirmed { last_seen, .. } =
+            unconfirmed.chain_position
+        else {
+            unreachable!("filtered to unconfirmed")
+        };
+        assert_eq!(last_seen, Some(4_102_444_800));
+
+        // the new SQLCipher writes to the old store, and the write reads back
+        let _ = wallet.reveal_next_address(KeychainKind::External);
+        wallet.persist(&mut conn).expect("store takes writes");
+        drop(conn);
+
+        let mut conn = open();
+        let reloaded =
+            Wallet::load().load_wallet(&mut conn).expect("store reloads").expect("wallet");
+        assert_eq!(reloaded.derivation_index(KeychainKind::External), Some(5));
+    }
+
     #[test]
     fn pre_publish_failure_keeps_the_old_store_authoritative() {
         let directory = tempfile::tempdir().expect("temporary directory");

@@ -79,6 +79,7 @@ env:
     CoveUITests/KeyTeleportAppScannerFullLaunchUITests,
     CoveUITests/VerifyWordsFullLaunchUITests,
     CoveUITests/RenameWalletFullLaunchUITests,
+    CoveUITests/TorSettingsFullLaunchUITests,
     CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
     CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
