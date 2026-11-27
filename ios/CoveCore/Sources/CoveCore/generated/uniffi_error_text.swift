@@ -63,6 +63,20 @@ extension DiagnosticsError: CustomStringConvertible {
 
 extension DiagnosticsReportsTableError: CustomStringConvertible {}
 
+extension FeeBumpError: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case let .NotFound(message),
+             let .InitialScanIncomplete(message),
+             let .Blocked(message),
+             let .FeeRateTooLow(message),
+             let .InsufficientFunds(message),
+             let .Build(message):
+            return message
+        }
+    }
+}
+
 extension FiatAmountError: CustomStringConvertible {}
 
 extension FileHandlerError: CustomStringConvertible {}
