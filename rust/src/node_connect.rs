@@ -1,5 +1,5 @@
 use tracing::error;
-use url::{Host, Url};
+use url::Url;
 
 use crate::{
     database::Database,
@@ -136,16 +136,12 @@ impl NodeSelector {
         }
         .map_err_str(Error::ParseNodeUrlError)?;
 
-        // http(s) urls parse an ip address as an ip host with no domain, so a local Esplora
-        // server is valid here, while a named host still needs a dot
-        let has_valid_host = match url.host() {
-            Some(Host::Domain(domain)) => domain.contains('.'),
-            Some(Host::Ipv4(_) | Host::Ipv6(_)) => true,
-            None => false,
-        };
+        // a single-label name such as `fulcrum` resolves through the local network's resolver
+        // like any other host, and self-hosted servers are often reached that way
+        let has_valid_host = url.host_str().is_some_and(|host| !host.is_empty());
 
         if !has_valid_host {
-            return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
+            return Err(Error::ParseNodeUrlError("invalid url, no host".to_string()));
         }
 
         let url_string = url.to_string();
@@ -324,6 +320,35 @@ pub(crate) mod tests {
         assert_eq!(node.api_type, ApiType::Esplora);
         assert_eq!(node.url, "https://mutinynet.com/api");
         assert_eq!(node.name, "mutinynet.com");
+    }
+
+    fn parse_electrum(url: &str) -> Result<Node, Error> {
+        selector(Network::Bitcoin).parse_custom_node(
+            url.to_string(),
+            ApiType::Electrum,
+            String::new(),
+        )
+    }
+
+    #[test]
+    fn parse_custom_node_accepts_single_label_hosts() {
+        let node = parse_electrum("fulcrum:50001").unwrap();
+        assert_eq!(node.url, "tcp://fulcrum:50001/");
+        assert_eq!(node.name, "fulcrum");
+
+        assert_eq!(parse_electrum("ssl://fulcrum").unwrap().url, "ssl://fulcrum:50002");
+        assert_eq!(parse_electrum("fulcrum:50002").unwrap().url, "ssl://fulcrum:50002/");
+
+        let esplora = selector(Network::Bitcoin)
+            .parse_custom_node("http://mempool:3006".to_string(), ApiType::Esplora, String::new())
+            .unwrap();
+        assert_eq!(esplora.url, "http://mempool:3006/");
+        assert_eq!(esplora.name, "mempool");
+    }
+
+    #[test]
+    fn parse_custom_node_rejects_a_url_without_a_host() {
+        assert!(parse_electrum("ssl://:50002").is_err());
     }
 
     #[test]
