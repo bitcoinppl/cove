@@ -188,7 +188,7 @@ internal fun FeeBumpAlertDialog(manager: FeeBumpManager) {
                             manager.acknowledge(alert.warning)
                         },
                     ) {
-                        Text("Bump Anyway")
+                        Text("Speed Up Anyway")
                     }
                 },
                 dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } },

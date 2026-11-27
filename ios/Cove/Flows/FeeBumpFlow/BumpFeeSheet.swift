@@ -423,7 +423,7 @@ extension FeeBumpAlert: TaggedAlertPresentable {
                 title: warning.title,
                 message: warning.message,
                 actions: {
-                    Button("Bump Anyway") {
+                    Button("Speed Up Anyway") {
                         manager.alert = nil
                         manager.acknowledge(warning)
                     }

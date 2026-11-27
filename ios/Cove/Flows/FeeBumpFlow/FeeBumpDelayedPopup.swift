@@ -166,7 +166,7 @@ private struct FeeBumpPopupAlert: ViewModifier {
         case .continueFailed, .customRateFailed:
             Button("OK") { manager?.alert = nil }
         case let .feeWarning(warning):
-            Button("Bump Anyway") {
+            Button("Speed Up Anyway") {
                 manager?.alert = nil
                 manager?.acknowledge(warning)
             }
