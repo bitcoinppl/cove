@@ -353,12 +353,14 @@ struct WalletManagerCacheState: Equatable {
         return sendFlowManager
     }
 
-    /// Returns the wallet's send flow manager, creating it when the router shows a send route for
-    /// the wallet, or nil when none does
+    /// Returns the wallet's send flow manager, creating it when the router still shows the
+    /// requesting send route, or nil when it does not
     ///
     /// A send screen that is animating out still runs its tasks after the router dropped its
     /// route, and a manager it created there would outlive the flow with the unit and fiat mode
-    /// the wallet had then, which the next send screen reused
+    /// the wallet had then, which the next send screen reused. The check is for that screen's own
+    /// route, not any send for the wallet, so a screen another send replaced cannot close the new
+    /// send's manager or take over its presenter
     ///
     /// A route that starts a different kind of send than the cached manager serves gets a new
     /// manager: a normal send opened while coin control's list keeps its draft starts fresh, and
@@ -369,8 +371,8 @@ struct WalletManagerCacheState: Equatable {
         router: Router,
         for sendRoute: SendRoute
     ) throws -> SendFlowManager? {
-        guard router.containsSendRoute(for: walletManager.id) else {
-            logger.debug("no send route for \(walletManager.id), not creating a SendFlowManager")
+        guard router.contains(.send(sendRoute)) else {
+            logger.debug("send route for \(walletManager.id) is gone, not creating a SendFlowManager")
             return nil
         }
 
@@ -493,6 +495,10 @@ extension Router {
 
     var containsKeyTeleportRoute: Bool {
         self.default.isKeyTeleportRoute || routes.contains { $0.isKeyTeleportRoute }
+    }
+
+    func contains(_ route: Route) -> Bool {
+        self.default == route || routes.contains(route)
     }
 
     func containsSendRoute(for id: WalletId) -> Bool {

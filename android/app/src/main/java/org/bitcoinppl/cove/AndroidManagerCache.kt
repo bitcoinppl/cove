@@ -18,6 +18,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
+import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RustKeyTeleportManager
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.SendSessionKind
@@ -263,10 +264,12 @@ internal class AndroidManagerCache(
     }
 
     /**
-     * The send session for the wallet, or null when no send route for it is on the stack
+     * The send session for the wallet, or null when the requesting send route is not on the stack
      *
      * A screen whose route is already gone, such as one still running its setup while it leaves,
-     * must not create a session that the next send would reuse
+     * must not create a session that the next send would reuse. The check is for that screen's own
+     * route, not any send for the wallet, so a screen another send replaced cannot close the new
+     * send's manager or take over its presenter
      *
      * A route that starts a different kind of send than the cached manager serves gets a new
      * manager: a normal send opened while coin control's list keeps its draft starts fresh, and
@@ -283,8 +286,8 @@ internal class AndroidManagerCache(
         val servesRequestedKind = requestedKind == null || requestedKind == sendFlowSessionKind
 
         return when {
-            !routeStackContainsSendWallet(router.default, router.routes, wm.id) -> {
-                Log.d(tag, "no send route for ${wm.id}, not creating a SendFlowManager")
+            !routeStackContains(router.default, router.routes, Route.Send(sendRoute)) -> {
+                Log.d(tag, "send route for ${wm.id} is gone, not creating a SendFlowManager")
                 null
             }
 

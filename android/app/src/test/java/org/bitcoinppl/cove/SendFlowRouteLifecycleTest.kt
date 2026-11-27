@@ -82,6 +82,22 @@ class SendFlowRouteLifecycleTest {
     }
 
     @Test
+    fun aSendScreenAnotherSendReplacedNoLongerCountsAsOnTheStack() {
+        val walletId = "wallet-a"
+        val list = Route.CoinControl(CoinControlRoute.List(walletId))
+        val coinControlSend = Route.Send(SendRoute.CoinControlSetAmount(walletId, emptyList()))
+        val normalSend = Route.Send(SendRoute.SetAmount(walletId, null, null))
+        val linked = listOf(list, normalSend)
+
+        // the wallet still has a send open, but not the coin control screen that was replaced, so
+        // its late setup cannot take over the new send's session
+        assertTrue(routeStackContainsSendWallet(Route.SelectedWallet(walletId), linked, walletId))
+        assertFalse(routeStackContains(Route.SelectedWallet(walletId), linked, coinControlSend))
+        assertTrue(routeStackContains(Route.SelectedWallet(walletId), linked, normalSend))
+        assertTrue(routeStackContains(normalSend, emptyList(), normalSend))
+    }
+
+    @Test
     fun coinControlListKeepsItsSendFlowButCannotStartOne() {
         val walletId = "wallet-a"
         val backAtTheList = listOf(Route.CoinControl(CoinControlRoute.List(walletId)))

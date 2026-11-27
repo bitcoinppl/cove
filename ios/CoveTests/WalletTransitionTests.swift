@@ -672,6 +672,16 @@ extension WalletTransitionTests {
         // and the normal send keeps its own session across its screens
         let same = try cache.ensureSendFlowManager(walletManager, presenter: presenter, router: linked, for: normalSend)
         XCTAssertTrue(same === fresh)
+
+        // the replaced coin control screen finishing its setup late leaves the new send alone
+        XCTAssertNil(try cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: linked,
+            for: coinControlSend
+        ))
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === fresh)
+        XCTAssertTrue(fresh.canApplyReconcileMessages)
     }
 }
 
