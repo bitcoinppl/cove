@@ -286,13 +286,15 @@ coverage = [
 id = "s06-set-amount-ownership-note-clears-the-number-pad"
 section = "6"
 title = "Set Amount keeps the ownership note above the number pad while the amount is typed"
-platforms = ["ios"]
+platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
     "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/SendFlowSetAmountScreen.kt",
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/AddressOwnershipSendFullLaunchUITests.swift::testTheNoteStaysInSightWhileTheAmountIsTyped",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/AddressOwnershipSendFullLaunchTest.kt::noteStaysInSightWhileTheAmountIsTyped",
 ]
-# with no amount, a whole address moves the focus to the amount and the screen scrolls it to the top, so the note moves under the amount until the keyboard closes; the test checks the note and the amount clear the keyboard's toolbar
+# with no amount, a whole address moves the focus to the amount and the screen scrolls it to the top, so the note moves under the amount until the keyboard closes; the tests check the note clears the keyboard's toolbar on both platforms, and on iOS that the amount does too

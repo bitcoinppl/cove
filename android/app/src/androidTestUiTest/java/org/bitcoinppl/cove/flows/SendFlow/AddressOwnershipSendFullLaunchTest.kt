@@ -25,6 +25,7 @@ import org.bitcoinppl.cove.test.waitFor
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -121,6 +122,51 @@ class AddressOwnershipSendFullLaunchTest {
         device.waitFor(By.res("coinControl.continue")).click()
         wallet.enterAddress(OTHER_CHANGE_0)
         assertOwnershipNote("This address belongs to your wallet “$other”")
+    }
+
+    /**
+     * With no amount yet, a whole address moves the focus to the amount, and the note has to stay
+     * in sight above the keyboard while the amount is typed
+     */
+    @Test
+    fun noteStaysInSightWhileTheAmountIsTyped() {
+        node.reset()
+        node.fundWallet(TEST_MNEMONIC, listOf(0 to SATS_A))
+        node.mine()
+
+        launchFullApp()
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        wallet.selectSignetFakeNode()
+        FullLaunchOnboardingRobot(device)
+            .tapGetStarted()
+            .chooseExistingUser()
+            .useAnotherWallet()
+            .chooseSoftwareWallet()
+            .importKnownEmptyMainnetWalletWords()
+            .skipCloudBackupAfterImport()
+            .acceptTermsAfterImport()
+        wallet.waitForBalance(SATS_A)
+        val sender = requireNotNull(wallet.selectedWalletName()) { "the wallet has no name\n${device.hierarchy()}" }
+
+        // onboarding is done, so the soft keyboard can show beside the emulator's hardware one, as
+        // it does on a phone, which is the keyboard the note must stay above
+        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+
+        device.waitFor(By.text("Send")).click()
+        device.waitFor(By.res("sendFlow.amount"))
+        device.scrollTo(By.res("sendFlow.address")).click()
+        device.waitFor(By.res("sendFlow.address").focused(true))
+        device.findObject(By.res("sendFlow.address")).text = SENDER_RECEIVE_2
+        device.waitFor(By.res("sendFlow.amount").hasDescendant(By.focused(true)))
+
+        // a node the keyboard covers is left out of the accessibility tree, so a covered note never
+        // shows up here
+        assertOwnershipNote("This address belongs to this wallet, “$sender”")
+        device.waitForIdle()
+        val note = device.findObject(By.res(NOTE_TAG)).visibleBounds
+        val toolbar = device.findObject(By.res("sendFlow.keyboardToolbar"))?.visibleBounds
+        assertTrue("the keyboard closed, so this didn't check the note beside it", toolbar != null)
+        assertTrue("the keyboard toolbar covers the note: it lies at $note, the toolbar at $toolbar", note.bottom <= toolbar!!.top)
     }
 
     /**

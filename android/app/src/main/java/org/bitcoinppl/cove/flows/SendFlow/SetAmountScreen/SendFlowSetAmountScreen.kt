@@ -243,6 +243,11 @@ fun SendFlowSetAmountScreen(
                 val density = LocalDensity.current
                 val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
                 val showsKeyboardToolbar = isKeyboardVisible && focusedField == SendFocusField.Amount
+
+                // the keyboard covers the address while the amount is typed, so the note that the
+                // address is the user's own moves up under the amount
+                val ownershipMessage = sendFlowManager.addressOwnershipMessage
+                val notesUnderAmount = focusedField == SendFocusField.Amount
                 var keyboardToolbarHeight by remember { mutableIntStateOf(0) }
                 val keyboardToolbarPadding =
                     if (showsKeyboardToolbar) with(density) { keyboardToolbarHeight.toDp() } else 0.dp
@@ -316,11 +321,15 @@ fun SendFlowSetAmountScreen(
                                         }
                                 },
                             )
+                            if (notesUnderAmount && ownershipMessage != null) {
+                                AddressOwnershipNote(ownershipMessage)
+                                Spacer(Modifier.height(16.dp))
+                            }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                             EnterAddressView(
                                 onScanQr = onScanQr,
                                 initialAddress = initialAddress,
-                                ownershipMessage = sendFlowManager.addressOwnershipMessage,
+                                ownershipMessage = ownershipMessage.takeUnless { notesUnderAmount },
                                 onAddressChanged = { newAddress ->
                                     sendFlowManager.enteringAddress = newAddress
                                 },
