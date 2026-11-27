@@ -11,6 +11,7 @@ use arc_swap::ArcSwap;
 use backon::Retryable as _;
 use eyre::{Context as _, Result};
 use once_cell::sync::OnceCell;
+use tokio::sync::watch;
 use tracing::{debug, error, warn};
 
 /// Guard to prevent multiple concurrent background refresh tasks
@@ -20,7 +21,10 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage as AppMessage, Updater},
     database::Database,
 };
-use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed, MIN_FEE_RATE_SAT_PER_VB};
+use cove_types::fees::{
+    FeeRate, FeeRateOption, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed,
+    MIN_FEE_RATE_SAT_PER_VB,
+};
 
 const FEE_URL: &str = "https://mempool.space/api/v1/fees/recommended";
 
@@ -44,6 +48,11 @@ pub static FEE_CLIENT: LazyLock<FeeClient> = LazyLock::new(FeeClient::new);
 
 pub static FEES: LazyLock<ArcSwap<Option<CachedFeeResponse>>> =
     LazyLock::new(|| ArcSwap::from_pointee(None));
+
+/// The Medium rate of the cached fees, which wallets watch to judge again which of their
+/// pending sends are late, since only a send paying under it counts as delayed
+static CACHED_MEDIUM: LazyLock<watch::Sender<Option<FeeRate>>> =
+    LazyLock::new(|| watch::channel(None).0);
 
 pub struct FeeClient {
     /// Fixed fee endpoint; `None` uses mempool.space, or `COVE_FEE_URL` in debug builds
@@ -159,6 +168,35 @@ impl FeeClient {
 
         warn!("no usable cached fees found in memory or database");
         None
+    }
+
+    /// The last network rates the app fetched, from memory or the database, whatever their age
+    ///
+    /// Never fetches or starts a refresh, so a list can read it on every rebuild. A snapshot
+    /// hours old still tells a payment that is late from one that is just slow, where the send
+    /// flow, which builds with the rates, fetches fresh ones
+    pub fn cached_fee_rate_options(&self) -> Option<FeeRateOptions> {
+        self.cached_fees()?.fees.fee_rate_options().ok()
+    }
+
+    /// Changes each time the cached fees move to a different Medium rate
+    ///
+    /// Starts at the rate last published, so a subscriber that just read the cache can mark it
+    /// seen and wake only on a later change
+    pub fn watch_cached_medium(&self) -> watch::Receiver<Option<FeeRate>> {
+        CACHED_MEDIUM.subscribe()
+    }
+
+    /// When a transaction paying `fee_rate` should confirm, as "Estimated to confirm within
+    /// 30 minutes", from the cached network rates
+    ///
+    /// Uses the send flow's custom rate estimate, so it matches the time the fee screens showed
+    /// for the same rate. `None` with no cached rates
+    pub fn confirmation_estimate(&self, fee_rate: FeeRate) -> Option<String> {
+        let options = FeeRateOptionsWithTotalFee::without_totals(self.cached_fee_rate_options()?);
+        let speed = options.calculate_custom_fee_speed(fee_rate.sat_per_vb());
+
+        Some(confirmation_estimate_fmt(speed))
     }
 
     /// Get fees, using cache if available and fresh, otherwise fetching new
@@ -393,6 +431,39 @@ impl TryFrom<FeeResponse> for FeeRateOptions {
     }
 }
 
+/// "within" reads right for a time in minutes, but not for an open-ended one like "2+ hours"
+fn confirmation_estimate_fmt(speed: FeeSpeed) -> String {
+    let duration = speed.duration();
+    let within_an_hour = match speed {
+        FeeSpeed::Fast | FeeSpeed::Medium => true,
+        FeeSpeed::Slow => false,
+        FeeSpeed::Custom { duration_mins } => duration_mins <= 60,
+    };
+
+    if within_an_hour {
+        format!("Estimated to confirm within {duration}")
+    } else {
+        format!("Estimated to confirm in {duration}")
+    }
+}
+
+/// Tells the wallets watching the cached Medium rate when `fees`, now cached, moves it
+///
+/// Only new fees publish: loading the database snapshot into memory changes nothing a reader
+/// sees, since a read with nothing in memory falls back to that same snapshot
+fn publish_cached_medium(fees: FeeResponse) {
+    let medium = fees.fee_rate_options().ok().map(|options| options.medium.fee_rate);
+
+    CACHED_MEDIUM.send_if_modified(|current| {
+        if *current == medium {
+            return false;
+        }
+
+        *current = medium;
+        true
+    });
+}
+
 /// get and update fees
 pub async fn get_and_update_fees() -> Result<(), FeeClientError> {
     let fees = FEE_CLIENT.get_new_fees().await?.0;
@@ -406,6 +477,7 @@ fn update_fees(fees: FeeResponse) {
     let snapshot = FeeSnapshot::new(fees);
     let cached = CachedFeeResponse::from_fresh_snapshot(snapshot);
     FEES.swap(Arc::new(Some(cached)));
+    publish_cached_medium(fees);
     Updater::send_update(AppMessage::FeesChanged(fees));
 
     // persist to database
@@ -454,6 +526,40 @@ pub async fn fetch_and_update_fees_if_needed() -> Result<()> {
     update_fees(fees);
 
     Ok(())
+}
+
+/// Sets the cached fees in memory the way a fetch does, without touching the database
+#[cfg(test)]
+pub mod test_support {
+    use std::sync::Arc;
+
+    use super::{
+        CACHED_MEDIUM, CachedFeeResponse, FEES, FeeResponse, FeeSnapshot, publish_cached_medium,
+    };
+
+    /// Puts back the fees cached before [`cache_fees`] when dropped
+    pub struct CachedFeesGuard(Option<CachedFeeResponse>);
+
+    impl Drop for CachedFeesGuard {
+        fn drop(&mut self) {
+            FEES.swap(Arc::new(self.0));
+            match self.0 {
+                Some(previous) => publish_cached_medium(previous.fees),
+                None => {
+                    CACHED_MEDIUM.send_replace(None);
+                }
+            }
+        }
+    }
+
+    /// Caches `fees` as fresh, for tests that hold the global state test lock
+    pub fn cache_fees(fees: FeeResponse) -> CachedFeesGuard {
+        let previous = **FEES.load();
+        FEES.swap(Arc::new(Some(CachedFeeResponse::from_fresh_snapshot(FeeSnapshot::new(fees)))));
+        publish_cached_medium(fees);
+
+        CachedFeesGuard(previous)
+    }
 }
 
 #[cfg(test)]

@@ -22,6 +22,7 @@ use crate::{
     keys::Descriptor,
     multi_format::MultiFormatError,
     tap_card::tap_signer_reader::DeriveInfo,
+    transaction::{fee_bump::FeeBumpWallet, pending_send::PendingSendContext},
     xpub::XpubError,
 };
 use balance::Balance;
@@ -312,9 +313,17 @@ impl Wallet {
             })
             .flatten();
 
+        let fee_bump_wallet = FeeBumpWallet::from(&self.metadata);
+        let pending_send = if self.uses_persistent_storage() {
+            PendingSendContext::current(fee_bump_wallet)
+        } else {
+            PendingSendContext::without_rates(fee_bump_wallet)
+        };
+
         crate::transaction::Transaction::all_from_wallet(
             &self.bdk,
             db.as_ref().map(|db| &db.labels),
+            &pending_send,
         )
     }
 

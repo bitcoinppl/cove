@@ -15,7 +15,10 @@ use crate::{
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
-    transaction::{ConfirmedTransaction, Transaction, TransactionDetailsPresentation, TxId},
+    transaction::{
+        ConfirmedTransaction, Transaction, TransactionDetailsPresentation, TxId,
+        pending_send::PendingSendContext,
+    },
     transaction_watcher::TransactionWatcher,
     wallet::{
         AddressTypeSwitchMetadata, Wallet, WalletAddressType, balance::Balance,
@@ -24,6 +27,7 @@ use crate::{
 };
 pub(crate) mod fee_bump;
 mod node;
+mod pending_send;
 mod receive_address;
 mod scan;
 mod transaction_confirmation;
@@ -80,6 +84,9 @@ pub(crate) struct WalletActor {
     targeted_transaction_scans: transaction_confirmation::TargetedTransactionScans,
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
     receive_address_refresh_timer: Option<AbortableTask<()>>,
+
+    /// When the list rebuilds next because a pending send's status changes with time alone
+    pending_send_refresh_at: Option<u64>,
     scan_actor: Option<Addr<WalletScanActor>>,
     scan_generation: WalletScanGeneration,
     payjoin_actor: Option<Addr<PayjoinActor>>,
@@ -122,6 +129,7 @@ impl Actor for WalletActor {
     async fn started(&mut self, addr: Addr<Self>) -> ActorResult<()> {
         self.addr = addr.downgrade();
         self.spawn_scan_actor();
+        self.watch_cached_medium();
         send!(addr.check_node_connection());
         send!(addr.resume_payjoin_session());
         Produces::ok(())
@@ -425,6 +433,7 @@ impl WalletActor {
             targeted_transaction_scans: Default::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
+            pending_send_refresh_at: None,
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
             payjoin_actor: None,
@@ -482,13 +491,18 @@ impl WalletActor {
 
     #[act_zero_ext::into_actor_result]
     pub async fn transactions(&mut self) -> Vec<Transaction> {
-        let transactions = Transaction::all_from_wallet(&self.wallet.bdk, Some(&self.db.labels));
+        let pending_send = PendingSendContext::current(self.fee_bump_wallet());
+        let transactions =
+            Transaction::all_from_wallet(&self.wallet.bdk, Some(&self.db.labels), &pending_send);
 
         for tx in &transactions {
             if let Transaction::Unconfirmed(unconfirmed) = tx {
                 send!(self.addr.start_transaction_watcher(unconfirmed.txid.0));
             }
         }
+
+        let next_change = pending_send.next_change_at(&transactions);
+        self.schedule_pending_send_refresh(next_change, pending_send.now());
 
         transactions
     }

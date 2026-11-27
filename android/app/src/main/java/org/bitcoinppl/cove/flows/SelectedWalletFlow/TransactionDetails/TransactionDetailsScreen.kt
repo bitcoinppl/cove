@@ -33,6 +33,8 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.FeeBumpFlow.FeeBumpHost
+import org.bitcoinppl.cove.flows.FeeBumpFlow.rememberFeeBumpFiat
 import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove.ui.theme.ResetStatusBarToTheme
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
@@ -73,6 +75,9 @@ fun TransactionDetailsScreen(
             transactionDetailsPresentation.details()
         }
     val numberOfConfirmations = transactionDetailsPresentation.confirmations()?.toInt()
+    val pendingSend = remember(transactionDetailsPresentation) { transactionDetailsPresentation.pendingSend() }
+    val feeBumpFiat = rememberFeeBumpFiat(app, manager)
+    val previousFeeFiatFmt = transactionDetails.previousFee()?.let { feeBumpFiat(it.fee) }
     val lockState = manager.transactionLockStates[txId]
     var isRefreshing by remember { mutableStateOf(false) }
     var isUpdatingLockState by remember { mutableStateOf(false) }
@@ -249,6 +254,18 @@ fun TransactionDetailsScreen(
         )
     }
 
+    // details offer Speed Up, closing the sheet refreshes them in case the send confirmed meanwhile
+    FeeBumpHost(
+        app = app,
+        walletManager = manager,
+        onSheetClosed = {
+            scope.launch {
+                runCatchingCancellable("TransactionDetails", "error refreshing details") {
+                    refreshTransactionDetails()
+                }
+            }
+        },
+    ) {
     Scaffold(
         containerColor = bg,
         topBar = {
@@ -280,7 +297,9 @@ fun TransactionDetailsScreen(
             manager = manager,
             metadata = metadata,
             numberOfConfirmations = numberOfConfirmations,
+            pendingSend = pendingSend,
             feeFiatFmt = feeFiatFmt,
+            previousFeeFiatFmt = previousFeeFiatFmt,
             sentSansFeeFiatFmt = sentSansFeeFiatFmt,
             totalSpentFiatFmt = totalSpentFiatFmt,
             historicalFiatFmt = historicalFiatFmt,
@@ -311,5 +330,6 @@ fun TransactionDetailsScreen(
             onToggleTransactionLockState = ::toggleTransactionLockState,
             onRequestUnlockLockedUtxos = { showUnlockLockedUtxosConfirmation = true },
         )
+    }
     }
 }

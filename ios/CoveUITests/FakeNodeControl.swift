@@ -84,9 +84,11 @@ struct FakeNodeControl {
         return try decode(Funded.self, request("POST", "fund", body: body)).outputs
     }
 
-    func fundWallet(mnemonic: String, sats: [UInt64]) throws -> [FundedOutput] {
-        let outputs = sats.enumerated().map { index, sats in ["index": index, "sats": sats] as [String: Any] }
-        let body: [String: Any] = ["mnemonic": mnemonic, "outputs": outputs, "confirm": true]
+    /// Pays the mnemonic's receive addresses from `firstIndex` on, one amount each, leaving the
+    /// payments in the mempool unless `confirm`
+    func fundWallet(mnemonic: String, sats: [UInt64], firstIndex: Int = 0, confirm: Bool = true) throws -> [FundedOutput] {
+        let outputs = sats.enumerated().map { index, sats in ["index": firstIndex + index, "sats": sats] as [String: Any] }
+        let body: [String: Any] = ["mnemonic": mnemonic, "outputs": outputs, "confirm": confirm]
 
         return try decode(Funded.self, request("POST", "fund-wallet", body: body)).outputs
     }
@@ -113,7 +115,12 @@ struct FakeNodeControl {
     }
 
     func outspend(_ output: FundedOutput) throws -> Outspend {
-        try decode(Outspend.self, request("GET", "outspend/\(output.txid)/\(output.vout)"))
+        try outspend(outpoint: output.outpoint)
+    }
+
+    /// Who spends the output `txid:vout`, as a broadcast lists its inputs
+    func outspend(outpoint: String) throws -> Outspend {
+        try decode(Outspend.self, request("GET", "outspend/\(outpoint.replacingOccurrences(of: ":", with: "/"))"))
     }
 
     private func decode<T: Decodable>(_ type: T.Type, _ data: Data) throws -> T {

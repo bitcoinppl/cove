@@ -31,6 +31,10 @@ paths = ["ios/CoveUITests/BiometricLockFullLaunchUITests.swift"]
 suites = ["CoveUITests/BiometricLockFullLaunchUITests"]
 
 [[rule]]
+paths = ["ios/CoveUITests/FeeBumpFullLaunchUITests.swift"]
+suites = ["CoveUITests/FeeBumpFullLaunchUITests"]
+
+[[rule]]
 paths = ["ios/CoveUITests/HardwareSigningFullLaunchUITests.swift"]
 suites = ["CoveUITests/HardwareSigningFullLaunchUITests"]
 
@@ -185,6 +189,7 @@ suites = ["CoveUITests/BiometricLockFullLaunchUITests"]
 [[rule]]
 paths = ["ios/CoveUITests/HardwareWalletScreens.swift"]
 suites = [
+    "CoveUITests/FeeBumpFullLaunchUITests",
     "CoveUITests/ReceiveTextSizeFullLaunchUITests",
     "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
     "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",
@@ -211,6 +216,7 @@ suites = [
 [[rule]]
 paths = ["ios/CoveUITests/HardwareSignerControl.swift"]
 suites = [
+    "CoveUITests/FeeBumpFullLaunchUITests",
     "CoveUITests/ReceiveTextSizeFullLaunchUITests",
     "CoveUITests/WatchOnlyUpgradeFullLaunchUITests",
     "CoveUITests/NfcScanPrivacyCoverFullLaunchUITests",

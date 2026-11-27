@@ -28,6 +28,7 @@ import org.bitcoinppl.cove.test.SignedFrames
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
 import org.bitcoinppl.cove.test.clipboardText
+import org.bitcoinppl.cove.test.setClipboard
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.hierarchy
 import org.bitcoinppl.cove.test.launchFullApp
@@ -74,8 +75,6 @@ class HardwareSigningFullLaunchTest {
         // what the TAPSIGNER sheet shows when signing fails for any reason but the CVC
         const val SIGNING_FAILED = "Connection failed, please try again"
 
-        // what the clipboard holds until the export's Copy replaces it
-        const val CLIPBOARD_SENTINEL = "cove-test-clipboard-sentinel"
 
         // the fewest frames a drawn export should cycle through, so the test reads an animated QR
         const val DRAWN_EXPORT_MIN_PARTS = 3
@@ -148,15 +147,15 @@ class HardwareSigningFullLaunchTest {
         formatLabel: String,
     ) {
         val funded = fundTestWallet()
-        importWatchOnlyWallet()
+        screens.importWatchOnlyWallet(signer, qr, FUNDED_SATS.sum())
         startMaxDraft()
 
-        val signed = signer.sign(exportUnsignedPsbt(formatLabel), ANIMATED_PARTS)
+        val signed = signer.sign(screens.exportUnsignedPsbt(formatLabel), ANIMATED_PARTS)
         val animated = frames(signed)
         assertTrue("the signature must be an animated QR", animated.size > 1)
 
         // the camera can catch an animated QR at any frame, so feed them out of order
-        openSignatureScanner()
+        screens.openSignatureScanner()
         qr.show(animated.reversed())
 
         assertConfirmationScreen()
@@ -171,15 +170,15 @@ class HardwareSigningFullLaunchTest {
     @Test
     fun partialBbqrFramesShowProgressUntilTheRestArrive() {
         fundTestWallet()
-        importWatchOnlyWallet()
+        screens.importWatchOnlyWallet(signer, qr, FUNDED_SATS.sum())
         startMaxDraft()
 
-        val frames = signer.sign(exportUnsignedPsbt("BBQr"), ANIMATED_PARTS).bbqr
+        val frames = signer.sign(screens.exportUnsignedPsbt("BBQr"), ANIMATED_PARTS).bbqr
         val total = frames.size
         assertTrue(total >= 3)
 
         // two frames in, the scanner shows how far it got and stays open
-        openSignatureScanner()
+        screens.openSignatureScanner()
         qr.show(frames.take(2))
         waitForScanProgress("Scanned 2 of $total")
         waitForScanProgress("${total - 2} parts left")
@@ -199,26 +198,26 @@ class HardwareSigningFullLaunchTest {
     @Test
     fun signaturesThatMatchNoDraftAreRejected() {
         fundTestWallet()
-        importWatchOnlyWallet()
+        screens.importWatchOnlyWallet(signer, qr, FUNDED_SATS.sum())
 
         // sign a draft, then delete it
         startMaxDraft()
-        val deleted = signer.sign(exportUnsignedPsbt("UR"), 1)
+        val deleted = signer.sign(screens.exportUnsignedPsbt("UR"), 1)
         deleteDraft()
 
         // a different draft, so the deleted one's signature can't match it
         startDraftOfHalfTheBalance()
 
-        openSignatureScanner()
+        screens.openSignatureScanner()
         qr.show(deleted.ur)
         assertNoUnsignedTransactionAlert()
 
-        openSignatureScanner()
+        screens.openSignatureScanner()
         qr.show(signer.unrelatedSignedPsbt("signet", 3).ur)
         assertNoUnsignedTransactionAlert()
 
         // nothing checks a PSBT's network, so a mainnet one is just another unknown transaction
-        openSignatureScanner()
+        screens.openSignatureScanner()
         qr.show(signer.unrelatedSignedPsbt("bitcoin", 3).bbqr)
         assertNoUnsignedTransactionAlert()
 
@@ -330,27 +329,6 @@ class HardwareSigningFullLaunchTest {
         wallet.selectSignetFakeNode()
     }
 
-    /** Imports the test mnemonic's account as a watch-only hardware wallet by scanning its export */
-    private fun importWatchOnlyWallet() {
-        launchSignetApp()
-        FullLaunchOnboardingRobot(device)
-            .tapGetStarted()
-            .chooseExistingUser()
-            .useAnotherWallet()
-            .chooseHardwareWallet()
-            .openHardwareQrScanner()
-
-        val (external, internal) = signer.watchOnlyDescriptors()
-        qr.show(listOf("$external\n$internal"))
-
-        device.waitFor(By.text("Protect this hardware wallet with Cloud Backup?"), timeoutMs = 30_000L)
-        FullLaunchOnboardingRobot(device)
-            .skipCloudBackupAfterImport()
-            .acceptTermsAfterImport()
-
-        wallet.waitForBalance(FUNDED_SATS.sum())
-    }
-
     /** TAPSIGNER import starts from Add Wallet, which needs onboarding finished first */
     private fun importTestMnemonicToFinishOnboarding() {
         FullLaunchOnboardingRobot(device)
@@ -377,40 +355,6 @@ class HardwareSigningFullLaunchTest {
         wallet.startSend()
         wallet.enterAmount(BigDecimal(FUNDED_SATS.sum() / 2).movePointLeft(8).toPlainString())
         wallet.clickNext(expecting = By.text("Import Signature"))
-    }
-
-    /** Shows the draft as an animated QR in the format, then copies the unsigned PSBT */
-    private fun exportUnsignedPsbt(formatLabel: String): String {
-        device.waitFor(By.text("Export Transaction")).click()
-        device.waitFor(By.text("QR Code")).click()
-        device.waitFor(By.text("Scan this QR"), timeoutMs = 15_000L)
-
-        // a small PSBT can fit in one BBQr frame, which shows no frame counter
-        device.waitFor(By.text(formatLabel)).click()
-        device.waitFor(By.desc("QR code for transaction signing"))
-
-        // the clipboard can still hold text from an earlier step or test, such as a receive address,
-        // and the app handles the tap asynchronously, so a read right after it can still see that
-        // text; a sentinel shows when Copy has written, even when it writes the same text again
-        setClipboard(CLIPBOARD_SENTINEL)
-        device.waitFor(By.desc("Copy")).click()
-        wallet.waitUntil("the export's Copy never reached the clipboard", timeoutMs = 5_000L) {
-            clipboardText() != CLIPBOARD_SENTINEL
-        }
-
-        val psbt = clipboardText().trim()
-        assertTrue("the Copy button copied nothing", psbt.isNotEmpty())
-
-        device.pressBack()
-        device.waitFor(By.text("Import Signature"))
-
-        return psbt
-    }
-
-    private fun openSignatureScanner() {
-        device.waitFor(By.text("Import Signature")).click()
-        device.waitFor(By.text("QR")).click()
-        device.waitFor(By.text("Scan QR Code"))
     }
 
     private fun deleteDraft() {
@@ -518,14 +462,6 @@ class HardwareSigningFullLaunchTest {
 
     // MARK: clipboard
 
-    private fun setClipboard(text: String) {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.runOnMainSync {
-            val clipboard = instrumentation.targetContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("signed PSBT", text))
-        }
-    }
-
     private fun hex(base64: String): String = Base64.decode(base64, Base64.DEFAULT).joinToString("") { "%02x".format(it) }
 
     // MARK: drawn export frames
@@ -550,10 +486,10 @@ class HardwareSigningFullLaunchTest {
         framePrefix: String,
     ) {
         val funded = fundTestWallet()
-        importWatchOnlyWallet()
+        screens.importWatchOnlyWallet(signer, qr, FUNDED_SATS.sum())
         startMaxDraft()
 
-        val copied = exportUnsignedPsbt(formatLabel)
+        val copied = screens.exportUnsignedPsbt(formatLabel)
 
         openExportSheet(formatLabel)
         val shownParts = lowerDensityUntilAnimated()
@@ -585,7 +521,7 @@ class HardwareSigningFullLaunchTest {
         assertEquals("the drawn frames carry a different PSBT than Copy", copied.lowercase(), drawn.psbt)
 
         val signed = signer.sign(drawn.psbt, ANIMATED_PARTS)
-        openSignatureScanner()
+        screens.openSignatureScanner()
         qr.show(frames(signed).reversed())
 
         assertConfirmationScreen()

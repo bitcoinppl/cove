@@ -37,7 +37,11 @@ use crate::{
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
     node::{Node, client::NodeClient},
-    transaction::{FeeRate, Transaction, TransactionDetails, TransactionDetailsPresentation, TxId},
+    transaction::{
+        FeeRate, SentAndReceived, Transaction, TransactionDetails, TransactionDetailsPresentation,
+        TransactionDirection, TxId,
+        pending_send::{PendingSendContext, PendingSendStatus},
+    },
     wallet::Address,
     wallet_secret::WalletSecretExt as _,
 };
@@ -1212,7 +1216,9 @@ impl WalletActor {
             return Ok(None);
         };
 
-        let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
+        let sent_and_received: SentAndReceived =
+            self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
+
         let labels = self
             .db
             .labels
@@ -1220,7 +1226,27 @@ impl WalletActor {
             .map_err_str(Error::TransactionDetailsError)?
             .into();
 
-        Ok(Some(Transaction::new_with_labels(sent_and_received, tx, labels)))
+        let context = PendingSendContext::current(self.fee_bump_wallet());
+        let pending_send = self.pending_send_status(&context, &tx, sent_and_received.direction);
+
+        Ok(Some(Transaction::new_with_labels(
+            sent_and_received,
+            tx,
+            labels,
+            &context,
+            pending_send,
+        )))
+    }
+
+    /// The status of `tx` when it is a pending payment this wallet sent
+    fn pending_send_status(
+        &self,
+        context: &PendingSendContext,
+        tx: &bdk_wallet::WalletTx<'_>,
+        direction: TransactionDirection,
+    ) -> Option<PendingSendStatus> {
+        let bdk = &self.wallet.bdk;
+        context.status(bdk, tx, direction, |txid| bdk.get_tx(txid).is_some())
     }
 
     pub(crate) fn transaction_details_for_tx_id(
@@ -1249,7 +1275,12 @@ impl WalletActor {
         let details = self.transaction_details_for_tx_id(tx_id)?;
         let current_height = self.current_confirmation_height();
 
-        Ok(TransactionDetailsPresentation::new(details, current_height))
+        let context = PendingSendContext::current(self.fee_bump_wallet());
+        let pending_send = self.wallet.bdk.get_tx(tx_id.0).and_then(|tx| {
+            self.pending_send_status(&context, &tx, details.sent_and_received.direction)
+        });
+
+        Ok(TransactionDetailsPresentation::new(details, current_height, pending_send))
     }
 
     fn current_confirmation_height(&mut self) -> u32 {

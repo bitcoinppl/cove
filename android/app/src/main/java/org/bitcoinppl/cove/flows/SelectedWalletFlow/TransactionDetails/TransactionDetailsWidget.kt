@@ -19,11 +19,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ internal fun TransactionDetailsWidget(
     transactionDetails: TransactionDetails,
     numberOfConfirmationsFmt: String?,
     feeFiatFmt: String?,
+    previousFeeFiatFmt: String?,
     sentSansFeeFiatFmt: String?,
     totalSpentFiatFmt: String?,
     historicalFiatFmt: String?,
@@ -55,6 +58,7 @@ internal fun TransactionDetailsWidget(
     val fg = MaterialTheme.colorScheme.onBackground
     val isSent = transactionDetails.isSent()
     val isConfirmed = transactionDetails.isConfirmed()
+    val previousFee = remember(transactionDetails) { transactionDetails.previousFee() }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(48.dp))
@@ -148,12 +152,20 @@ internal fun TransactionDetailsWidget(
                         .background(dividerColor),
             )
             Spacer(Modifier.height(24.dp))
+            previousFee?.let { PreviousFeeDetails(it, metadata.selectedUnit, previousFeeFiatFmt) }
+
             DetailsWidget(
-                label = stringResource(R.string.label_network_fee),
+                label =
+                    if (previousFee == null) {
+                        stringResource(R.string.label_network_fee)
+                    } else {
+                        "New Network Fee"
+                    },
                 primary = transactionDetails.feeFmt(unit = metadata.selectedUnit),
                 secondary = feeFiatFmt,
                 showInfoIcon = true,
                 onInfoClick = { /* TODO: show fee info */ },
+                modifier = Modifier.testTag("transactionDetails.networkFee"),
             )
             Spacer(Modifier.height(24.dp))
 
@@ -179,6 +191,15 @@ internal fun TransactionDetailsWidget(
                 secondary = totalSpentFiatFmt,
                 isTotal = true,
             )
+
+            // one earlier fee already shows as the previous fee, a list only helps beyond that
+            if (transactionDetails.feeHistory().size > 1) {
+                FeeHistoryDetails(transactionDetails, metadata.selectedUnit, dividerColor)
+            }
+
+            if (transactionDetails.isPendingFeeBump) {
+                FeeBumpPendingFooterNote()
+            }
 
             // fiat price section for sent transactions
             if (isConfirmed) {
@@ -217,6 +238,7 @@ internal fun DetailsWidget(
     isTotal: Boolean = false,
     showInfoIcon: Boolean = false,
     onInfoClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     if (primary == null) return
     val sub = MaterialTheme.colorScheme.onSurfaceVariant
@@ -226,7 +248,7 @@ internal fun DetailsWidget(
     val primaryColor = if (isTotal) fg else sub
 
     KeyValueRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         labelWeight = 1f,
         valueWeight = null,
         verticalAlignment = Alignment.Top,

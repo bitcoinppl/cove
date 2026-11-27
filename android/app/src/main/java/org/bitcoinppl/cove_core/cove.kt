@@ -1151,6 +1151,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_passkey_request_may_present(
     ): Short
+    external fun uniffi_cove_checksum_func_fee_bump_broadcast(
+    ): Short
     external fun uniffi_cove_checksum_func_send_flow_alert_state_from_address_error(
     ): Short
     external fun uniffi_cove_checksum_func_balance_presentation_provisional(
@@ -1713,6 +1715,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_wallet_id(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_fee_bump_context(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_new_fee_bump_manager(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_address_at(
@@ -1957,11 +1961,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_unconfirmedtransaction_fiat_amount(
     ): Short
+    external fun uniffi_cove_checksum_method_unconfirmedtransaction_first_seen(
+    ): Short
     external fun uniffi_cove_checksum_method_unconfirmedtransaction_id(
     ): Short
     external fun uniffi_cove_checksum_method_unconfirmedtransaction_label(
     ): Short
     external fun uniffi_cove_checksum_method_unconfirmedtransaction_last_seen(
+    ): Short
+    external fun uniffi_cove_checksum_method_unconfirmedtransaction_pending_send(
     ): Short
     external fun uniffi_cove_checksum_method_unconfirmedtransaction_sent_and_received(
     ): Short
@@ -1991,13 +1999,21 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_confirmation_date_time(
     ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_confirmation_estimate(
+    ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_display_amount(
+    ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_fee(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt_cached(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_fee_fmt(
+    ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_fee_history(
+    ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_fee_rate(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt(
     ): Short
@@ -2010,6 +2026,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_transactiondetails_is_received(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_is_sent(
+    ): Short
+    external fun uniffi_cove_checksum_method_transactiondetails_previous_fee(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt(
     ): Short
@@ -2026,6 +2044,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_transactiondetailspresentation_confirmations(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetailspresentation_details(
+    ): Short
+    external fun uniffi_cove_checksum_method_transactiondetailspresentation_pending_send(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetailspresentation_tx_id(
     ): Short
@@ -2970,6 +2990,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_constructor_rustwalletmanager_try_new_from_xpub(`xpub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_fee_bump_context(`ptr`: Long,`details`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_new_fee_bump_manager(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_address_at(`ptr`: Long,`index`: Int,
@@ -3302,12 +3324,16 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_unconfirmedtransaction_fiat_amount(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_unconfirmedtransaction_first_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
     external fun uniffi_cove_fn_method_unconfirmedtransaction_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_method_unconfirmedtransaction_label(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_unconfirmedtransaction_last_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_unconfirmedtransaction_pending_send(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_unconfirmedtransaction_sent_and_received(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_clone_bitcointransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3360,13 +3386,21 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_confirmation_date_time(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_transactiondetails_confirmation_estimate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_display_amount(`ptr`: Long,`metadata`: RustBuffer.ByValue,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_transactiondetails_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_transactiondetails_fee_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_fee_fmt(`ptr`: Long,`unit`: RustBufferBitcoinUnit.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_transactiondetails_fee_history(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_transactiondetails_fee_rate(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_historical_fiat_fmt(`ptr`: Long,
     ): Long
@@ -3380,6 +3414,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_transactiondetails_is_sent(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_transactiondetails_previous_fee(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt(`ptr`: Long,
     ): Long
     external fun uniffi_cove_fn_method_transactiondetails_sent_sans_fee_fiat_fmt_cached(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3408,6 +3444,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetailspresentation_details(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_transactiondetailspresentation_pending_send(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_transactiondetailspresentation_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_clone_unsignedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3632,6 +3670,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_coincontrollistsortkey_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_feebumppayment_amounttaken(`ptr`: RustBuffer.ByValue,`option`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_feebumppayment_recipientamount(`ptr`: RustBuffer.ByValue,`option`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_feebumprateerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_feebumpunavailable_usermessage(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_importwalleterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3708,6 +3752,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_bitcointransactionerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_pendingsendstatus_elapsedfmt(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_pendingsendstatus_isbumpable(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_pendingsendstatus_isdelayed(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_transactiondetailerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_walletaddresstype_sortorder(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3755,6 +3805,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_cloudbackupscreen_listed_row(`ptr`: RustBuffer.ByValue,`recordId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_cloudbackupscreen_row_action(`ptr`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_feebumpbroadcast_confirmation_estimate(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_walletmetadata_ident_or_fingerprint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3816,6 +3868,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_passkey_request_may_present(uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_func_fee_bump_broadcast(`txId`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_send_flow_alert_state_from_address_error(`error`: RustBufferAddressError.ByValue,`address`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_balance_presentation_provisional(uniffi_out_err: UniffiRustCallStatus,
@@ -4093,6 +4147,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_passkey_request_may_present() != 31752.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_fee_bump_broadcast() != 30057.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_send_flow_alert_state_from_address_error() != 5267.toShort()) {
@@ -4797,7 +4854,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_state() != 43225.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustfeebumpmanager_custom_fee_option() != 63599.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustfeebumpmanager_custom_fee_option() != 13724.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustfeebumpmanager_dispatch() != 42929.toShort()) {
@@ -4936,6 +4993,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_wallet_id() != 54313.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_fee_bump_context() != 488.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_fee_bump_manager() != 49383.toShort()) {
@@ -5304,6 +5364,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_unconfirmedtransaction_fiat_amount() != 6476.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_unconfirmedtransaction_first_seen() != 49184.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_unconfirmedtransaction_id() != 59603.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5311,6 +5374,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_unconfirmedtransaction_last_seen() != 42072.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_unconfirmedtransaction_pending_send() != 24968.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_unconfirmedtransaction_sent_and_received() != 7072.toShort()) {
@@ -5355,7 +5421,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_transactiondetails_confirmation_date_time() != 59432.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_confirmation_estimate() != 31677.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_transactiondetails_display_amount() != 46360.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_fee() != 1840.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fiat_fmt() != 57101.toShort()) {
@@ -5365,6 +5437,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_fee_fmt() != 45494.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_history() != 27019.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_fee_rate() != 35108.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_historical_fiat_fmt() != 9571.toShort()) {
@@ -5383,6 +5461,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_is_sent() != 49296.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetails_previous_fee() != 10288.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_sent_sans_fee_fiat_fmt() != 61624.toShort()) {
@@ -5407,6 +5488,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetailspresentation_details() != 37876.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_transactiondetailspresentation_pending_send() != 26670.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetailspresentation_tx_id() != 2428.toShort()) {
@@ -22455,7 +22539,7 @@ public interface RustFeeBumpManagerInterface {
     /**
      * A custom rate with the replacement's total fee at it
      *
-     * Fails with [`FeeBumpError::FeeRateTooLow`] below the rate a node would accept
+     * Fails below the rate a node would accept, and above the rate the wallet can pay
      */
     suspend fun `customFeeOption`(`feeRate`: FeeRate): FeeRateOptionWithTotalFee
 
@@ -22578,9 +22662,9 @@ open class RustFeeBumpManager: Disposable, AutoCloseable, RustFeeBumpManagerInte
     /**
      * A custom rate with the replacement's total fee at it
      *
-     * Fails with [`FeeBumpError::FeeRateTooLow`] below the rate a node would accept
+     * Fails below the rate a node would accept, and above the rate the wallet can pay
      */
-    @Throws(FeeBumpException::class)
+    @Throws(FeeBumpRateException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `customFeeOption`(`feeRate`: FeeRate) : FeeRateOptionWithTotalFee {
         return uniffiRustCallAsync(
@@ -22597,7 +22681,7 @@ open class RustFeeBumpManager: Disposable, AutoCloseable, RustFeeBumpManagerInte
         // lift function
         { FfiConverterTypeFeeRateOptionWithTotalFee.lift(it) },
         // Error FFI converter
-        FeeBumpException.ErrorHandler,
+        FeeBumpRateException.ErrorHandler,
     )
     }
 
@@ -24691,6 +24775,16 @@ public object FfiConverterTypeRustSendFlowManager: FfiConverter<RustSendFlowMana
 public interface RustWalletManagerInterface {
 
     /**
+     * The pending payment the transaction in `details` replaces when it is a fee bump, with
+     * the fee that one paid, for the confirm screen to show it as a replacement
+     *
+     * Works for every way a transaction reaches the confirm screen: one built here, signed on
+     * a hardware wallet, or scanned back in. Ask before broadcasting and keep the answer,
+     * since once the replacement is broadcast nothing is left for it to replace
+     */
+    suspend fun `feeBumpContext`(`details`: ConfirmDetails): FeeBumpConfirmContext?
+
+    /**
      * A manager that speeds up the pending transaction `tx_id`, loading its options right away
      */
     fun `newFeeBumpManager`(`txId`: TxId): RustFeeBumpManager
@@ -25028,6 +25122,35 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         return uniffiRustCall() { status ->
             UniffiLib.uniffi_cove_fn_clone_rustwalletmanager(handle, status)
         }
+    }
+
+
+    /**
+     * The pending payment the transaction in `details` replaces when it is a fee bump, with
+     * the fee that one paid, for the confirm screen to show it as a replacement
+     *
+     * Works for every way a transaction reaches the confirm screen: one built here, signed on
+     * a hardware wallet, or scanned back in. Ask before broadcasting and keep the answer,
+     * since once the replacement is broadcast nothing is left for it to replace
+     */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `feeBumpContext`(`details`: ConfirmDetails) : FeeBumpConfirmContext? {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_fee_bump_context(
+                uniffiHandle,
+
+        FfiConverterTypeConfirmDetails.lower(`details`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterOptionalTypeFeeBumpConfirmContext.lift(it) },
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
+    )
     }
 
 
@@ -28441,13 +28564,37 @@ public interface TransactionDetailsInterface {
 
     fun `confirmationDateTime`(): kotlin.String?
 
+    /**
+     * When the pending transaction should confirm at its rate, as "Estimated to confirm
+     * within 30 minutes", from the cached network rates
+     *
+     * `None` once it confirms, or with no rate or cached network rates
+     */
+    fun `confirmationEstimate`(): kotlin.String?
+
     fun `displayAmount`(`metadata`: WalletMetadata, `showUnit`: kotlin.Boolean = true): kotlin.String
+
+    /**
+     * The fee it pays, `None` when the wallet can't work it out
+     */
+    fun `fee`(): Amount?
 
     suspend fun `feeFiatFmt`(): kotlin.String
 
     fun `feeFiatFmtCached`(): kotlin.String?
 
     fun `feeFmt`(`unit`: BitcoinUnit): kotlin.String?
+
+    /**
+     * Every fee this payment paid before fee bumps replaced it, oldest first, kept once it
+     * confirms
+     */
+    fun `feeHistory`(): List<PreviousFee>
+
+    /**
+     * The rate it pays, `None` when the wallet can't work it out
+     */
+    fun `feeRate`(): FeeRate?
 
     /**
      * Historical fiat value at time of transaction - async version (fetches from API if not cached)
@@ -28472,6 +28619,11 @@ public interface TransactionDetailsInterface {
     fun `isReceived`(): kotlin.Boolean
 
     fun `isSent`(): kotlin.Boolean
+
+    /**
+     * The fee it paid just before the current one, `None` when it was never fee bumped
+     */
+    fun `previousFee`(): PreviousFee?
 
     suspend fun `sentSansFeeFiatFmt`(): kotlin.String
 
@@ -28736,6 +28888,25 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     }
 
 
+
+    /**
+     * When the pending transaction should confirm at its rate, as "Estimated to confirm
+     * within 30 minutes", from the cached network rates
+     *
+     * `None` once it confirms, or with no rate or cached network rates
+     */override fun `confirmationEstimate`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_confirmation_estimate(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
     override fun `displayAmount`(`metadata`: WalletMetadata, `showUnit`: kotlin.Boolean): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -28745,6 +28916,22 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
 
         FfiConverterTypeWalletMetadata.lower(`metadata`),
         FfiConverterBoolean.lower(`showUnit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The fee it pays, `None` when the wallet can't work it out
+     */override fun `fee`(): Amount? {
+            return FfiConverterOptionalTypeAmount.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_fee(
+        it,
+        _status)
 }
     }
     )
@@ -28793,6 +28980,39 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
         it,
 
         FfiConverterTypeBitcoinUnit.lower(`unit`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Every fee this payment paid before fee bumps replaced it, oldest first, kept once it
+     * confirms
+     */override fun `feeHistory`(): List<PreviousFee> {
+            return FfiConverterSequenceTypePreviousFee.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_history(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The rate it pays, `None` when the wallet can't work it out
+     */override fun `feeRate`(): FeeRate? {
+            return FfiConverterOptionalTypeFeeRate.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_fee_rate(
+        it,
+        _status)
 }
     }
     )
@@ -28889,6 +29109,22 @@ open class TransactionDetails: Disposable, AutoCloseable, TransactionDetailsInte
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetails_is_sent(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The fee it paid just before the current one, `None` when it was never fee bumped
+     */override fun `previousFee`(): PreviousFee? {
+            return FfiConverterOptionalTypePreviousFee.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetails_previous_fee(
         it,
         _status)
 }
@@ -29199,6 +29435,11 @@ public interface TransactionDetailsPresentationInterface {
     fun `details`(): TransactionDetails
 
     /**
+     * How the transaction is doing when it is a pending payment this wallet sent
+     */
+    fun `pendingSend`(): PendingSendStatus?
+
+    /**
      * Returns the transaction identifier
      */
     fun `txId`(): TxId
@@ -29334,6 +29575,22 @@ open class TransactionDetailsPresentation: Disposable, AutoCloseable, Transactio
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_transactiondetailspresentation_details(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * How the transaction is doing when it is a pending payment this wallet sent
+     */override fun `pendingSend`(): PendingSendStatus? {
+            return FfiConverterOptionalTypePendingSendStatus.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_transactiondetailspresentation_pending_send(
         it,
         _status)
 }
@@ -29550,11 +29807,21 @@ public interface UnconfirmedTransactionInterface {
 
     fun `fiatAmount`(): FiatAmount?
 
+    /**
+     * When the wallet first saw it, in unix seconds
+     */
+    fun `firstSeen`(): kotlin.ULong
+
     fun `id`(): TxId
 
     fun `label`(): kotlin.String
 
     fun `lastSeen`(): kotlin.ULong
+
+    /**
+     * How it is doing when this wallet sent it, `None` for a payment it received
+     */
+    fun `pendingSend`(): PendingSendStatus?
 
     fun `sentAndReceived`(): SentAndReceived
 
@@ -29675,6 +29942,22 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
     }
 
 
+
+    /**
+     * When the wallet first saw it, in unix seconds
+     */override fun `firstSeen`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_first_seen(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
     override fun `id`(): TxId {
             return FfiConverterTypeTxId.lift(
     callWithHandle {
@@ -29706,6 +29989,22 @@ open class UnconfirmedTransaction: Disposable, AutoCloseable, UnconfirmedTransac
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_last_seen(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * How it is doing when this wallet sent it, `None` for a payment it received
+     */override fun `pendingSend`(): PendingSendStatus? {
+            return FfiConverterOptionalTypePendingSendStatus.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_unconfirmedtransaction_pending_send(
         it,
         _status)
 }
@@ -36105,6 +36404,149 @@ public object FfiConverterTypeDiagnosticsSubmission: FfiConverterRustBuffer<Diag
 
 
 /**
+ * A fee bump's replacement once it was broadcast, which the Sped Up screen shows
+ *
+ * The confirm screen shows it in place rather than pushing another route: a push made as the
+ * broadcast's wallet updates redraw the screens below can be dropped by the navigation stack,
+ * leaving the user on a confirm screen that already sent
+ */
+data class FeeBumpBroadcast (
+    var `txId`: TxId
+    ,
+    var `fee`: Amount
+    ,
+    var `feeRate`: FeeRate
+
+): Disposable{
+
+    /**
+     * When the replacement should confirm, as "Estimated to confirm within 30 minutes", from
+     * the current network rates, `None` while none are cached
+     */ fun `confirmationEstimate`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_feebumpbroadcast_confirmation_estimate(FfiConverterTypeFeeBumpBroadcast.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`txId`,
+        this.`fee`,
+        this.`feeRate`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeBumpBroadcast: FfiConverterRustBuffer<FeeBumpBroadcast> {
+    override fun read(buf: ByteBuffer): FeeBumpBroadcast {
+        return FeeBumpBroadcast(
+            FfiConverterTypeTxId.read(buf),
+            FfiConverterTypeAmount.read(buf),
+            FfiConverterTypeFeeRate.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FeeBumpBroadcast) = (
+            FfiConverterTypeTxId.allocationSize(value.`txId`) +
+            FfiConverterTypeAmount.allocationSize(value.`fee`) +
+            FfiConverterTypeFeeRate.allocationSize(value.`feeRate`)
+    )
+
+    override fun write(value: FeeBumpBroadcast, buf: ByteBuffer) {
+            FfiConverterTypeTxId.write(value.`txId`, buf)
+            FfiConverterTypeAmount.write(value.`fee`, buf)
+            FfiConverterTypeFeeRate.write(value.`feeRate`, buf)
+    }
+}
+
+
+
+/**
+ * Shown on the confirm screen when the transaction being signed replaces a pending one
+ */
+data class FeeBumpConfirmContext (
+    /**
+     * The pending transaction the signed one takes the place of
+     */
+    var `replaces`: TxId
+    ,
+    var `previousFee`: Amount
+    ,
+    var `previousFeeRate`: FeeRate
+    ,
+    /**
+     * How much less the recipient receives than the pending transaction paid them, when the
+     * higher fee comes out of the amount sent
+     */
+    var `recipientReceivesLess`: Amount?
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`replaces`,
+        this.`previousFee`,
+        this.`previousFeeRate`,
+        this.`recipientReceivesLess`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeBumpConfirmContext: FfiConverterRustBuffer<FeeBumpConfirmContext> {
+    override fun read(buf: ByteBuffer): FeeBumpConfirmContext {
+        return FeeBumpConfirmContext(
+            FfiConverterTypeTxId.read(buf),
+            FfiConverterTypeAmount.read(buf),
+            FfiConverterTypeFeeRate.read(buf),
+            FfiConverterOptionalTypeAmount.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FeeBumpConfirmContext) = (
+            FfiConverterTypeTxId.allocationSize(value.`replaces`) +
+            FfiConverterTypeAmount.allocationSize(value.`previousFee`) +
+            FfiConverterTypeFeeRate.allocationSize(value.`previousFeeRate`) +
+            FfiConverterOptionalTypeAmount.allocationSize(value.`recipientReceivesLess`)
+    )
+
+    override fun write(value: FeeBumpConfirmContext, buf: ByteBuffer) {
+            FfiConverterTypeTxId.write(value.`replaces`, buf)
+            FfiConverterTypeAmount.write(value.`previousFee`, buf)
+            FfiConverterTypeFeeRate.write(value.`previousFeeRate`, buf)
+            FfiConverterOptionalTypeAmount.write(value.`recipientReceivesLess`, buf)
+    }
+}
+
+
+
+/**
  * A replacement fee the user should confirm before signing, as a new send warns
  */
 data class FeeBumpFeeWarning (
@@ -36191,6 +36633,11 @@ data class FeeBumpOptions (
      * minimum rate instead
      */
     var `feeOptions`: FeeRateOptionsWithTotalFee
+    ,
+    /**
+     * Where the higher fee comes from, which the screens explain
+     */
+    var `payment`: FeeBumpPayment
 
 ): Disposable{
 
@@ -36205,7 +36652,8 @@ data class FeeBumpOptions (
         this.`originalFee`,
         this.`originalFeeRate`,
         this.`minimumFeeRate`,
-        this.`feeOptions`
+        this.`feeOptions`,
+        this.`payment`
     )
     }
 
@@ -36222,6 +36670,7 @@ public object FfiConverterTypeFeeBumpOptions: FfiConverterRustBuffer<FeeBumpOpti
             FfiConverterTypeFeeRate.read(buf),
             FfiConverterTypeFeeRate.read(buf),
             FfiConverterTypeFeeRateOptionsWithTotalFee.read(buf),
+            FfiConverterTypeFeeBumpPayment.read(buf),
         )
     }
 
@@ -36229,7 +36678,8 @@ public object FfiConverterTypeFeeBumpOptions: FfiConverterRustBuffer<FeeBumpOpti
             FfiConverterTypeAmount.allocationSize(value.`originalFee`) +
             FfiConverterTypeFeeRate.allocationSize(value.`originalFeeRate`) +
             FfiConverterTypeFeeRate.allocationSize(value.`minimumFeeRate`) +
-            FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.`feeOptions`)
+            FfiConverterTypeFeeRateOptionsWithTotalFee.allocationSize(value.`feeOptions`) +
+            FfiConverterTypeFeeBumpPayment.allocationSize(value.`payment`)
     )
 
     override fun write(value: FeeBumpOptions, buf: ByteBuffer) {
@@ -36237,6 +36687,7 @@ public object FfiConverterTypeFeeBumpOptions: FfiConverterRustBuffer<FeeBumpOpti
             FfiConverterTypeFeeRate.write(value.`originalFeeRate`, buf)
             FfiConverterTypeFeeRate.write(value.`minimumFeeRate`, buf)
             FfiConverterTypeFeeRateOptionsWithTotalFee.write(value.`feeOptions`, buf)
+            FfiConverterTypeFeeBumpPayment.write(value.`payment`, buf)
     }
 }
 
@@ -37392,6 +37843,62 @@ public object FfiConverterTypePendingWalletSaveResult: FfiConverterRustBuffer<Pe
     override fun write(value: PendingWalletSaveResult, buf: ByteBuffer) {
             FfiConverterTypeWalletMetadata.write(value.`metadata`, buf)
             FfiConverterSequenceTypeRoute.write(value.`routes`, buf)
+    }
+}
+
+
+
+/**
+ * A fee an earlier version of a payment paid before a fee bump replaced it
+ */
+data class PreviousFee (
+    var `txId`: TxId
+    ,
+    var `fee`: Amount
+    ,
+    var `feeRate`: FeeRate
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`txId`,
+        this.`fee`,
+        this.`feeRate`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePreviousFee: FfiConverterRustBuffer<PreviousFee> {
+    override fun read(buf: ByteBuffer): PreviousFee {
+        return PreviousFee(
+            FfiConverterTypeTxId.read(buf),
+            FfiConverterTypeAmount.read(buf),
+            FfiConverterTypeFeeRate.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PreviousFee) = (
+            FfiConverterTypeTxId.allocationSize(value.`txId`) +
+            FfiConverterTypeAmount.allocationSize(value.`fee`) +
+            FfiConverterTypeFeeRate.allocationSize(value.`feeRate`)
+    )
+
+    override fun write(value: PreviousFee, buf: ByteBuffer) {
+            FfiConverterTypeTxId.write(value.`txId`, buf)
+            FfiConverterTypeAmount.write(value.`fee`, buf)
+            FfiConverterTypeFeeRate.write(value.`feeRate`, buf)
     }
 }
 
@@ -54414,6 +54921,22 @@ sealed class FeeBumpManagerReconcileMessage: Disposable  {
         companion object
     }
 
+    /**
+     * The replacement is built, and the route confirms or exports it
+     *
+     * The screen pushes it itself once it has closed: a sheet still sliding away while a push
+     * animates can leave the navigation stack out of step with the router, after which it shows
+     * no later push
+     */
+    data class ReadyToConfirm(
+        val v1: org.bitcoinppl.cove_core.Route) : FeeBumpManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
 
 
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
@@ -54441,6 +54964,13 @@ sealed class FeeBumpManagerReconcileMessage: Disposable  {
 
             }
             is FeeBumpManagerReconcileMessage.FeeWarning -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is FeeBumpManagerReconcileMessage.ReadyToConfirm -> {
 
     Disposable.destroy(
         this.v1
@@ -54476,6 +55006,9 @@ public object FfiConverterTypeFeeBumpManagerReconcileMessage : FfiConverterRustB
             4 -> FeeBumpManagerReconcileMessage.FeeWarning(
                 FfiConverterTypeFeeBumpFeeWarning.read(buf),
                 )
+            5 -> FeeBumpManagerReconcileMessage.ReadyToConfirm(
+                FfiConverterTypeRoute.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -54509,6 +55042,13 @@ public object FfiConverterTypeFeeBumpManagerReconcileMessage : FfiConverterRustB
                 + FfiConverterTypeFeeBumpFeeWarning.allocationSize(value.v1)
             )
         }
+        is FeeBumpManagerReconcileMessage.ReadyToConfirm -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeRoute.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: FeeBumpManagerReconcileMessage, buf: ByteBuffer) {
@@ -54533,11 +55073,224 @@ public object FfiConverterTypeFeeBumpManagerReconcileMessage : FfiConverterRustB
                 FfiConverterTypeFeeBumpFeeWarning.write(value.v1, buf)
                 Unit
             }
+            is FeeBumpManagerReconcileMessage.ReadyToConfirm -> {
+                buf.putInt(5)
+                FfiConverterTypeRoute.write(value.v1, buf)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 }
 
 
+
+
+
+/**
+ * Where a replacement's higher fee comes from
+ */
+sealed class FeeBumpPayment: Disposable  {
+
+    /**
+     * The change pays it, so the recipient receives the same amount
+     */
+    object FromChange : FeeBumpPayment()
+
+
+    /**
+     * The amount sent pays it, as a send with no change, such as a Max send, has nothing else
+     * to take it from, so the recipient receives less by the extra fee
+     */
+    data class FromAmount(
+        /**
+         * What the pending transaction pays the recipient
+         */
+        val `originalAmount`: org.bitcoinppl.cove_core.types.Amount,
+        /**
+         * What the pending transaction pays in fees, which the replacement's total exceeds
+         */
+        val `originalFee`: org.bitcoinppl.cove_core.types.Amount) : FeeBumpPayment()
+
+    {
+
+
+        companion object
+    }
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is FeeBumpPayment.FromChange -> {// Nothing to destroy
+            }
+            is FeeBumpPayment.FromAmount -> {
+
+    Disposable.destroy(
+        this.`originalAmount`,
+        this.`originalFee`
+    )
+
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+     fun `amountTaken`(`option`: FeeRateOptionWithTotalFee): Amount? {
+            return FfiConverterOptionalTypeAmount.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_feebumppayment_amounttaken(FfiConverterTypeFeeBumpPayment.lower(this),
+
+        FfiConverterTypeFeeRateOptionWithTotalFee.lower(`option`),_status)
+}
+    )
+    }
+
+
+     fun `recipientAmount`(`option`: FeeRateOptionWithTotalFee): Amount? {
+            return FfiConverterOptionalTypeAmount.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_feebumppayment_recipientamount(FfiConverterTypeFeeBumpPayment.lower(this),
+
+        FfiConverterTypeFeeRateOptionWithTotalFee.lower(`option`),_status)
+}
+    )
+    }
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeBumpPayment : FfiConverterRustBuffer<FeeBumpPayment>{
+    override fun read(buf: ByteBuffer): FeeBumpPayment {
+        return when(buf.getInt()) {
+            1 -> FeeBumpPayment.FromChange
+            2 -> FeeBumpPayment.FromAmount(
+                FfiConverterTypeAmount.read(buf),
+                FfiConverterTypeAmount.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: FeeBumpPayment): ULong = when(value) {
+        is FeeBumpPayment.FromChange -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is FeeBumpPayment.FromAmount -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeAmount.allocationSize(value.`originalAmount`)
+                + FfiConverterTypeAmount.allocationSize(value.`originalFee`)
+            )
+        }
+    }
+
+    override fun write(value: FeeBumpPayment, buf: ByteBuffer) {
+        when(value) {
+            is FeeBumpPayment.FromChange -> {
+                buf.putInt(1)
+                Unit
+            }
+            is FeeBumpPayment.FromAmount -> {
+                buf.putInt(2)
+                FfiConverterTypeAmount.write(value.`originalAmount`, buf)
+                FfiConverterTypeAmount.write(value.`originalFee`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+
+
+/**
+ * Why a custom rate can't pay for the replacement
+ */
+sealed class FeeBumpRateException: kotlin.Exception() {
+
+    /**
+     * With a message safe to show the user, which `Display` gives too
+     */
+    class Unavailable(
+
+        val v1: kotlin.String
+        ) : FeeBumpRateException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_feebumprateerror_uniffi_trait_display(FfiConverterTypeFeeBumpRateError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<FeeBumpRateException> {
+        override fun lift(error_buf: RustBuffer.ByValue): FeeBumpRateException = FfiConverterTypeFeeBumpRateError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFeeBumpRateError : FfiConverterRustBuffer<FeeBumpRateException> {
+    override fun read(buf: ByteBuffer): FeeBumpRateException {
+
+
+        return when(buf.getInt()) {
+            1 -> FeeBumpRateException.Unavailable(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: FeeBumpRateException): ULong {
+        return when(value) {
+            is FeeBumpRateException.Unavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: FeeBumpRateException, buf: ByteBuffer) {
+        when(value) {
+            is FeeBumpRateException.Unavailable -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
 
 
 
@@ -61640,6 +62393,210 @@ public object FfiConverterTypePendingOrConfirmed : FfiConverterRustBuffer<Pendin
             is PendingOrConfirmed.Confirmed -> {
                 buf.putInt(2)
                 FfiConverterTypeConfirmedDetails.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * How a pending payment this wallet sent is doing
+ *
+ * A received or confirmed transaction has none. A send the wallet can't bump, such as one
+ * paying several recipients, is never delayed, since nothing could be done about it
+ */
+sealed class PendingSendStatus: Disposable  {
+
+    /**
+     * Pending for under 30 minutes, which needs no mention
+     */
+    data class Recent(
+        val `bumpable`: kotlin.Boolean) : PendingSendStatus()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Pending for over 30 minutes without being delayed, shown as "Unconfirmed · 32m"
+     */
+    data class Waiting(
+        /**
+         * When the wallet first saw it, in unix seconds
+         */
+        val `since`: kotlin.ULong,
+        val `bumpable`: kotlin.Boolean) : PendingSendStatus()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Pending for over an hour, at a rate below the network's current Medium rate, and the
+     * wallet can bump its fee, so it shows as taking longer than usual
+     */
+    data class Delayed(
+        /**
+         * When the wallet first saw it, in unix seconds
+         */
+        val `since`: kotlin.ULong,
+        /**
+         * The rate it pays
+         */
+        val `feeRate`: org.bitcoinppl.cove_core.types.FeeRate) : PendingSendStatus()
+
+    {
+
+
+        companion object
+    }
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+        when(this) {
+            is PendingSendStatus.Recent -> {
+
+    Disposable.destroy(
+        this.`bumpable`
+    )
+
+            }
+            is PendingSendStatus.Waiting -> {
+
+    Disposable.destroy(
+        this.`since`,
+        this.`bumpable`
+    )
+
+            }
+            is PendingSendStatus.Delayed -> {
+
+    Disposable.destroy(
+        this.`since`,
+        this.`feeRate`
+    )
+
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+
+
+
+    /**
+     * How long it has been pending, as "1h 32m" or "45m", or `None` while it is recent
+     *
+     * Counts to the current time, so a screen calls it again every minute to keep it current
+     */ fun `elapsedFmt`(): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_pendingsendstatus_elapsedfmt(FfiConverterTypePendingSendStatus.lower(this),
+        _status)
+}
+    )
+    }
+
+
+     fun `isBumpable`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_pendingsendstatus_isbumpable(FfiConverterTypePendingSendStatus.lower(this),
+        _status)
+}
+    )
+    }
+
+
+     fun `isDelayed`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_pendingsendstatus_isdelayed(FfiConverterTypePendingSendStatus.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePendingSendStatus : FfiConverterRustBuffer<PendingSendStatus>{
+    override fun read(buf: ByteBuffer): PendingSendStatus {
+        return when(buf.getInt()) {
+            1 -> PendingSendStatus.Recent(
+                FfiConverterBoolean.read(buf),
+                )
+            2 -> PendingSendStatus.Waiting(
+                FfiConverterULong.read(buf),
+                FfiConverterBoolean.read(buf),
+                )
+            3 -> PendingSendStatus.Delayed(
+                FfiConverterULong.read(buf),
+                FfiConverterTypeFeeRate.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PendingSendStatus): ULong = when(value) {
+        is PendingSendStatus.Recent -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterBoolean.allocationSize(value.`bumpable`)
+            )
+        }
+        is PendingSendStatus.Waiting -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`since`)
+                + FfiConverterBoolean.allocationSize(value.`bumpable`)
+            )
+        }
+        is PendingSendStatus.Delayed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`since`)
+                + FfiConverterTypeFeeRate.allocationSize(value.`feeRate`)
+            )
+        }
+    }
+
+    override fun write(value: PendingSendStatus, buf: ByteBuffer) {
+        when(value) {
+            is PendingSendStatus.Recent -> {
+                buf.putInt(1)
+                FfiConverterBoolean.write(value.`bumpable`, buf)
+                Unit
+            }
+            is PendingSendStatus.Waiting -> {
+                buf.putInt(2)
+                FfiConverterULong.write(value.`since`, buf)
+                FfiConverterBoolean.write(value.`bumpable`, buf)
+                Unit
+            }
+            is PendingSendStatus.Delayed -> {
+                buf.putInt(3)
+                FfiConverterULong.write(value.`since`, buf)
+                FfiConverterTypeFeeRate.write(value.`feeRate`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -75294,6 +76251,38 @@ public object FfiConverterOptionalTypeAmount: FfiConverterRustBuffer<Amount?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeFeeRate: FfiConverterRustBuffer<FeeRate?> {
+    override fun read(buf: ByteBuffer): FeeRate? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFeeRate.read(buf)
+    }
+
+    override fun allocationSize(value: FeeRate?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFeeRate.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FeeRate?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFeeRate.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeFeeRateOptionWithTotalFee: FfiConverterRustBuffer<FeeRateOptionWithTotalFee?> {
     override fun read(buf: ByteBuffer): FeeRateOptionWithTotalFee? {
         if (buf.get().toInt() == 0) {
@@ -75774,6 +76763,38 @@ public object FfiConverterOptionalTypeDeriveInfo: FfiConverterRustBuffer<DeriveI
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeFeeBumpConfirmContext: FfiConverterRustBuffer<FeeBumpConfirmContext?> {
+    override fun read(buf: ByteBuffer): FeeBumpConfirmContext? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeFeeBumpConfirmContext.read(buf)
+    }
+
+    override fun allocationSize(value: FeeBumpConfirmContext?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeFeeBumpConfirmContext.allocationSize(value)
+        }
+    }
+
+    override fun write(value: FeeBumpConfirmContext?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeFeeBumpConfirmContext.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeFeeResponse: FfiConverterRustBuffer<FeeResponse?> {
     override fun read(buf: ByteBuffer): FeeResponse? {
         if (buf.get().toInt() == 0) {
@@ -75828,6 +76849,38 @@ public object FfiConverterOptionalTypeFiatAmount: FfiConverterRustBuffer<FiatAmo
         } else {
             buf.put(1)
             FfiConverterTypeFiatAmount.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypePreviousFee: FfiConverterRustBuffer<PreviousFee?> {
+    override fun read(buf: ByteBuffer): PreviousFee? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypePreviousFee.read(buf)
+    }
+
+    override fun allocationSize(value: PreviousFee?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypePreviousFee.allocationSize(value)
+        }
+    }
+
+    override fun write(value: PreviousFee?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypePreviousFee.write(value, buf)
         }
     }
 }
@@ -76372,6 +77425,38 @@ public object FfiConverterOptionalTypeOnboardingBranch: FfiConverterRustBuffer<O
         } else {
             buf.put(1)
             FfiConverterTypeOnboardingBranch.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypePendingSendStatus: FfiConverterRustBuffer<PendingSendStatus?> {
+    override fun read(buf: ByteBuffer): PendingSendStatus? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypePendingSendStatus.read(buf)
+    }
+
+    override fun allocationSize(value: PendingSendStatus?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypePendingSendStatus.allocationSize(value)
+        }
+    }
+
+    override fun write(value: PendingSendStatus?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypePendingSendStatus.write(value, buf)
         }
     }
 }
@@ -77192,6 +78277,34 @@ public object FfiConverterSequenceTypeNode: FfiConverterRustBuffer<List<Node>> {
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeNode.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypePreviousFee: FfiConverterRustBuffer<List<PreviousFee>> {
+    override fun read(buf: ByteBuffer): List<PreviousFee> {
+        val len = buf.getInt()
+        return List<PreviousFee>(len) {
+            FfiConverterTypePreviousFee.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<PreviousFee>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypePreviousFee.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<PreviousFee>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypePreviousFee.write(it, buf)
         }
     }
 }
@@ -78427,6 +79540,21 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     UniffiLib.uniffi_cove_fn_func_passkey_request_may_present(
 
         _status)
+}
+    )
+    }
+
+
+        /**
+         * The replacement `tx_id` the wallet broadcast, built from the confirm screen's `details`
+         */ fun `feeBumpBroadcast`(`txId`: TxId, `details`: ConfirmDetails): FeeBumpBroadcast {
+            return FfiConverterTypeFeeBumpBroadcast.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_fee_bump_broadcast(
+
+
+        FfiConverterTypeTxId.lower(`txId`),
+        FfiConverterTypeConfirmDetails.lower(`details`),_status)
 }
     )
     }

@@ -13,9 +13,14 @@ use jiff::Timestamp;
 
 use crate::{
     database::Database,
+    fee_client::FEE_CLIENT,
     fiat::{FiatCurrency, client::FIAT_CLIENT, historical::HistoricalPrice},
     historical_price_service::HistoricalPriceService,
-    transaction::{TransactionDirection, Unit},
+    transaction::{
+        TransactionDirection, Unit,
+        fee_bump::{self, PreviousFee},
+        pending_send::PendingSendStatus,
+    },
 };
 use cove_tokio::task;
 
@@ -70,6 +75,10 @@ pub struct TransactionDetails {
     /// `true` when at least one input has `nSequence < 0xFFFFFFFE`,
     /// meaning the transaction can be replaced while unconfirmed.
     pub is_rbf_signaling: bool,
+
+    /// The fees earlier versions of this payment paid before fee bumps replaced them, oldest
+    /// first, see [`fee_bump::fee_history`]
+    pub fee_history: Vec<PreviousFee>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -89,14 +98,23 @@ enum TransactionConfirmationPresentation {
 pub struct TransactionDetailsPresentation {
     details: Arc<TransactionDetails>,
     confirmation: TransactionConfirmationPresentation,
+    pending_send: Option<PendingSendStatus>,
 }
 
 impl TransactionDetailsPresentation {
-    pub(crate) fn new(details: TransactionDetails, current_height: u32) -> Self {
-        Self::from_arc(Arc::new(details), current_height)
+    pub(crate) fn new(
+        details: TransactionDetails,
+        current_height: u32,
+        pending_send: Option<PendingSendStatus>,
+    ) -> Self {
+        Self::from_arc(Arc::new(details), current_height, pending_send)
     }
 
-    fn from_arc(details: Arc<TransactionDetails>, current_height: u32) -> Self {
+    fn from_arc(
+        details: Arc<TransactionDetails>,
+        current_height: u32,
+        pending_send: Option<PendingSendStatus>,
+    ) -> Self {
         let confirmation = match details.block_number() {
             Some(block_height) => TransactionConfirmationPresentation::Confirmed(
                 confirmed_transaction_confirmation_count(block_height, current_height),
@@ -104,11 +122,11 @@ impl TransactionDetailsPresentation {
             None => TransactionConfirmationPresentation::Pending,
         };
 
-        Self { details, confirmation }
+        Self { details, confirmation, pending_send }
     }
 
     pub(crate) fn with_current_height(&self, current_height: u32) -> Self {
-        Self::from_arc(self.details.clone(), current_height)
+        Self::from_arc(self.details.clone(), current_height, self.pending_send.clone())
     }
 }
 
@@ -125,25 +143,25 @@ impl TransactionDetailsPresentation {
     /// Creates a confirmed received preview presentation
     #[uniffi::constructor]
     pub fn preview_confirmed_received() -> Self {
-        Self::new(TransactionDetails::preview_confirmed_received(), 840_002)
+        Self::new(TransactionDetails::preview_confirmed_received(), 840_002, None)
     }
 
     /// Creates a confirmed sent preview presentation
     #[uniffi::constructor]
     pub fn preview_confirmed_sent() -> Self {
-        Self::new(TransactionDetails::preview_confirmed_sent(), 840_002)
+        Self::new(TransactionDetails::preview_confirmed_sent(), 840_002, None)
     }
 
     /// Creates a pending received preview presentation
     #[uniffi::constructor]
     pub fn preview_pending_received() -> Self {
-        Self::new(TransactionDetails::preview_pending_received(), 840_002)
+        Self::new(TransactionDetails::preview_pending_received(), 840_002, None)
     }
 
     /// Creates a pending sent preview presentation
     #[uniffi::constructor]
     pub fn preview_pending_sent() -> Self {
-        Self::new(TransactionDetails::preview_pending_sent(), 840_002)
+        Self::new(TransactionDetails::preview_pending_sent(), 840_002, None)
     }
 
     /// Returns the transaction details
@@ -167,6 +185,12 @@ impl TransactionDetailsPresentation {
     #[uniffi::method]
     pub fn tx_id(&self) -> TxId {
         self.details.tx_id()
+    }
+
+    /// How the transaction is doing when it is a pending payment this wallet sent
+    #[uniffi::method]
+    pub fn pending_send(&self) -> Option<PendingSendStatus> {
+        self.pending_send.clone()
     }
 }
 
@@ -195,11 +219,8 @@ impl TransactionDetails {
             }
         };
 
-        let fee = wallet
-            .calculate_fee(&tx_details)
-            .tap_err(|e| note_fee_error("fee", e))
-            .ok()
-            .map(Into::into);
+        let bdk_fee = wallet.calculate_fee(&tx_details).tap_err(|e| note_fee_error("fee", e)).ok();
+        let fee = bdk_fee.map(Into::into);
         let fee_rate = wallet
             .calculate_fee_rate(&tx_details)
             .tap_err(|e| note_fee_error("fee rate", e))
@@ -275,6 +296,16 @@ impl TransactionDetails {
         // BIP 125: a transaction signals RBF if any input has nSequence < 0xFFFFFFFE
         let is_rbf_signaling = tx.tx_node.tx.input.iter().any(|input| input.sequence.is_rbf());
 
+        // only this wallet's own payments are ones it could have sped up
+        let fee_history = match (sent_and_received.direction, bdk_fee) {
+            (TransactionDirection::Outgoing, Some(fee)) => {
+                fee_bump::fee_history(wallet, &tx_details, fee)
+            }
+            (TransactionDirection::Outgoing, None) | (TransactionDirection::Incoming, _) => {
+                Vec::new()
+            }
+        };
+
         let me = Self {
             tx_id: txid.into(),
             network,
@@ -288,6 +319,7 @@ impl TransactionDetails {
             output_indexes,
             change_address,
             is_rbf_signaling,
+            fee_history,
         };
 
         Ok(me)
@@ -394,6 +426,18 @@ impl TransactionDetails {
         Some(fiat_amount_fmt(fiat, currency))
     }
 
+    /// The fee it pays, `None` when the wallet can't work it out
+    #[uniffi::method]
+    pub fn fee(&self) -> Option<Arc<Amount>> {
+        self.fee.map(Arc::new)
+    }
+
+    /// The rate it pays, `None` when the wallet can't work it out
+    #[uniffi::method]
+    pub fn fee_rate(&self) -> Option<Arc<FeeRate>> {
+        self.fee_rate.map(Arc::new)
+    }
+
     #[uniffi::method]
     pub fn fee_fmt(&self, unit: Unit) -> Option<String> {
         let fee = self.fee?;
@@ -483,6 +527,32 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn is_rbf_signaling(&self) -> bool {
         self.is_rbf_signaling
+    }
+
+    /// Every fee this payment paid before fee bumps replaced it, oldest first, kept once it
+    /// confirms
+    #[uniffi::method]
+    pub fn fee_history(&self) -> Vec<PreviousFee> {
+        self.fee_history.clone()
+    }
+
+    /// The fee it paid just before the current one, `None` when it was never fee bumped
+    #[uniffi::method]
+    pub fn previous_fee(&self) -> Option<PreviousFee> {
+        self.fee_history.last().cloned()
+    }
+
+    /// When the pending transaction should confirm at its rate, as "Estimated to confirm
+    /// within 30 minutes", from the cached network rates
+    ///
+    /// `None` once it confirms, or with no rate or cached network rates
+    #[uniffi::method]
+    pub fn confirmation_estimate(&self) -> Option<String> {
+        if self.is_confirmed() {
+            return None;
+        }
+
+        FEE_CLIENT.confirmation_estimate(self.fee_rate?)
     }
 
     #[uniffi::method]
@@ -592,6 +662,7 @@ impl TransactionDetails {
             output_indexes: vec![],
             change_address: None,
             is_rbf_signaling: false,
+            fee_history: Vec::new(),
         }
     }
 
@@ -850,6 +921,7 @@ mod tests {
         let presentation = TransactionDetailsPresentation::new(
             TransactionDetails::preview_pending_received(),
             840_002,
+            None,
         );
 
         assert_eq!(presentation.confirmations(), None);
@@ -863,7 +935,7 @@ mod tests {
             confirmation_time: 0,
         });
 
-        let presentation = TransactionDetailsPresentation::new(details, 839_999);
+        let presentation = TransactionDetailsPresentation::new(details, 839_999, None);
 
         assert_eq!(presentation.confirmations(), Some(1));
     }

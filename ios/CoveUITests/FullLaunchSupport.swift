@@ -198,6 +198,18 @@ extension XCUIApplication {
 
     /// Swipes the confirm screen's handle across, accepts the Sent alert and returns to the wallet
     func swipeToSend() {
+        swipeConfirmHandle()
+
+        let sent = alerts["Sent!"]
+        XCTAssertTrue(sent.waitForExistence(timeout: 30), "the send was not broadcast")
+        sent.buttons["OK"].tap()
+
+        XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 15))
+    }
+
+    /// Scrolls the confirm screen's swipe handle fully into view, checks it sits at the bottom,
+    /// then drags it from its leading edge all the way across
+    func swipeConfirmHandle() {
         let swipe = element("sendFlowConfirm.swipeToSend")
         XCTAssertTrue(swipe.waitForExistence(timeout: 30), "the send didn't reach the confirm screen")
 
@@ -225,12 +237,6 @@ extension XCUIApplication {
         let start = swipe.coordinate(withNormalizedOffset: CGVector(dx: frame.height / 2 / frame.width, dy: 0.5))
         let end = swipe.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.5))
         start.press(forDuration: 0.2, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
-
-        let sent = alerts["Sent!"]
-        XCTAssertTrue(sent.waitForExistence(timeout: 30), "the send was not broadcast")
-        sent.buttons["OK"].tap()
-
-        XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 15))
     }
 
     // MARK: - Amounts

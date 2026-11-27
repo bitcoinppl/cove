@@ -23,6 +23,9 @@ struct TransactionsCardView: View {
     let unsignedTransactions: [UnsignedTransaction]
     let metadata: WalletMetadata
 
+    /// The pending send whose bump fee sheet is open
+    @State private var feeBumpTarget: FeeBumpTarget?
+
     private let screenHeight = UIScreen.main.bounds.height
     private var scanProgress: WalletScanProgress? {
         if case let .scanning(progress) = manager.scanStatus {
@@ -77,6 +80,7 @@ struct TransactionsCardView: View {
             .padding()
             .padding(.top, 5)
         }
+        .feeBumpSheet(target: $feeBumpTarget, walletManager: manager)
     }
 }
 
@@ -367,6 +371,11 @@ struct TransactionRow: View {
     var metadata: WalletMetadata
     var index: Int
 
+    private var pendingSend: PendingSendStatus? {
+        guard case let .unconfirmed(txn) = txn else { return nil }
+        return txn.pendingSend()
+    }
+
     var body: some View {
         VStack(alignment: .leading) {
             Group {
@@ -378,9 +387,18 @@ struct TransactionRow: View {
                 }
             }
             .padding(.vertical, 6)
+            .contentShape(
+                .contextMenuPreview,
+                RoundedRectangle(cornerRadius: 8)
+                    .inset(by: -6)
+            )
+            .modifier(TransactionRowContextMenu(txn: txn, metadata: metadata, index: index))
 
             Divider().opacity(0.7)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("transactionRow.\(txn.id.description)")
+        .accessibilityValue(pendingSend?.rowAccessibilityValue ?? "")
     }
 }
 
@@ -579,17 +597,25 @@ struct UnconfirmedTransactionView: View {
         }
     }
 
+    private var pendingSend: PendingSendStatus? {
+        txn.pendingSend()
+    }
+
     var body: some View {
         let direction = txn.sentAndReceived().direction()
         let showsLockedTreatment = showsLockedTransactionTreatment(lockState)
 
         TransactionRowLayout {
-            TxnIcon(
-                direction: direction,
-                confirmed: false,
-                locked: showsLockedTreatment
-            )
-            .opacity(showsLockedTreatment ? 1 : 0.6)
+            if let pendingSend, pendingSend.isDelayed() {
+                DelayedTransactionIcon(txId: txn.id(), pendingSend: pendingSend)
+            } else {
+                TxnIcon(
+                    direction: direction,
+                    confirmed: false,
+                    locked: showsLockedTreatment
+                )
+                .opacity(showsLockedTreatment ? 1 : 0.6)
+            }
         } details: {
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
@@ -597,6 +623,10 @@ struct UnconfirmedTransactionView: View {
                     .fontWeight(.medium)
                     .uiTestTruncationProbe()
                     .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.72) : .primary.opacity(0.4))
+
+                if let pendingSend {
+                    PendingSendSubtitle(pendingSend: pendingSend)
+                }
             }
         } amounts: { alignment in
             VStack(alignment: alignment) {
@@ -759,7 +789,7 @@ private struct TransactionRowLayout<Icon: View, Details: View, Amounts: View>: V
     }
 }
 
-private struct TxnIcon: View {
+struct TxnIcon: View {
     @Environment(\.colorScheme) var colorScheme
 
     let direction: TransactionDirection

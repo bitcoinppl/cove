@@ -44,6 +44,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +64,7 @@ import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove.views.FlexibleSpacer
+import org.bitcoinppl.cove_core.FeeBumpConfirmContext
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.ConfirmDetails
@@ -80,6 +82,12 @@ private const val SWIPE_COMPLETE_THRESHOLD = 0.9f
 // Target text color (white) that text animates to during swipe gesture.
 private val SWIPE_BUTTON_TEXT_COLOR_TARGET = CoveColor.SwipeButtonText
 
+/**
+ * Confirms a send before it is broadcast
+ *
+ * @param feeBump the pending send this one replaces when it speeds one up, which retitles the
+ *   screen and shows the fee it paid before
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendFlowConfirmScreen(
@@ -90,6 +98,7 @@ fun SendFlowConfirmScreen(
     sendState: SendState,
     onBack: () -> Unit,
     onSwipeToSend: () -> Unit,
+    feeBump: FeeBumpConfirmContext? = null,
 ) {
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
@@ -116,6 +125,8 @@ fun SendFlowConfirmScreen(
     val networkFee = walletManager.amountFmtUnit(details.feeTotal())
     val willReceive = walletManager.amountFmtUnit(details.sendingAmount())
     val willPay = walletManager.amountFmtUnit(details.spendingAmount())
+    val previousFee = feeBump?.let { walletManager.amountFmtUnit(it.previousFee) }
+    val recipientReceivesLess = feeBump?.recipientReceivesLess?.let { "${it.satsString()} sats" }
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -185,11 +196,14 @@ fun SendFlowConfirmScreen(
                                 denomination = sendingAmountDenomination,
                                 dollarText = dollarEquivalentText,
                                 metadata = metadata,
+                                isFeeBump = feeBump != null,
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                             SummaryWidget(
                                 address = address,
                                 networkFee = networkFee,
+                                previousFee = previousFee,
+                                recipientReceivesLess = recipientReceivesLess,
                                 willReceive = willReceive,
                                 willPay = willPay,
                                 onAddressClick = { sheetState = SheetState.AdvancedDetails },
@@ -200,7 +214,12 @@ fun SendFlowConfirmScreen(
 
                         Column(Modifier.testTag("sendFlowConfirm.bottomSection")) {
                             SwipeToSendStub(
-                                text = stringResource(R.string.action_swipe_to_send),
+                                text =
+                                    if (feeBump == null) {
+                                        stringResource(R.string.action_swipe_to_send)
+                                    } else {
+                                        "Swipe to confirm new fee"
+                                    },
                                 sendState = sendState,
                                 onComplete = onSwipeToSend,
                                 containerColor = MaterialTheme.coveColors.swipeTrackBg,
@@ -315,6 +334,7 @@ private fun AmountWidget(
     denomination: String,
     dollarText: String,
     metadata: WalletMetadata?,
+    isFeeBump: Boolean,
 ) {
     val density = LocalDensity.current
     var unitLabelWidth by remember { mutableStateOf(0.dp) }
@@ -322,10 +342,11 @@ private fun AmountWidget(
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(16.dp))
         Text(
-            stringResource(R.string.label_you_are_sending),
+            if (isFeeBump) "Speed Up" else stringResource(R.string.label_you_are_sending),
             color = MaterialTheme.colorScheme.onSurface,
             fontSize = 17.sp,
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.testTag("sendFlowConfirm.title"),
         )
         Spacer(Modifier.height(4.dp))
         Text(
@@ -386,9 +407,12 @@ private fun AmountWidget(
 }
 
 @Composable
+@Suppress("LongParameterList")
 private fun SummaryWidget(
     address: String,
     networkFee: String,
+    previousFee: String?,
+    recipientReceivesLess: String?,
     willReceive: String,
     willPay: String,
     onAddressClick: () -> Unit,
@@ -423,12 +447,7 @@ private fun SummaryWidget(
             },
         )
         Spacer(Modifier.height(20.dp))
-        SummaryKeyValueRow(
-            label = stringResource(R.string.label_network_fee),
-            value = networkFee,
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        SummaryFeeRows(networkFee = networkFee, previousFee = previousFee)
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(
             label = stringResource(R.string.label_they_will_receive),
@@ -438,6 +457,10 @@ private fun SummaryWidget(
             labelFontWeight = FontWeight.SemiBold,
             valueFontWeight = FontWeight.SemiBold,
         )
+
+        // a bump that takes its fee from the amount sent leaves the recipient less
+        recipientReceivesLess?.let { RecipientReceivesLessNote(it) }
+
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(
             label = stringResource(R.string.label_you_will_pay),
@@ -451,6 +474,48 @@ private fun SummaryWidget(
     }
 }
 
+/** The network fee, after the struck-through fee it replaces when the send speeds one up */
+@Composable
+private fun SummaryFeeRows(
+    networkFee: String,
+    previousFee: String?,
+) {
+    previousFee?.let {
+        SummaryKeyValueRow(
+            label = "Previous Fee",
+            value = it,
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            valueTextDecoration = TextDecoration.LineThrough,
+            modifier = Modifier.fillMaxWidth().testTag("sendFlowConfirm.previousFee"),
+        )
+
+        Spacer(Modifier.height(20.dp))
+    }
+
+    SummaryKeyValueRow(
+        label = if (previousFee == null) stringResource(R.string.label_network_fee) else "New Network Fee",
+        value = networkFee,
+        labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun RecipientReceivesLessNote(amount: String) {
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = "The recipient receives $amount less.",
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.End,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag("sendFlowConfirm.recipientReceivesLess"),
+    )
+}
+
 @Composable
 @Suppress("FunctionNaming", "LongParameterList")
 private fun SummaryKeyValueRow(
@@ -461,6 +526,7 @@ private fun SummaryKeyValueRow(
     modifier: Modifier = Modifier.fillMaxWidth(),
     labelFontWeight: FontWeight = FontWeight.Normal,
     valueFontWeight: FontWeight = FontWeight.Normal,
+    valueTextDecoration: TextDecoration? = null,
 ) {
     KeyValueRow(
         label = label,
@@ -469,7 +535,7 @@ private fun SummaryKeyValueRow(
         labelWeight = 1f,
         valueWeight = 2f,
         labelStyle = TextStyle(fontSize = 13.sp, fontWeight = labelFontWeight),
-        valueStyle = TextStyle(fontSize = 13.sp, fontWeight = valueFontWeight),
+        valueStyle = TextStyle(fontSize = 13.sp, fontWeight = valueFontWeight, textDecoration = valueTextDecoration),
         labelColor = labelColor,
         valueColor = valueColor,
         valueTextAlign = TextAlign.Right,

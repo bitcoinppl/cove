@@ -1,7 +1,7 @@
 //! Speeding up a pending payment by replacing it with one that pays a higher fee, against a fake
 //! node that enforces Bitcoin Core's replacement rules
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use act_zero::call;
 use bdk_wallet::{SignOptions, Wallet as BdkWallet};
@@ -13,8 +13,8 @@ use bitcoin::{
 use cove_fake_node::TxLocation;
 
 use super::{
-    Fixture, ScreenUpdates, fresh_mnemonic, listed_label, paste_hardware_export, receive_script,
-    transaction_list, tx_id, wait_for_refresh_to_settle,
+    Fixture, Msg, ScreenUpdates, fresh_mnemonic, listed_label, paste_hardware_export,
+    receive_script, transaction_list, tx_id, wait_for_refresh_to_settle,
 };
 use crate::{
     manager::{
@@ -24,9 +24,12 @@ use crate::{
     mnemonic::MnemonicExt as _,
     network::Network,
     transaction::{
-        FeeRate,
-        fee_bump::{FeeBumpBlocker, FeeBumpError},
+        FeeRate, Transaction,
+        fee_bump::{
+            FeeBumpBlocker, FeeBumpConfirmContext, FeeBumpError, PreviousFee, ReplacementFunding,
+        },
         ffi::BitcoinTransaction,
+        pending_send::PendingSendStatus,
     },
     wallet::{
         Address, WalletAddressType,
@@ -156,6 +159,66 @@ fn output(to: &Address, amount: u64) -> TxOut {
     TxOut { value: Amount::from_sat(amount), script_pubkey: to.script_pubkey() }
 }
 
+/// The pending send status the home screen's row for `txid` shows
+async fn listed_pending_send(manager: &RustWalletManager, txid: Txid) -> Option<PendingSendStatus> {
+    let listed = transaction_list(manager)
+        .await
+        .into_iter()
+        .find(|transaction| transaction.id().0 == txid)
+        .expect("the transaction is listed");
+
+    match listed {
+        Transaction::Unconfirmed(unconfirmed) => unconfirmed.pending_send(),
+        Transaction::Confirmed(_) => panic!("{txid} is confirmed"),
+    }
+}
+
+async fn details_pending_send(
+    manager: &RustWalletManager,
+    txid: Txid,
+) -> Option<PendingSendStatus> {
+    manager.transaction_details(tx_id(txid)).await.expect("the details load").pending_send()
+}
+
+/// The fee `txid` paid, as the fee history lists it
+async fn paid(manager: &RustWalletManager, txid: Txid) -> PreviousFee {
+    let details = manager.transaction_details(tx_id(txid)).await.unwrap().details();
+
+    PreviousFee {
+        tx_id: tx_id(txid),
+        fee: Arc::new(details.fee.expect("a send's fee is known")),
+        fee_rate: Arc::new(details.fee_rate.expect("a send's fee rate is known")),
+    }
+}
+
+/// The confirm context of a bump of a payment with change, which `previous` paid before
+fn bump_of(previous: &PreviousFee) -> FeeBumpConfirmContext {
+    FeeBumpConfirmContext {
+        replaces: previous.tx_id.clone(),
+        previous_fee: previous.fee.clone(),
+        previous_fee_rate: previous.fee_rate.clone(),
+        recipient_receives_less: None,
+    }
+}
+
+/// Shortens how long a send stays recent and becomes delayed while it lives
+struct PendingSendDelay;
+
+impl PendingSendDelay {
+    fn set(secs: u64) -> Self {
+        // SAFETY: tests that read the variable hold the global state test lock
+        unsafe { std::env::set_var("COVE_UI_TEST_PENDING_SEND_DELAY_SECS", secs.to_string()) };
+        Self
+    }
+}
+
+impl Drop for PendingSendDelay {
+    fn drop(&mut self) {
+        // SAFETY: as in `set`
+        unsafe { std::env::remove_var("COVE_UI_TEST_PENDING_SEND_DELAY_SECS") };
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn speeding_up_a_payment_replaces_it_at_the_lowest_rate_a_node_accepts() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
@@ -273,10 +336,10 @@ async fn transactions_that_cannot_be_sped_up_say_why() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn a_max_send_is_sped_up_from_another_confirmed_coin() {
+async fn a_max_send_is_sped_up_from_the_amount_sent() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
-    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[50_000]).await;
+    let (mnemonic, manager, mut screen, fundings) = funded_wallet(&mut fx, &[50_000]).await;
     let signer = signer(&mnemonic, fx.network);
     let destination = outside_address(fx.network);
 
@@ -289,25 +352,98 @@ async fn a_max_send_is_sped_up_from_another_confirmed_coin() {
 
     let sent_amount = drain.unsigned_tx.output[0].value;
     let sent = broadcast(&manager, &mut screen, sign(&signer, drain)).await;
-    let short = manager.fee_bump_target(sent).await;
-    assert!(matches!(short, Err(FeeBumpError::InsufficientFunds { .. })), "{short:?}");
 
-    // a confirmed coin received later pays the extra fee, and the recipient still gets it all
+    // a confirmed coin received since must stay out of the replacement
     let script = receive_script(&manager, 3).await;
     let funding = fx.node.chain().pay(&script, Amount::from_sat(20_000));
     fx.node.chain().confirm(funding);
     refresh(&manager, &mut screen).await;
 
-    let target = manager.fee_bump_target(sent).await.expect("the new coin pays for the bump");
+    let target = manager.fee_bump_target(sent).await.expect("the amount sent pays for the bump");
+    assert_eq!(target.original.funding, ReplacementFunding::Amount { sent: sent_amount });
+
     let confirm = manager
         .confirm_fee_bump_txn(sent, FeeRate::from(target.minimum_fee_rate))
         .await
         .expect("the replacement builds");
 
-    assert_eq!(confirm.sending_amount().to_sat(), sent_amount.to_sat());
+    // the recipient receives less by exactly the extra fee
+    let extra_fee = confirm.fee_total.0.checked_sub(target.original.fee).unwrap();
+    assert!(extra_fee > Amount::ZERO);
+    assert_eq!(confirm.sending_amount().0, sent_amount.checked_sub(extra_fee).unwrap());
+
     let replacement = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
-    let spent = fx.node.chain().tx(replacement).unwrap().tx.input.len();
-    assert_eq!(spent, 2, "the replacement spends the original coin and the new one");
+    assert_eq!(fx.node.chain().location(sent), None, "the node dropped the original");
+    assert_eq!(fx.node.chain().location(replacement), Some(TxLocation::Mempool));
+
+    let replacement_tx = fx.node.chain().tx(replacement).unwrap().tx;
+    let inputs = replacement_tx.input.iter().map(|input| input.previous_output).collect::<Vec<_>>();
+    assert_eq!(
+        inputs,
+        vec![OutPoint { txid: fundings[0], vout: 0 }],
+        "the same inputs, no new coin"
+    );
+    assert_eq!(replacement_tx.output.len(), 1);
+    assert_eq!(replacement_tx.output[0].script_pubkey, destination.script_pubkey());
+    assert_eq!(replacement_tx.output[0].value, sent_amount.checked_sub(extra_fee).unwrap());
+
+    // a rate that would shrink the one output below dust has nothing left to pay it from
+    let too_high = manager.fee_bump_total_fee(replacement, FeeRate::from(sat_per_vb(500))).await;
+    assert!(matches!(too_high, Err(FeeBumpError::InsufficientFunds { .. })), "{too_high:?}");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_pending_send_is_judged_again_when_the_medium_rate_moves() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+
+    // a Medium of 1.5 sat/vB, under the send's 2
+    let _fees = crate::fee_client::test_support::cache_fees(fee_response(1.0, 1.2, 1.5, 2.0));
+    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[100_000]).await;
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+
+    // waiting after a second and past the delay after 2, but paying above Medium it waits
+    let _delay = PendingSendDelay::set(2);
+    let sent = pay(&manager, &mut screen, &signer, &destination, 10_000, sat_per_vb(2)).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(
+        matches!(
+            listed_pending_send(&manager, sent).await,
+            Some(PendingSendStatus::Waiting { bumpable: true, .. })
+        ),
+        "a send paying above Medium is never delayed"
+    );
+
+    // Medium rising above the send's rate makes it late, with no sync and no threshold crossed
+    screen.seen.clear();
+    let _fees = crate::fee_client::test_support::cache_fees(fee_response(2.0, 3.0, 5.0, 8.0));
+    screen
+        .until("the pending send's details to count as delayed", |message| {
+            matches!(
+                message,
+                Msg::TransactionDetailsUpdated(presentation)
+                    if presentation.tx_id().0 == sent
+                        && matches!(presentation.pending_send(), Some(PendingSendStatus::Delayed { .. }))
+            )
+        })
+        .await;
+}
+
+/// Network rates as the fee server returns them
+fn fee_response(
+    economy: f32,
+    hour: f32,
+    half_hour: f32,
+    fastest: f32,
+) -> crate::fee_client::FeeResponse {
+    crate::fee_client::FeeResponse {
+        fastest_fee: fastest,
+        half_hour_fee: half_hour,
+        hour_fee: hour,
+        economy_fee: economy,
+        minimum_fee: economy,
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -335,6 +471,11 @@ async fn a_replacement_a_sync_finds_first_still_takes_over_from_the_original() {
     // so the wallet already shows it in the original's place
     let replacement = sign(&signer, confirm.psbt().0);
     let replacement_txid = fx.node.chain().broadcast(replacement.clone()).unwrap();
+
+    // BDK records seen times in whole seconds and breaks a tie between conflicting
+    // transactions by txid, so a sync in the second the original was last seen could keep
+    // either one. Syncs in the app are seconds apart, so wait out the second here too
+    tokio::time::sleep(Duration::from_millis(1_100)).await;
     refresh(&manager, &mut screen).await;
     assert!(transaction_list(&manager).await.iter().all(|listed| listed.id().0 != sent));
 
@@ -505,4 +646,163 @@ async fn a_hardware_wallet_signs_the_replacement_it_exports() {
     assert_eq!(fx.node.chain().location(sent), None);
     assert_eq!(fx.node.chain().location(replacement), Some(TxLocation::Mempool));
     assert!(manager.get_unsigned_transactions().unwrap().is_empty(), "the draft was settled");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_payment_bumped_twice_keeps_every_earlier_fee_oldest_first() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[100_000]).await;
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+
+    // a new payment replaces nothing, so its confirm screen shows it as a normal send
+    let confirm = manager
+        .confirm_txn(
+            crate::transaction::Amount::from_sat(10_000),
+            Arc::new(destination.clone()),
+            FeeRate::from(sat_per_vb(2)),
+        )
+        .await
+        .expect("the payment builds");
+
+    let confirm = Arc::new(confirm);
+    assert_eq!(manager.fee_bump_context(confirm.clone()).await, None);
+
+    let sent = broadcast(&manager, &mut screen, sign(&signer, confirm.psbt().0)).await;
+    let sent_fee = paid(&manager, sent).await;
+    assert_eq!(manager.transaction_details(tx_id(sent)).await.unwrap().details().fee_history(), []);
+
+    // each bump's confirm screen knows what it replaces and the fee that one paid
+    let target = manager.fee_bump_target(sent).await.expect("the payment can be sped up");
+    let first = manager
+        .confirm_fee_bump_txn(sent, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .map(Arc::new)
+        .expect("the first replacement builds");
+
+    assert_eq!(manager.fee_bump_context(first.clone()).await, Some(bump_of(&sent_fee)));
+
+    let first = broadcast(&manager, &mut screen, sign(&signer, first.psbt().0)).await;
+    let first_fee = paid(&manager, first).await;
+
+    let target = manager.fee_bump_target(first).await.expect("the replacement can be sped up");
+    let second = manager
+        .confirm_fee_bump_txn(first, FeeRate::from(target.minimum_fee_rate))
+        .await
+        .map(Arc::new)
+        .expect("the second replacement builds");
+
+    assert_eq!(manager.fee_bump_context(second.clone()).await, Some(bump_of(&first_fee)));
+
+    let second = broadcast(&manager, &mut screen, sign(&signer, second.psbt().0)).await;
+
+    // the details list both earlier fees, and the one just before the current is the first bump
+    let details = manager.transaction_details(tx_id(second)).await.unwrap().details();
+    assert_eq!(details.fee_history(), [sent_fee.clone(), first_fee.clone()]);
+    assert_eq!(details.previous_fee(), Some(first_fee.clone()));
+    assert!(*first_fee.fee < details.fee.unwrap() && *sent_fee.fee < *first_fee.fee);
+
+    // the history stays once the payment confirms
+    fx.node.chain().confirm(second);
+    refresh(&manager, &mut screen).await;
+
+    let details = manager.transaction_details(tx_id(second)).await.unwrap().details();
+    assert!(details.is_confirmed());
+    assert_eq!(details.fee_history(), [sent_fee, first_fee.clone()]);
+    assert_eq!(details.previous_fee(), Some(first_fee));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn only_a_pending_send_has_a_status_and_only_a_replaceable_one_is_bumpable() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let (mnemonic, manager, mut screen, fundings) =
+        funded_wallet(&mut fx, &[100_000, 30_000]).await;
+
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+    let other = outside_address(fx.network);
+
+    // a batch paying two people, which the wallet can't bump, spending the smaller coin before
+    // the payment below can pick it
+    let coin = OutPoint { txid: fundings[1], vout: 0 };
+    let batch =
+        unchecked_spend(&[coin], vec![output(&destination, 10_000), output(&other, 19_000)]);
+    let batch = fx.node.chain().add_to_mempool(batch);
+
+    let script = receive_script(&manager, 5).await;
+    let received = fx.node.chain().pay(&script, Amount::from_sat(5_000));
+    refresh(&manager, &mut screen).await;
+
+    let sent = pay(&manager, &mut screen, &signer, &destination, 10_000, sat_per_vb(2)).await;
+
+    let bumpable = Some(PendingSendStatus::Recent { bumpable: true });
+    let blocked = Some(PendingSendStatus::Recent { bumpable: false });
+    assert_eq!(listed_pending_send(&manager, sent).await, bumpable);
+    assert_eq!(listed_pending_send(&manager, batch).await, blocked);
+    assert_eq!(listed_pending_send(&manager, received).await, None);
+
+    // details show the same status as the row
+    assert_eq!(details_pending_send(&manager, sent).await, bumpable);
+    assert_eq!(details_pending_send(&manager, batch).await, blocked);
+    assert_eq!(details_pending_send(&manager, received).await, None);
+
+    // a watch-only wallet can't sign a replacement, so nothing it sent is bumpable
+    manager.set_wallet_type(WalletType::WatchOnly).await.expect("the wallet type changes");
+    assert_eq!(listed_pending_send(&manager, sent).await, blocked);
+    manager.set_wallet_type(WalletType::Hot).await.expect("the wallet type changes");
+
+    // a confirmed send has no status
+    fx.node.chain().confirm(sent);
+    refresh(&manager, &mut screen).await;
+    assert_eq!(details_pending_send(&manager, sent).await, None);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_pending_send_moves_on_from_recent_without_a_sync() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+    let (mnemonic, manager, mut screen, _) = funded_wallet(&mut fx, &[100_000]).await;
+    let signer = signer(&mnemonic, fx.network);
+    let destination = outside_address(fx.network);
+
+    // waiting after 2 seconds, delayed after 4
+    let _delay = PendingSendDelay::set(4);
+    let sent = pay(&manager, &mut screen, &signer, &destination, 10_000, sat_per_vb(2)).await;
+
+    // only the scheduled rebuild sends a pending send's details along with the list, and by
+    // then the send is past recent, delayed too when the cached medium rate is above its rate
+    screen
+        .until("the pending send's details to move on from recent", |message| {
+            matches!(
+                message,
+                Msg::TransactionDetailsUpdated(presentation)
+                    if presentation.tx_id().0 == sent
+                        && matches!(
+                            presentation.pending_send(),
+                            Some(
+                                PendingSendStatus::Waiting { bumpable: true, .. }
+                                    | PendingSendStatus::Delayed { .. }
+                            )
+                        )
+            )
+        })
+        .await;
+
+    let listed = screen
+        .seen
+        .iter()
+        .rev()
+        .find_map(|message| match message {
+            Msg::UpdatedTransactions(transactions) => Some(transactions),
+            _ => None,
+        })
+        .expect("the rebuilt list was sent");
+
+    let row = listed.iter().find(|transaction| transaction.id().0 == sent).unwrap();
+    let Transaction::Unconfirmed(row) = row else { panic!("{sent} is pending") };
+    let status = row.pending_send().expect("a pending send has a status");
+    assert!(status.is_bumpable());
+    assert!(status.elapsed_fmt_at(row.first_seen + 2).is_some(), "{status:?}");
 }

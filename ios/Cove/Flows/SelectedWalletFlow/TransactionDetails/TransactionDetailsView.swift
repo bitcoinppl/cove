@@ -24,6 +24,7 @@ struct TransactionDetailsView: View {
     @State private var lockStateUpdatingIndicatorShownAt: ContinuousClock.Instant? = nil
     @State private var lockStateError: String? = nil
     @State private var lockStateLoadError: String? = nil
+    @State private var feeBumpTarget: FeeBumpTarget? = nil
 
     // public
     let id: WalletId
@@ -43,6 +44,10 @@ struct TransactionDetailsView: View {
 
     var lockState: TransactionLockState? {
         manager.transactionLockStates[txId]
+    }
+
+    var pendingSend: PendingSendStatus? {
+        transactionDetailsPresentation.pendingSend()
     }
 
     var numberOfConfirmations: Int? {
@@ -112,6 +117,7 @@ struct TransactionDetailsView: View {
                 manager: manager,
                 metadata: metadata,
                 numberOfConfirmations: numberOfConfirmations,
+                pendingSend: pendingSend,
                 lockState: lockState,
                 isUpdatingLockState: isUpdatingLockState,
                 showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
@@ -151,6 +157,12 @@ struct TransactionDetailsView: View {
             UIRefreshControl.appearance().tintColor = UIColor.secondaryLabel
         }
         .modifier(TransactionLockErrorModifier(error: $lockStateError))
+        .feeBumpSheet(target: $feeBumpTarget, walletManager: manager, onDismiss: refreshAfterFeeBump)
+    }
+
+    /// A send that confirmed or was replaced while the sheet was open changes what details show
+    private func refreshAfterFeeBump() {
+        Task { await refreshTransactionDetails() }
     }
 
     private func openTransactionExplorer() {
@@ -280,6 +292,7 @@ private struct TransactionDetailsContent: View {
     let manager: WalletManager
     let metadata: WalletMetadata
     let numberOfConfirmations: Int?
+    let pendingSend: PendingSendStatus?
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
     let showLockStateUpdatingIndicator: Bool
@@ -301,6 +314,7 @@ private struct TransactionDetailsContent: View {
                 manager: manager,
                 metadata: metadata,
                 numberOfConfirmations: numberOfConfirmations,
+                pendingSend: pendingSend,
                 lockState: lockState,
                 isUpdatingLockState: isUpdatingLockState,
                 showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,
@@ -332,6 +346,7 @@ private struct TransactionDetailsDirectionContent: View {
     let manager: WalletManager
     let metadata: WalletMetadata
     let numberOfConfirmations: Int?
+    let pendingSend: PendingSendStatus?
     let lockState: TransactionLockState?
     let isUpdatingLockState: Bool
     let showLockStateUpdatingIndicator: Bool
@@ -361,6 +376,7 @@ private struct TransactionDetailsDirectionContent: View {
                 manager: manager,
                 metadata: metadata,
                 numberOfConfirmations: numberOfConfirmations,
+                pendingSend: pendingSend,
                 lockState: lockState,
                 isUpdatingLockState: isUpdatingLockState,
                 showLockStateUpdatingIndicator: showLockStateUpdatingIndicator,

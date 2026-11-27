@@ -26,6 +26,7 @@ import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.shouldShowNoBalanceAlertOnEntry
+import org.bitcoinppl.cove.flows.FeeBumpFlow.SpedUpScreen
 import org.bitcoinppl.cove.flows.SendFlow.ConfirmScreen.SendFlowConfirmScreen
 import org.bitcoinppl.cove.flows.SendFlow.HardwareScreen.SendFlowHardwareScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.CoinControlSetAmountScreen
@@ -451,6 +452,24 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
+            // asked as the screen opens and before sending at the latest, since after the broadcast
+            // nothing is left to replace
+            var feeBump by remember(details) { mutableStateOf<FeeBumpCheck>(FeeBumpCheck.Checking) }
+
+            // asks once, keeping the first answer, since one that arrives after the broadcast would
+            // find nothing left to replace
+            suspend fun checkFeeBump() {
+                if (feeBump !is FeeBumpCheck.Checking) return
+
+                val context = walletManager.feeBumpContext(details)
+                if (feeBump !is FeeBumpCheck.Checking) return
+
+                feeBump = FeeBumpCheck.Checked(context)
+            }
+
+            // a fee bump's replacement once broadcast, which this screen then shows as Sped Up
+            var spedUp by remember { mutableStateOf<FeeBumpBroadcast?>(null) }
+
             var sendConfirmationLock by remember { mutableStateOf<SendConfirmationLock?>(null) }
 
             // ask hot wallet users to authenticate again before sending
@@ -519,6 +538,26 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
+            // the screen shows as a plain send until the answer comes, a few milliseconds later,
+            // so no send waits behind a spinner
+            LaunchedEffect(details) { checkFeeBump() }
+
+            // a fee bump goes on to Sped Up in place, any other send shows the sent alert
+            fun sent(txId: TxId) {
+                sendState = SendState.Sent
+                if (feeBump.context == null) {
+                    showSuccessAlert = true
+                    return
+                }
+
+                spedUp = feeBumpBroadcast(txId, details)
+            }
+
+            spedUp?.let {
+                SpedUpScreen(app = app, walletManager = walletManager, broadcast = it)
+                return@SendFlowRouteToScreen
+            }
+
             // show loading while PSBT is being finalized (matches iOS pattern)
             // this prevents user from swiping before finalization completes
             val needsFinalization =
@@ -538,30 +577,36 @@ private fun SendFlowRouteToScreen(
                 walletManager = walletManager,
                 sendFlowManager = sendFlowManager,
                 details = details,
+                feeBump = feeBump.context,
                 sendState = sendState,
                 onBack = { app.popRoute() },
                 onSwipeToSend = {
                     sendState = SendState.Sending
                     scope.launch {
+                        // a swipe that beats the check still needs its answer, which the
+                        // broadcast would erase
+                        checkFeeBump()
+
                         try {
                             when (input) {
                                 is SendConfirmationInput.SignedTransaction -> {
                                     walletManager.broadcastTransaction(input.v1)
+                                    sent(input.v1.txId())
                                 }
                                 is SendConfirmationInput.SignedPsbt -> {
                                     val txnToBroadcast =
                                         finalizedTransaction
                                             ?: error("Unable to finalize transaction")
                                     walletManager.broadcastTransaction(txnToBroadcast)
+                                    sent(txnToBroadcast.txId())
                                 }
                                 SendConfirmationInput.Unsigned -> {
                                     walletManager.initiatePayment(details.psbt(), payjoinEndpoint)
                                     // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
                                     if (payjoinEndpoint != null) return@launch
+                                    sent(details.id())
                                 }
                             }
-                            sendState = SendState.Sent
-                            showSuccessAlert = true
                         } catch (e: WalletManagerException) {
                             sendState = SendState.Error(e.displayMessage("Unknown error"))
                             showErrorAlert = true
@@ -687,3 +732,15 @@ private fun SendFlowRouteToScreen(
         )
     }
 }
+
+/** Whether a confirm screen's transaction replaces a pending send, which takes a moment to learn */
+private sealed interface FeeBumpCheck {
+    data object Checking : FeeBumpCheck
+
+    data class Checked(
+        val context: FeeBumpConfirmContext?,
+    ) : FeeBumpCheck
+}
+
+private val FeeBumpCheck.context: FeeBumpConfirmContext?
+    get() = (this as? FeeBumpCheck.Checked)?.context

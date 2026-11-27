@@ -37,6 +37,14 @@ struct SendFlowConfirmScreen: View {
     /// Lock this screen took to ask for authentication before sending
     @State private var sendConfirmationLock: SendConfirmationLock? = nil
 
+    /// The pending send this transaction replaces when it is a fee bump, asked for as the screen
+    /// opens and before sending at the latest, since after the broadcast nothing is left for it
+    /// to replace
+    @State private var feeBump: FeeBumpCheck = .checking
+
+    /// The fee bump's replacement once broadcast, which this screen then shows as Sped Up
+    @State private var spedUp: FeeBumpBroadcast?
+
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
@@ -70,7 +78,9 @@ struct SendFlowConfirmScreen: View {
     }
 
     var body: some View {
-        if case let .signedPsbt(psbt) = input, finalizedTransaction == nil {
+        if let spedUp {
+            FeeBumpedScreen(broadcast: spedUp, manager: manager)
+        } else if case let .signedPsbt(psbt) = input, finalizedTransaction == nil {
             SendFlowFinalizePsbtView(
                 manager: manager,
                 psbt: psbt,
@@ -80,6 +90,7 @@ struct SendFlowConfirmScreen: View {
             SendFlowConfirmationContent(
                 manager: manager,
                 details: details,
+                feeBump: feeBump.context,
                 prices: prices,
                 fiatAmount: fiatAmount,
                 showingMenu: $showingMenu,
@@ -94,6 +105,9 @@ struct SendFlowConfirmScreen: View {
             // nothing here takes text, and the amount screen's keyboard and its toolbar must not
             // lift the swipe control while they leave
             .ignoresSafeArea(.keyboard)
+            // the screen shows as a plain send until the answer comes, a few milliseconds later,
+            // so no send waits behind a spinner
+            .task { await checkFeeBump() }
             .onDisappear(perform: handleDisappear)
             .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
@@ -103,6 +117,29 @@ struct SendFlowConfirmScreen: View {
                 defaultTitle: "Error Broadcasting!"
             )
         }
+    }
+
+    /// Asks once, keeping the first answer, since one that arrives after the broadcast would
+    /// find nothing left to replace
+    private func checkFeeBump() async {
+        guard case .checking = feeBump else { return }
+
+        let context = await manager.feeBumpContext(details: details)
+        guard case .checking = feeBump else { return }
+
+        feeBump = .checked(context)
+    }
+
+    /// A fee bump goes on to the Sped Up screen, any other send shows the sent alert
+    private func sent(txId: TxId) {
+        sendState = .sent
+
+        guard feeBump.context != nil else {
+            presenter.confirmationAlertState = .init(.sent(id))
+            return
+        }
+
+        withAnimation { spedUp = feeBumpBroadcast(txId: txId, details: details) }
     }
 
     private func confirmSend() {
@@ -151,15 +188,20 @@ struct SendFlowConfirmScreen: View {
 
     @MainActor
     private func sendTransaction() async {
+        // a swipe that beats the check still needs its answer, which the broadcast would erase
+        await checkFeeBump()
+
         do {
             switch input {
             case let .signedTransaction(txn):
                 try await manager.broadcastTransaction(txn)
+                sent(txId: txn.txId())
             case .signedPsbt:
                 guard let finalizedTransaction else {
                     throw SendConfirmationError.unfinalizedSignedPsbt
                 }
                 try await manager.broadcastTransaction(finalizedTransaction)
+                sent(txId: finalizedTransaction.txId())
             case .unsigned:
                 try await manager.initiatePayment(
                     psbt: details.psbt(),
@@ -167,13 +209,9 @@ struct SendFlowConfirmScreen: View {
                 )
                 // for payjoin, stay in .sending until PayjoinTxBroadcast reconciles
                 if payjoinEndpoint == nil {
-                    sendState = .sent
-                    presenter.confirmationAlertState = .init(.sent(id))
+                    sent(txId: details.id())
                 }
-                return
             }
-            sendState = .sent
-            presenter.confirmationAlertState = .init(.sent(id))
         } catch let error as WalletManagerError {
             sendState = .error(error.description)
             presenter.confirmationAlertState = .init(.broadcastError(error.description))
@@ -219,6 +257,7 @@ private struct SendFlowConfirmationContent: View {
     @Bindable var manager: WalletManager
 
     let details: ConfirmDetails
+    let feeBump: FeeBumpConfirmContext?
     let prices: PriceResponse?
     let fiatAmount: String
     @Binding var showingMenu: Bool
@@ -236,6 +275,7 @@ private struct SendFlowConfirmationContent: View {
                 SendFlowConfirmationBody(
                     manager: manager,
                     details: details,
+                    feeBump: feeBump,
                     prices: prices,
                     fiatAmount: fiatAmount,
                     showingMenu: $showingMenu,
@@ -255,6 +295,7 @@ private struct SendFlowConfirmationBody: View {
     @Bindable var manager: WalletManager
 
     let details: ConfirmDetails
+    let feeBump: FeeBumpConfirmContext?
     let prices: PriceResponse?
     let fiatAmount: String
     @Binding var showingMenu: Bool
@@ -283,6 +324,7 @@ private struct SendFlowConfirmationBody: View {
                 SendFlowConfirmationSummary(
                     manager: manager,
                     details: details,
+                    isFeeBump: feeBump != nil,
                     fiatAmount: fiatAmount,
                     showingMenu: $showingMenu
                 )
@@ -292,7 +334,7 @@ private struct SendFlowConfirmationBody: View {
 
                 Divider()
 
-                SendFlowDetailsView(manager: manager, details: details, prices: prices)
+                SendFlowDetailsView(manager: manager, details: details, prices: prices, feeBump: feeBump)
             }
 
             Spacer(minLength: 0)
@@ -300,6 +342,7 @@ private struct SendFlowConfirmationBody: View {
             SendFlowConfirmationFooter(
                 sendState: $sendState,
                 lockingTask: $lockingTask,
+                swipePrompt: feeBump == nil ? "Swipe to Send" : "Swipe to confirm new fee",
                 walletType: walletType,
                 confirmSend: confirmSend,
                 lockWallet: lockWallet
@@ -313,12 +356,13 @@ private struct SendFlowConfirmationSummary: View {
     @Bindable var manager: WalletManager
 
     let details: ConfirmDetails
+    let isFeeBump: Bool
     let fiatAmount: String
     @Binding var showingMenu: Bool
 
     var body: some View {
         VStack(spacing: 24) {
-            SendFlowConfirmationTitle()
+            SendFlowConfirmationTitle(isFeeBump: isFeeBump)
                 .padding(.top, 10)
 
             SendFlowConfirmationAmount(
@@ -344,12 +388,15 @@ private struct SendFlowConfirmationSummary: View {
 }
 
 private struct SendFlowConfirmationTitle: View {
+    let isFeeBump: Bool
+
     var body: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("You're sending")
+                Text(isFeeBump ? "Speed Up" : "You're sending")
                     .font(.headline)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("sendFlowConfirm.title")
 
                 Spacer()
             }
@@ -466,6 +513,8 @@ private struct SendFlowConfirmationFooter: View {
     @Binding var sendState: SendState
     @Binding var lockingTask: Task<Void, Never>?
 
+    let swipePrompt: String
+
     let walletType: WalletType
     let confirmSend: () -> Void
     let lockWallet: () -> Void
@@ -473,6 +522,7 @@ private struct SendFlowConfirmationFooter: View {
     var body: some View {
         SwipeToSendView(
             sendState: $sendState,
+            prompt: swipePrompt,
             onConfirm: confirmSend
         )
         .padding(.top, sendConfirmationActionTopPadding)
@@ -487,6 +537,17 @@ private struct SendFlowConfirmationFooter: View {
 
             if walletType == .hot { lockWallet() }
         }
+    }
+}
+
+/// Whether the transaction replaces a pending send, which takes a moment to learn
+private enum FeeBumpCheck {
+    case checking
+    case checked(FeeBumpConfirmContext?)
+
+    var context: FeeBumpConfirmContext? {
+        if case let .checked(context) = self { return context }
+        return nil
     }
 }
 

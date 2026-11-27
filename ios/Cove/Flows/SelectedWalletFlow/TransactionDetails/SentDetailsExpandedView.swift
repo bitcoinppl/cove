@@ -42,6 +42,10 @@ struct SentDetailsExpandedView: View {
 
             Divider().padding(.vertical, 18)
 
+            if let previousFee = transactionDetails.previousFee() {
+                SentPreviousFeeDetails(manager: manager, previousFee: previousFee, unit: metadata.selectedUnit)
+            }
+
             SentNetworkFeeDetails(
                 transactionDetails: transactionDetails,
                 unit: metadata.selectedUnit
@@ -57,6 +61,15 @@ struct SentDetailsExpandedView: View {
                 transactionDetails: transactionDetails,
                 unit: metadata.selectedUnit
             )
+
+            // one earlier fee already shows as the previous fee, a list only helps beyond that
+            if transactionDetails.feeHistory().count > 1 {
+                SentFeeHistoryDetails(transactionDetails: transactionDetails, unit: metadata.selectedUnit)
+            }
+
+            if transactionDetails.isPendingFeeBump {
+                FeeBumpPendingFooterNote()
+            }
         }
         .padding(.horizontal, detailsExpandedPadding)
     }
@@ -233,7 +246,7 @@ private struct SentNetworkFeeDetails: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            Text("Network Fee")
+            Text(transactionDetails.previousFee() == nil ? "Network Fee" : "New Network Fee")
             Image(systemName: "info.circle")
                 .font(.footnote)
                 .fontWeight(.bold)
@@ -254,6 +267,8 @@ private struct SentNetworkFeeDetails: View {
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("transactionDetails.networkFee")
     }
 }
 

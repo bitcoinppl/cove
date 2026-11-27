@@ -555,6 +555,13 @@ private extension HotWalletCreateScreenLayoutTests {
         do {
             _ = try await bootstrap()
         } catch AppInitError.AlreadyCalled(_) {}
+
+        // the test host app bootstraps on its own, so AlreadyCalled can return before it finishes
+        let deadline = Date().addingTimeInterval(30)
+        while bootstrapProgress() != .complete {
+            try XCTUnwrap(Date() < deadline ? true : nil, "bootstrap did not complete")
+            try await Task.sleep(for: .milliseconds(50))
+        }
     }
 
     private func firstScrollView(in view: UIView) -> UIScrollView? {

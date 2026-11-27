@@ -16,6 +16,9 @@ struct SendFlowDetailsView: View {
     let details: ConfirmDetails
     @State var prices: PriceResponse?
 
+    /// The pending send this one replaces when it bumps a fee, whose fee shows struck through
+    var feeBump: FeeBumpConfirmContext? = nil
+
     // private
     @State private var presentingInputOutputDetails = false
     @State private var presentationSize: PresentationDetent = .medium
@@ -50,6 +53,8 @@ struct SendFlowDetailsView: View {
                 .onTapGesture { presentingInputOutputDetails = true }
 
             SendFlowDetailsAmountRows(
+                previousFeeAmount: feeBump.map { displayFiatOrBtcAmount($0.previousFee) },
+                recipientReceivesLess: feeBump?.recipientReceivesLess.map { "\($0.satsString()) sats" },
                 feeAmount: displayFiatOrBtcAmount(details.feeTotal()),
                 feePercentage: details.feePercentage(),
                 receiveAmount: displayFiatOrBtcAmount(details.sendingAmount()),
@@ -104,14 +109,38 @@ private struct SendFlowDetailsAddressRow: View {
 }
 
 private struct SendFlowDetailsAmountRows: View {
+    let previousFeeAmount: String?
+
+    /// How much less the recipient gets when a bump takes its fee from the amount sent
+    let recipientReceivesLess: String?
+
     let feeAmount: String
     let feePercentage: UInt64
     let receiveAmount: String
     let spendingAmount: String
 
     var body: some View {
+        if let previousFeeAmount {
+            HStack {
+                Text("Previous Fee")
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Text(previousFeeAmount)
+                    .font(.footnote)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .strikethrough()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("sendFlowConfirm.previousFee")
+        }
+
         HStack {
-            Text("Network Fee")
+            Text(previousFeeAmount == nil ? "Network Fee" : "New Network Fee")
                 .font(.footnote)
                 .fontWeight(.medium)
                 .foregroundStyle(.secondary)
@@ -132,6 +161,14 @@ private struct SendFlowDetailsAmountRows: View {
         }
         .font(.footnote)
         .fontWeight(.semibold)
+
+        if let recipientReceivesLess {
+            Text("The recipient receives \(recipientReceivesLess) less.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityIdentifier("sendFlowConfirm.recipientReceivesLess")
+        }
 
         HStack {
             Text("You'll pay")

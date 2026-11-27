@@ -463,6 +463,25 @@ class WalletManager :
             },
         )
 
+    /** A manager that speeds up the pending send [txId], for the sheet or popup that opens it to own */
+    fun newFeeBumpManager(txId: TxId): FeeBumpManager =
+        FeeBumpManager(
+            withRust {
+                newFeeBumpManager(txId)
+            },
+            txId,
+        )
+
+    /**
+     * The pending send the transaction in [details] replaces when it is a fee bump
+     *
+     * Ask before broadcasting, since afterwards nothing is left for it to replace
+     */
+    suspend fun feeBumpContext(details: ConfirmDetails): FeeBumpConfirmContext? =
+        withRustOrSuspend(null) {
+            feeBumpContext(details)
+        }
+
     suspend fun refreshTransactions() {
         withRustSuspend {
             getTransactions()

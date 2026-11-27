@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.test
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
@@ -9,8 +10,12 @@ import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import org.junit.Assert.assertTrue
 
-/** Steps through the Receive and TAPSIGNER screens that several full-launch suites share */
+/**
+ * Steps through the Receive, TAPSIGNER and QR signing screens that several full-launch suites
+ * share
+ */
 class HardwareWalletScreens(
     private val device: UiDevice,
     private val wallet: FullLaunchWalletRobot,
@@ -47,6 +52,72 @@ class HardwareWalletScreens(
         }
 
         wallet.waitForBalance(sats)
+    }
+
+    /**
+     * Imports the test mnemonic's account as a watch-only hardware wallet by scanning the signer's
+     * export, then waits for the funded balance
+     */
+    fun importWatchOnlyWallet(
+        signer: HardwareSignerControl,
+        qr: QrScript,
+        balanceSats: Long,
+    ) {
+        launchFullApp()
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        wallet.selectSignetFakeNode()
+
+        FullLaunchOnboardingRobot(device)
+            .tapGetStarted()
+            .chooseExistingUser()
+            .useAnotherWallet()
+            .chooseHardwareWallet()
+            .openHardwareQrScanner()
+
+        val (external, internal) = signer.watchOnlyDescriptors()
+        qr.show(listOf("$external\n$internal"))
+
+        device.waitFor(By.text("Protect this hardware wallet with Cloud Backup?"), timeoutMs = 30_000L)
+        FullLaunchOnboardingRobot(device)
+            .skipCloudBackupAfterImport()
+            .acceptTermsAfterImport()
+
+        wallet.waitForBalance(balanceSats)
+    }
+
+    /** Shows the open draft as an animated QR in the format, then copies the unsigned PSBT */
+    fun exportUnsignedPsbt(formatLabel: String): String {
+        device.waitFor(By.text("Export Transaction")).click()
+        device.waitFor(By.text("QR Code")).click()
+        device.waitFor(By.text("Scan this QR"), timeoutMs = 15_000L)
+
+        // a small PSBT can fit in one BBQr frame, which shows no frame counter
+        device.waitFor(By.text(formatLabel)).click()
+        device.waitFor(By.desc("QR code for transaction signing"))
+
+        // the clipboard can still hold text from an earlier step or test, such as a receive address,
+        // and the app handles the tap asynchronously, so a read right after it can still see that
+        // text; a sentinel shows when Copy has written, even when it writes the same text again
+        setClipboard(CLIPBOARD_SENTINEL)
+        device.waitFor(By.desc("Copy")).click()
+        wallet.waitUntil("the export's Copy never reached the clipboard", timeoutMs = 5_000L) {
+            clipboardText() != CLIPBOARD_SENTINEL
+        }
+
+        val psbt = clipboardText().trim()
+        assertTrue("the Copy button copied nothing", psbt.isNotEmpty())
+
+        device.pressBack()
+        device.waitFor(By.text("Import Signature"))
+
+        return psbt
+    }
+
+    /** Opens the draft's QR signature scanner, which the QR seam feeds */
+    fun openSignatureScanner() {
+        device.waitFor(By.text("Import Signature")).click()
+        device.waitFor(By.text("QR")).click()
+        device.waitFor(By.text("Scan QR Code"))
     }
 
     /**
@@ -102,6 +173,18 @@ class HardwareWalletScreens(
         }
         wallet.dismissKeyboard()
         findSubmit(By.text(submit).enabled(true)).click()
+    }
+}
+
+// what the clipboard holds until the export's Copy replaces it
+private const val CLIPBOARD_SENTINEL = "cove-test-clipboard-sentinel"
+
+/** Puts plain text on the device clipboard, as a user copying it elsewhere would */
+fun setClipboard(text: String) {
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
+    instrumentation.runOnMainSync {
+        val clipboard = instrumentation.targetContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("signed PSBT", text))
     }
 }
 

@@ -289,100 +289,22 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
 
     /// Imports the test mnemonic's account as a watch-only hardware wallet by scanning its export
     private func importWatchOnlyWallet() {
-        app.launch(expecting: app.staticTexts["Welcome to Cove"])
-        app.openHardwareExportScanner()
-
-        let descriptors: HardwareSignerControl.Descriptors
-        do {
-            descriptors = try signer.watchOnlyDescriptors()
-            try qr.show(["\(descriptors.external)\n\(descriptors.internal)"])
-        } catch {
-            return XCTFail("couldn't show the wallet export: \(error)")
-        }
-
-        app.finishHardwareImport()
+        app.importWatchOnlyHardwareWallet(signer: signer, qr: qr)
     }
 
     // MARK: - Hardware screen
 
     /// Shows the draft as an animated QR in the format, then copies the unsigned PSBT
     private func exportUnsignedPsbt(showing format: QrFormat) -> String {
-        app.tapButton(named: "Export Transaction")
-        app.tapButton(named: "QR Code")
-        XCTAssertTrue(app.staticTexts["Scan this QR"].waitForExistence(timeout: 15))
-
-        let formatButton = app.segmentedControls.buttons[format.rawValue]
-        XCTAssertTrue(formatButton.waitForExistence(timeout: 5))
-        formatButton.tap()
-        XCTAssertTrue(formatButton.isSelected)
-
-        // the "Copied" popup shows for only two seconds, which a slow CI simulator's existence
-        // checks can miss, so wait on the pasteboard itself
-        let psbt: String
-        do {
-            let previous = try copiedText()
-            app.tapButton(named: "Copy")
-            psbt = try waitForCopiedText(changingFrom: previous, timeout: 15)
-        } catch {
-            XCTFail("couldn't read the copied PSBT: \(error)")
-            return ""
-        }
-
-        XCTAssertFalse(psbt.isEmpty, "the Copy button copied nothing")
-
-        closeExportSheet()
-        return psbt
-    }
-
-    /// Swipes the export sheet away and waits until the hardware screen under it takes taps
-    private func closeExportSheet() {
-        // the "Copied" popup can dismiss on a tap outside it, so while it shows its window takes
-        // every touch and a swipe never reaches the sheet
-        XCTAssertTrue(app.staticTexts["Copied"].waitForNonExistence(timeout: 10), "the Copied popup never went away")
-
-        // the sheet has no close button, and the Import Signature button behind it stays in the
-        // accessibility tree while it shows, so wait for the sheet itself to go
-        let sheetTitle = app.staticTexts["Scan this QR"]
-        for _ in 0 ..< 3 where sheetTitle.exists {
-            app.swipeDown(velocity: .fast)
-            _ = sheetTitle.waitForNonExistence(timeout: 5)
-        }
-
-        XCTAssertFalse(sheetTitle.exists, "the export sheet never closed")
-
-        let hittable = NSPredicate(format: "isHittable == true")
-        waitUntil(app.buttons["Import Signature"], matches: hittable, timeout: 10, "Import Signature never became tappable")
-    }
-
-    private func copiedText() throws -> String {
-        try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Polls the simulator pasteboard until it holds new text, returning empty text on timeout
-    private func waitForCopiedText(changingFrom previous: String, timeout: TimeInterval) throws -> String {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            let text = try copiedText()
-            if !text.isEmpty, text != previous { return text }
-
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-
-        return ""
+        app.exportUnsignedPsbt(showing: format, signer: signer)
     }
 
     private func openSignatureScanner() {
-        app.tapButton(named: "Import Signature")
+        app.openSignatureScanner()
+    }
 
-        // a tap that lands while the menu animates in does nothing and leaves the menu open
-        let qr = app.buttons["QR"]
-        XCTAssertTrue(qr.waitForExistence(timeout: 10))
-        for _ in 0 ..< 3 where qr.exists {
-            qr.tap()
-            _ = qr.waitForNonExistence(timeout: 3)
-        }
-
-        XCTAssertFalse(qr.exists, "the QR menu item never opened the scanner")
+    private func closeExportSheet() {
+        app.closeExportSheet()
     }
 
     private func deleteDraft() {

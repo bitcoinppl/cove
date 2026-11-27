@@ -77,6 +77,8 @@ extension FeeBumpError: CustomStringConvertible {
     }
 }
 
+extension FeeBumpRateError: CustomStringConvertible {}
+
 extension FiatAmountError: CustomStringConvertible {}
 
 extension FileHandlerError: CustomStringConvertible {}
