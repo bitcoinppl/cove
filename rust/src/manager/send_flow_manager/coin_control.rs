@@ -133,8 +133,8 @@ impl RustSendFlowManager {
         }
 
         match self.state.lock().mode.clone() {
-            // already in coin control mode with the same utxos, so do nothing
-            EnterMode::CoinControl(cc) if cc.utxo_list.utxos == utxos => {
+            // already in coin control mode with the same coins, so the amount typed for them stays
+            EnterMode::CoinControl(cc) if cc.utxo_list.has_same_coins(&utxos) => {
                 return;
             }
             _ => {}

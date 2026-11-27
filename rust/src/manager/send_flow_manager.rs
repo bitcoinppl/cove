@@ -1110,6 +1110,36 @@ mod tests {
         assert_eq!(manager.state.lock().amount_sats, Some(117_716));
     }
 
+    /// Continue from a coin list sorted another way hands over the same coins in a new order,
+    /// which keeps the amount typed for them instead of starting over at Max
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_same_coins_in_another_order_keep_the_custom_amount() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_validation();
+        show_bitcoin_unit(&manager, BitcoinUnit::Sat);
+
+        let mut utxos = preview_new_utxo_list(2, 0);
+        utxos[0].amount = Arc::new(super::Amount::from_sat(300_000));
+        utxos[1].amount = Arc::new(super::Amount::from_sat(200_000));
+        manager.set_coin_control_mode(utxos.clone());
+        assert!(
+            manager.handle_coin_control_amount_changed(super::Amount::from_sat(100_000)).is_some()
+        );
+        assert_eq!(manager.state.lock().amount_sats, Some(100_000));
+
+        utxos.reverse();
+        manager.set_coin_control_mode(utxos.clone());
+        assert_eq!(manager.state.lock().amount_sats, Some(100_000));
+        let super::EnterMode::CoinControl(mode) = manager.state.lock().mode.clone() else {
+            panic!("the send stays in coin control");
+        };
+        assert!(!mode.is_max_selected);
+
+        // other coins start over at their Max
+        manager.set_coin_control_mode(utxos[..1].to_vec());
+        assert_ne!(manager.state.lock().amount_sats, Some(100_000));
+    }
+
     #[test]
     fn coin_control_entered_btc_text_rejects_over_precision() {
         let manager = manager_for_validation();
