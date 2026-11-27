@@ -564,7 +564,7 @@ private fun isFlagSecureSet(): Boolean {
     return (activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE) != 0
 }
 
-private fun resumedActivity(): android.app.Activity {
+internal fun resumedActivity(): android.app.Activity {
     return resumedActivityOrNull() ?: error("No resumed activity")
 }
 

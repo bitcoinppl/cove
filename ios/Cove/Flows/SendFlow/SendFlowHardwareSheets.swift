@@ -29,6 +29,7 @@ private struct SendFlowHardwareSheetContent: View {
                 .presentationDetents([.height(550), .height(650), .large])
                 .padding()
                 .padding(.top, 10)
+                .qrSheetPresentation()
         }
     }
 }

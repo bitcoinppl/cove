@@ -305,5 +305,6 @@ struct SeedQrSheetView: View {
             Spacer()
         }
         .presentationDetents([.medium, .large])
+        .qrSheetPresentation()
     }
 }

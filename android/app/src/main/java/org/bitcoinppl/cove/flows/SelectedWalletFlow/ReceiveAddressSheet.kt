@@ -56,8 +56,8 @@ import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.AddressText
+import org.bitcoinppl.cove.views.QrModalBottomSheet
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
-import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.ReceiveAddressCopyPolicy
 import org.bitcoinppl.cove_core.ReceiveAddressPresentation
 import org.bitcoinppl.cove_core.ReceiveAddressRefreshState
@@ -129,12 +129,11 @@ fun ReceiveAddressSheet(
         }
     }
 
-    ModalBottomSheet(
+    QrModalBottomSheet(
         onDismissRequest = {
             onDismiss()
         },
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
     ) {
         ReceiveAddressSheetContent(
             walletName = manager.walletMetadata?.name ?: "Wallet",

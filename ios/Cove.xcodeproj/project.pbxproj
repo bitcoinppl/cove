@@ -42,9 +42,12 @@
 		F3F300022F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */; };
 		F3F400022F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F400012F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift */; };
 		F3F600022F80000000000001 /* PrivacyCoverFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F600012F80000000000001 /* PrivacyCoverFullLaunchUITests.swift */; };
+		F3F700022F80000000000001 /* QrSheetAppearanceFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F700012F80000000000001 /* QrSheetAppearanceFullLaunchUITests.swift */; };
+		F3F800022F80000000000001 /* ScreenColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F800012F80000000000001 /* ScreenColor.swift */; };
 		F3F500022F80000000000001 /* HotWalletImportScanFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F500012F80000000000001 /* HotWalletImportScanFullLaunchUITests.swift */; };
 		C0F100062F30000000000001 /* ScreenReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100052F30000000000001 /* ScreenReachability.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
+		F3F900012F80000000000001 /* KeyTeleportPacketQrTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F900022F80000000000001 /* KeyTeleportPacketQrTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
 		C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */; };
 		F3F300042F80000000000001 /* ScenePhasePrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F300032F80000000000001 /* ScenePhasePrivacyTests.swift */; };
@@ -165,10 +168,13 @@
 		F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcScanPrivacyCoverFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F3F400012F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrScanCameraPermissionFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F3F600012F80000000000001 /* PrivacyCoverFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyCoverFullLaunchUITests.swift; sourceTree = "<group>"; };
+		F3F700012F80000000000001 /* QrSheetAppearanceFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrSheetAppearanceFullLaunchUITests.swift; sourceTree = "<group>"; };
+		F3F800012F80000000000001 /* ScreenColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenColor.swift; sourceTree = "<group>"; };
 		F3F500012F80000000000001 /* HotWalletImportScanFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletImportScanFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100052F30000000000001 /* ScreenReachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenReachability.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
+		F3F900022F80000000000001 /* KeyTeleportPacketQrTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportPacketQrTests.swift; sourceTree = "<group>"; };
 		C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Fixtures/wallet_2_descriptors.txt; sourceTree = "<group>"; };
 		C0B000052F00000000000001 /* CoveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupPresentationCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -341,6 +347,8 @@
 				F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */,
 				F3F400012F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift */,
 				F3F600012F80000000000001 /* PrivacyCoverFullLaunchUITests.swift */,
+				F3F700012F80000000000001 /* QrSheetAppearanceFullLaunchUITests.swift */,
+				F3F800012F80000000000001 /* ScreenColor.swift */,
 				F3F500012F80000000000001 /* HotWalletImportScanFullLaunchUITests.swift */,
 				C0F100052F30000000000001 /* ScreenReachability.swift */,
 			);
@@ -369,6 +377,7 @@
 				C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */,
 				C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */,
 				C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */,
+				F3F900022F80000000000001 /* KeyTeleportPacketQrTests.swift */,
 				C0B000212F30000000000001 /* QrExportLayoutTests.swift */,
 				C0B0001E2F10000000000001 /* SwiftLogStoreTests.swift */,
 				C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */,
@@ -673,6 +682,8 @@
 				F3F300022F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift in Sources */,
 				F3F400022F80000000000001 /* QrScanCameraPermissionFullLaunchUITests.swift in Sources */,
 				F3F600022F80000000000001 /* PrivacyCoverFullLaunchUITests.swift in Sources */,
+				F3F700022F80000000000001 /* QrSheetAppearanceFullLaunchUITests.swift in Sources */,
+				F3F800022F80000000000001 /* ScreenColor.swift in Sources */,
 				F3F500022F80000000000001 /* HotWalletImportScanFullLaunchUITests.swift in Sources */,
 				C0F100062F30000000000001 /* ScreenReachability.swift in Sources */,
 			);
@@ -702,6 +713,7 @@
 				C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */,
 				C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */,
 				C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */,
+				F3F900012F80000000000001 /* KeyTeleportPacketQrTests.swift in Sources */,
 				C0B000202F30000000000001 /* QrExportLayoutTests.swift in Sources */,
 				C0B0001F2F10000000000001 /* SwiftLogStoreTests.swift in Sources */,
 				C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */,

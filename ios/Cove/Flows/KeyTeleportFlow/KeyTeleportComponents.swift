@@ -75,6 +75,23 @@ struct KeyTeleportRevealable<Content: View>: View {
     }
 }
 
+/// A KeyTeleport packet's QR code on a white card
+///
+/// The screens stay dark, so the card's white border gives a camera the quiet zone it needs to find
+/// the code against the dark background around it. The border is drawn in the code's own modules,
+/// so it stays four modules wide however dense the packet makes the code
+struct KeyTeleportPacketQr: View {
+    let text: String
+
+    var body: some View {
+        QrCodeView(text: text, quietZoneModules: 4)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .frame(maxWidth: 280)
+            .frame(maxWidth: .infinity)
+    }
+}
+
 struct KeyTeleportRevealPair<QR: View, Code: View>: View {
     let qrHint: String
     let codeHint: String
