@@ -18,6 +18,10 @@ Prefer direct, structurally correct fixes over temporary workarounds. The right 
 - **Android**: Android Studio + NDK, Java 17/JDK
 - **Optional**: bacon, watchexec
 
+### Rust Toolchain
+
+[`rust-toolchain.toml`](rust-toolchain.toml) pins the Rust version, with clippy and rustfmt. rustup installs that version the first time cargo runs in the repository, and every CI job installs it from the same file through [`actions-rust-lang/setup-rust-toolchain`](https://github.com/actions-rust-lang/setup-rust-toolchain), so local checks and CI use the same compiler. To move to a newer Rust, change `channel` there in its own pull request and fix any new clippy or rustc findings in that change.
+
 ## Environment Setup
 
 Copy `.envrc.example` to your preferred local environment setup and load the Android variables before running Android builds. At minimum, make sure `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `ANDROID_NDK_HOME`, and `JAVA_HOME` are set correctly for your machine.
