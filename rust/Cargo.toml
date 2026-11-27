@@ -188,6 +188,7 @@ argon2 = { version = "0.5.3", features = ["password-hash"] }
 flume = { version = "0.12.0", features = ["async"] }
 parking_lot = { workspace = true, features = ["deadlock_detection"] }
 once_cell = { workspace = true }
+rayon = "1.12"
 
 # error handling
 eyre = { workspace = true }

@@ -214,6 +214,35 @@ fn searches_each_chain_up_to_the_gap_past_its_last_revealed_address() {
 }
 
 #[test]
+fn owners_come_back_in_wallet_list_order() {
+    let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
+    let mnemonic = random_mnemonic();
+
+    // wallets are searched in parallel, so enough of them that some finish out of order
+    let wallets: Vec<_> = (0..12)
+        .map(|_| {
+            save_store_less_watch_only(
+                Some(bip84_pair(&mnemonic, Network::Bitcoin)),
+                Network::Bitcoin,
+                WalletMode::Main,
+            )
+        })
+        .collect();
+
+    let listed = Database::global().wallets.get_all(Network::Bitcoin, WalletMode::Main).unwrap();
+    let listed_ids: Vec<_> = listed.into_iter().map(|wallet| wallet.id).collect();
+    assert_eq!(listed_ids.len(), wallets.len());
+
+    let address = address_at(&mnemonic, Network::Bitcoin, KeychainKind::External, 4);
+    let AddressOwnership::Owned { owners } = find_owners(&address) else {
+        panic!("every wallet owns the address");
+    };
+
+    let owner_ids: Vec<_> = owners.into_iter().map(|owner| owner.wallet_id).collect();
+    assert_eq!(owner_ids, listed_ids);
+}
+
+#[test]
 fn main_and_decoy_mode_never_see_each_others_wallets() {
     let (_lock, _target) = isolated_wallets(Network::Bitcoin, WalletMode::Main);
     let main_mnemonic = random_mnemonic();

@@ -13,6 +13,7 @@ use cove_types::{
     address::{AddressError, AddressWithNetwork},
 };
 use cove_util::result_ext::ResultExt as _;
+use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use strum::IntoEnumIterator as _;
 use tracing::warn;
 
@@ -164,10 +165,21 @@ impl AddressOwnershipLookup {
     ) -> Result<AddressOwnership, AddressOwnershipError> {
         self.ensure_mode_is_active()?;
 
+        // each wallet reads its own store and derives its own scripts, so wallets are searched in
+        // parallel; rayon's collect keeps the results in wallet list order
+        let searched: Vec<_> = self
+            .wallets_in(networks)?
+            .into_par_iter()
+            .map(|metadata| {
+                let found = find_in_wallet(&metadata, script);
+                (metadata, found)
+            })
+            .collect();
+
         let mut owners = Vec::new();
         let mut unchecked_wallets = Vec::new();
-        for metadata in self.wallets_in(networks)? {
-            match find_in_wallet(&metadata, script) {
+        for (metadata, found) in searched {
+            match found {
                 Ok(Some(owned)) => owners.push(owned),
                 Ok(None) => {}
                 Err(error) => {
