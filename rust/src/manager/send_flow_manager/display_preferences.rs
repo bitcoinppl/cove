@@ -220,9 +220,10 @@ mod tests {
     }
 
     /// Android sends a keystroke after a short delay, so an edit typed in sats can reach Rust
-    /// after the wallet moved to BTC; parsed in BTC it would make 500,001 sats 500,001 BTC
+    /// after the wallet moved to BTC; parsed in BTC it would make 500,001 sats 500,001 BTC, and
+    /// dropped it would lose the last keystroke before the switch
     #[tokio::test(flavor = "current_thread")]
-    async fn an_edit_typed_before_a_unit_change_is_dropped_not_parsed_in_the_new_unit() {
+    async fn an_edit_typed_before_a_unit_change_counts_in_the_unit_it_was_typed_in() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
         let (wallet, send) = send_flow_over_btc_wallet();
 
@@ -235,23 +236,29 @@ mod tests {
         messages_until_refresh(&send).await;
         assert_eq!(send.state.lock().amount_entry.btc_text, "0.0005");
 
-        // the sats keystroke still on its way lands after the switch
+        // the sats keystroke still on its way lands after the switch, and is shown in BTC
         type_btc_amount_in(&send, "500001", BitcoinUnit::Sat);
-        assert_eq!(send.amount_sats(), 50_000);
-        assert_eq!(send.state.lock().amount_entry.btc_text, "0.0005");
+        assert_eq!(send.amount_sats(), 500_001);
+        assert_eq!(send.state.lock().amount_entry.btc_text, "0.00500001");
+        assert!(drain(&send).contains(&Message::UpdateEnteringBtcAmount("0.00500001".to_string())));
 
-        // and the field is told what Rust holds, so the platform drops the stale text too
-        let resent = std::iter::from_fn(|| send.reconciler.receiver().try_recv().ok())
+        // partial text typed in sats sets no amount, so it is dropped and the field sent again
+        type_btc_amount_in(&send, "", BitcoinUnit::Sat);
+        type_btc_amount_in(&send, "5.", BitcoinUnit::Sat);
+        assert_eq!(send.amount_sats(), 0);
+
+        // and an edit typed in BTC is parsed as one
+        type_btc_amount(&send, "0.00051");
+        assert_eq!(send.amount_sats(), 51_000);
+    }
+
+    fn drain(send: &RustSendFlowManager) -> Vec<Message> {
+        std::iter::from_fn(|| send.reconciler.receiver().try_recv().ok())
             .flat_map(|message| match message {
                 SingleOrMany::Single(message) => vec![message],
                 SingleOrMany::Many(batch) => batch,
             })
-            .collect::<Vec<_>>();
-        assert!(resent.contains(&Message::UpdateEnteringBtcAmount("0.0005".to_string())));
-
-        // an edit typed in BTC is parsed as one
-        type_btc_amount(&send, "0.00051");
-        assert_eq!(send.amount_sats(), 51_000);
+            .collect()
     }
 
     #[tokio::test(flavor = "current_thread")]

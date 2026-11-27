@@ -35,6 +35,26 @@ impl BtcOnChangeHandler {
         Self { mode, max_selected, btc_price_in_fiat }
     }
 
+    /// A handler that parses bitcoin text typed in `unit`, whatever the state's entry mode is now
+    pub fn typed_in(state: &SendFlowManagerState, unit: BitcoinUnit) -> Self {
+        let mode = AmountEntryMode { unit, fiat_or_btc: FiatOrBtc::Btc };
+        Self { mode, ..Self::new(state) }
+    }
+
+    /// Parses text on its own, with no earlier text to compare it to, as an edit that arrived
+    /// after the field was rewritten for another unit; cleared text is a zero amount
+    pub fn parse_fresh(&self, text: &str) -> Changeset {
+        if text.trim().is_empty() {
+            return Changeset {
+                amount_btc: Some(Amount::from_sat(0)),
+                amount_fiat: Some(0.0),
+                ..Default::default()
+            };
+        }
+
+        self.on_change("", text)
+    }
+
     pub fn on_change(&self, old_value: &str, new_value: &str) -> Changeset {
         // ---------------------------------------------------------------------
         // 1. early exits and sanitization

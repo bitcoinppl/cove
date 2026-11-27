@@ -333,8 +333,8 @@ pub(crate) enum MaxCommit {
 /// What an amount field edit committed, for the work that runs once the state is unlocked
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AmountEdit {
-    /// The text was the same as before, or the edit was typed in an entry mode that has since
-    /// changed, so nothing changed
+    /// The text was the same as before, or an edit typed in an entry mode that has since changed
+    /// set no amount, so nothing changed
     Unchanged,
 
     /// The text changed without setting an amount to send
@@ -354,8 +354,17 @@ fn apply_btc_edit(
 ) -> AmountEdit {
     let mode = state.amount_entry.mode;
     if mode.fiat_or_btc != FiatOrBtc::Btc || mode.unit != unit {
-        resend_stale_field(&state.amount_entry.btc_text, sender, Message::UpdateEnteringBtcAmount);
-        return AmountEdit::Unchanged;
+        let changeset = BtcOnChangeHandler::typed_in(state, unit).parse_fresh(&new);
+        let amount = changeset.amount_btc.map(|amount| (amount, changeset.clear_max_selected));
+
+        return match amount {
+            Some((amount, clear_max_selected)) => {
+                commit_stale_edit(state, amount, clear_max_selected, sender)
+            }
+            None => {
+                resend_field(&state.amount_entry.btc_text, sender, Message::UpdateEnteringBtcAmount)
+            }
+        };
     }
 
     let old = std::mem::replace(&mut state.amount_entry.btc_text, new.clone());
@@ -410,12 +419,24 @@ fn apply_fiat_edit(
     sender: &mut DeferredSender,
 ) -> AmountEdit {
     if state.amount_entry.mode.fiat_or_btc != FiatOrBtc::Fiat {
-        resend_stale_field(
-            &state.amount_entry.fiat_text,
-            sender,
-            Message::UpdateEnteringFiatAmount,
-        );
-        return AmountEdit::Unchanged;
+        let max_selected = state.max_selected.as_ref().map(|max| *max.amount);
+        let currency = state.selected_fiat_currency;
+        let amount = prices
+            .and_then(|prices| {
+                FiatOnChangeHandler::new(prices, currency, max_selected).on_change("", &new).ok()
+            })
+            .and_then(|changeset| Some((changeset.btc_amount?, changeset.clear_max_selected)));
+
+        return match amount {
+            Some((amount, clear_max_selected)) => {
+                commit_stale_edit(state, amount, clear_max_selected, sender)
+            }
+            None => resend_field(
+                &state.amount_entry.fiat_text,
+                sender,
+                Message::UpdateEnteringFiatAmount,
+            ),
+        };
     }
 
     let old = std::mem::replace(&mut state.amount_entry.fiat_text, new.clone());
@@ -471,12 +492,37 @@ fn apply_fiat_edit(
     edit
 }
 
-/// Drops an edit typed before a display preference change moved the entry to another unit or
-/// field, which already rewrote the field for the new mode, and sends the field's text again so
-/// the platform shows what Rust holds even when that rewrite left the text as it was
-fn resend_stale_field(text: &str, sender: &mut DeferredSender, message: fn(String) -> Message) {
-    debug!("dropping an amount edit typed before the entry mode changed");
+/// Commits the amount of an edit typed before a display preference change moved the entry to
+/// another unit or field
+///
+/// The change already rewrote the fields for the new mode, so the edit's text is not stored;
+/// its amount is, parsed in the unit or field it was typed in and rendered in the current mode,
+/// so the last keystroke before a switch still counts
+fn commit_stale_edit(
+    state: &mut SendFlowManagerState,
+    amount: Amount,
+    clear_max_selected: bool,
+    sender: &mut DeferredSender,
+) -> AmountEdit {
+    debug!("committing an amount edit typed before the entry mode changed");
+    if clear_max_selected {
+        unset_max_selected(state, sender);
+    }
+
+    if apply_amount(state, amount, sender) { AmountEdit::Amount } else { AmountEdit::Text }
+}
+
+/// Drops an edit typed before a display preference change that sets no amount yet, such as
+/// "0.", and sends the field's text again so the platform shows what Rust holds even when that
+/// change left the text as it was
+fn resend_field(
+    text: &str,
+    sender: &mut DeferredSender,
+    message: fn(String) -> Message,
+) -> AmountEdit {
+    debug!("dropping a partial amount edit typed before the entry mode changed");
     sender.queue(message(text.to_string()));
+    AmountEdit::Unchanged
 }
 
 /// Rewrites both amount fields from the committed amount once the amount field loses focus, in
