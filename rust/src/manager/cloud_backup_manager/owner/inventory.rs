@@ -1909,14 +1909,36 @@ mod tests {
             ]
         );
 
-        // a matching cloud copy is confirmed whatever its upload did
+        // a Failed notice moves a Confirmed Up to Date row into Needs Sync so a rename whose
+        // refresh failed is not stuck looking current (#1192 case 2)
         let effects = owner.apply(upload_failed("confirmed"));
 
-        assert!(!effects.changed);
+        assert!(effects.changed, "the Confirmed row must leave Up to Date");
         assert_eq!(
-            visible_rows(&owner)[0],
-            ("confirmed".into(), CloudBackupWalletStatus::Confirmed)
+            visible_rows(&owner),
+            vec![
+                ("new".into(), CloudBackupWalletStatus::Failed),
+                ("confirmed".into(), CloudBackupWalletStatus::Failed),
+            ]
         );
+    }
+
+    #[test]
+    fn failed_upload_moves_confirmed_row_out_of_up_to_date() {
+        let mut owner = InventoryOwner::default();
+        apply_provider_detail(
+            &mut owner,
+            CloudBackupDetail {
+                last_sync: None,
+                up_to_date: vec![cloud_only_wallet("renamed", CloudBackupWalletStatus::Confirmed)],
+                needs_sync: Vec::new(),
+            },
+        );
+
+        let effects = owner.apply(upload_failed("renamed"));
+
+        assert!(effects.changed);
+        assert_eq!(visible_rows(&owner), vec![("renamed".into(), CloudBackupWalletStatus::Failed)]);
     }
 
     #[test]
