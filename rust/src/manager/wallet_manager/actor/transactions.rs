@@ -213,6 +213,18 @@ impl WalletActor {
         Ok(psbt)
     }
 
+    /// Persist revealed change indexes after a draft is saved
+    ///
+    /// Building a draft reveals the next change index in memory. Without a store flush,
+    /// a relaunch only knows the old last-revealed index plus a 25-script lookahead, so a
+    /// saved draft past that window cannot be reserved and a new draft can reuse its change
+    /// address (#1091).
+    pub async fn persist_wallet_after_draft_save(&mut self) {
+        if let Err(error) = self.wallet.persist() {
+            warn!("failed to persist wallet after saving unsigned draft: {error}");
+        }
+    }
+
     // release reserved change addresses for a discarded unsigned transaction; the caller
     // already deleted its record, so the next load does not reserve them again
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {

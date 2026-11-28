@@ -56,6 +56,9 @@ impl RustWalletManager {
             Error::SaveUnsignedTransactionError(error)
         })?;
 
+        // flush revealed change so a relaunch can reserve this draft past the lookahead (#1091)
+        send!(self.actor.persist_wallet_after_draft_save());
+
         self.reconciler.send(Message::UnsignedTransactionsChanged);
 
         Ok(())
