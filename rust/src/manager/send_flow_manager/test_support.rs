@@ -1,8 +1,8 @@
 use cove_types::unit::BitcoinUnit;
 
-use crate::wallet::metadata::FiatOrBtc;
+use crate::{manager::deferred_sender::SingleOrMany, wallet::metadata::FiatOrBtc};
 
-use super::RustSendFlowManager;
+use super::{Message, RustSendFlowManager};
 
 /// Shows amounts in `unit`, typed in bitcoin, applied the way the wallet manager's push applies it
 ///
@@ -14,5 +14,15 @@ pub(crate) fn show_bitcoin_unit(manager: &RustSendFlowManager, unit: BitcoinUnit
     preferences.fiat_or_btc = FiatOrBtc::Btc;
     manager.apply_display_preferences(preferences);
 
-    while manager.reconciler.receiver().try_recv().is_ok() {}
+    drain_reconcile_messages(manager);
+}
+
+/// Takes every reconcile message already sent, in order, with batches flattened
+pub(crate) fn drain_reconcile_messages(manager: &RustSendFlowManager) -> Vec<Message> {
+    std::iter::from_fn(|| manager.reconciler.receiver().try_recv().ok())
+        .flat_map(|message| match message {
+            SingleOrMany::Single(message) => vec![message],
+            SingleOrMany::Many(batch) => batch,
+        })
+        .collect()
 }

@@ -842,7 +842,7 @@ mod tests {
         wallet::Address,
     };
 
-    use super::test_support::show_bitcoin_unit;
+    use super::test_support::{drain_reconcile_messages, show_bitcoin_unit};
 
     fn manager_for_validation() -> Arc<super::RustSendFlowManager> {
         crate::test_support::ensure_tokio_runtime();
@@ -960,20 +960,6 @@ mod tests {
         };
 
         message
-    }
-
-    fn drain_reconcile_messages(manager: &super::RustSendFlowManager) -> Vec<super::Message> {
-        let mut messages = Vec::new();
-        let receiver = manager.reconciler.receiver();
-
-        while let Ok(message) = receiver.try_recv() {
-            match message {
-                SingleOrMany::Single(message) => messages.push(message),
-                SingleOrMany::Many(batch) => messages.extend(batch),
-            }
-        }
-
-        messages
     }
 
     fn pending_warning_kind(
@@ -1105,25 +1091,11 @@ mod tests {
         assert_eq!(state.amount_sats, Some(117_716));
     }
 
-    #[test]
-    fn coin_control_entered_sats_text_ignores_thousands_separators() {
-        let manager = manager_for_validation();
-        set_coin_control_mode_with_total(&manager, 435_558);
-
-        assert!(
-            manager
-                .handle_coin_control_entered_amount_changed("117,716".to_string(), BitcoinUnit::Sat)
-                .is_some()
-        );
-
-        let state = manager.state.lock();
-        assert_eq!(state.amount_sats, Some(117_716));
-    }
-
     /// A display preference change can land between a keystroke in the custom amount sheet and
-    /// Rust handling it, so the text is parsed in the unit the sheet showed, not the new one
+    /// Rust handling it, so the text is parsed in the unit the sheet showed, not the new one, and
+    /// sats text keeps its thousands separators
     #[test]
-    fn coin_control_entered_text_is_parsed_in_the_unit_it_was_typed_in() {
+    fn coin_control_entered_sats_text_is_parsed_in_the_unit_it_was_typed_in() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 435_558);
         show_bitcoin_unit(&manager, BitcoinUnit::Btc);

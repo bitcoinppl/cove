@@ -202,17 +202,16 @@ mod tests {
 
     use crate::{
         app::{App, AppAction},
-        manager::{
-            deferred_sender::SingleOrMany,
-            wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
-        },
+        manager::wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
         test_support::hardware_signing::external_address,
         wallet::metadata::WalletMetadata,
     };
 
-    use super::super::{Action, Message, RustSendFlowManager};
+    use super::super::{
+        Action, Message, RustSendFlowManager, test_support::drain_reconcile_messages,
+    };
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
     const AMOUNT_SATS: u64 = 50_000;
@@ -248,20 +247,6 @@ mod tests {
         .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
-    }
-
-    fn drain_reconcile_messages(manager: &RustSendFlowManager) -> Vec<Message> {
-        let receiver = manager.reconciler.receiver();
-        let mut messages = Vec::new();
-
-        while let Ok(message) = receiver.try_recv() {
-            match message {
-                SingleOrMany::Single(message) => messages.push(message),
-                SingleOrMany::Many(batch) => messages.extend(batch),
-            }
-        }
-
-        messages
     }
 
     fn pushed_confirm_route() -> Option<SendRouteConfirmArgs> {

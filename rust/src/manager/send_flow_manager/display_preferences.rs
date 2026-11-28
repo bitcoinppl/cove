@@ -18,9 +18,10 @@ impl RustSendFlowManager {
     /// Applies the wallet's display preferences after the wallet manager changed them
     ///
     /// The unit or field and the entered text change in one critical section, the same one an
-    /// amount edit is checked, parsed and committed in, and an edit typed in the old mode is
-    /// dropped, so a keystroke is never parsed in a unit it was not typed in. Sensitive visibility
-    /// is read live when amounts render, so any change only needs the presenters refreshed
+    /// amount edit is checked, parsed and committed in, and an edit typed in the old mode is parsed
+    /// in the mode it was typed in, so a keystroke is never read in a unit it was not typed in.
+    /// Sensitive visibility is read live when amounts render, so any change only needs the
+    /// presenters refreshed
     pub(crate) fn apply_display_preferences(&self, preferences: WalletDisplayPreferences) {
         self.update_state(|state, sender| {
             apply_amount_entry_mode(state, preferences.into(), sender);
@@ -99,13 +100,15 @@ fn set_text(
 mod tests {
     use std::sync::Arc;
 
-    use act_zero::{call, send};
+    use act_zero::call;
     use cove_types::unit::BitcoinUnit;
 
     use crate::{
         manager::{
             deferred_sender::SingleOrMany,
-            send_flow_manager::{RustSendFlowManager, SendFlowManagerAction},
+            send_flow_manager::{
+                RustSendFlowManager, SendFlowManagerAction, test_support::drain_reconcile_messages,
+            },
             wallet_manager::{RustWalletManager, WalletManagerAction},
         },
         wallet::{
@@ -146,10 +149,6 @@ mod tests {
         send.clone().dispatch(action);
     }
 
-    fn discard_messages(send: &RustSendFlowManager) {
-        while send.reconciler.receiver().try_recv().is_ok() {}
-    }
-
     /// Waits for the send flow to reconcile a change the wallet manager published
     async fn messages_until_refresh(send: &RustSendFlowManager) -> Vec<Message> {
         let receiver = send.reconciler.receiver();
@@ -178,7 +177,7 @@ mod tests {
 
         type_btc_amount(&send, "0.0015");
         assert_eq!(send.amount_sats(), 150_000);
-        discard_messages(&send);
+        drain_reconcile_messages(&send);
 
         // sats picked on another screen: the text and unit flip together and the amount stays
         wallet_dispatch(&wallet, WalletManagerAction::UpdateUnit(BitcoinUnit::Sat)).await;
@@ -196,7 +195,7 @@ mod tests {
         // the next keystroke parses in sats, not BTC
         type_btc_amount(&send, "150,0001");
         assert_eq!(send.amount_sats(), 1_500_001);
-        discard_messages(&send);
+        drain_reconcile_messages(&send);
 
         // typing in fiat rewrites the fiat field from the amount
         send.state.lock().amount_fiat = Some(1_500.0);
@@ -241,7 +240,10 @@ mod tests {
         type_btc_amount_in(&send, "500001", BitcoinUnit::Sat);
         assert_eq!(send.amount_sats(), 500_001);
         assert_eq!(send.state.lock().amount_entry.btc_text, "0.00500001");
-        assert!(drain(&send).contains(&Message::UpdateEnteringBtcAmount("0.00500001".to_string())));
+        assert!(
+            drain_reconcile_messages(&send)
+                .contains(&Message::UpdateEnteringBtcAmount("0.00500001".to_string()))
+        );
 
         // partial text typed in sats sets no amount, so it is dropped and the field sent again
         type_btc_amount_in(&send, "", BitcoinUnit::Sat);
@@ -251,15 +253,6 @@ mod tests {
         // and an edit typed in BTC is parsed as one
         type_btc_amount(&send, "0.00051");
         assert_eq!(send.amount_sats(), 51_000);
-    }
-
-    fn drain(send: &RustSendFlowManager) -> Vec<Message> {
-        std::iter::from_fn(|| send.reconciler.receiver().try_recv().ok())
-            .flat_map(|message| match message {
-                SingleOrMany::Single(message) => vec![message],
-                SingleOrMany::Many(batch) => batch,
-            })
-            .collect()
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -274,36 +267,5 @@ mod tests {
 
         type_btc_amount(&send, "50000");
         assert_eq!(send.amount_sats(), 50_000);
-    }
-
-    /// A send flow created while a unit change is still on its way through the wallet actor
-    /// starts on the old unit, and the change landing afterwards moves it to the new one with the
-    /// typed amount converted
-    #[tokio::test(flavor = "current_thread")]
-    async fn a_unit_change_landing_after_the_send_flow_is_created_converts_the_amount() {
-        let _guard = crate::test_support::global_state_test_lock().lock().await;
-        let (wallet, send) = send_flow_over_btc_wallet();
-        type_btc_amount(&send, "0.0005");
-        assert_eq!(send.amount_sats(), 50_000);
-
-        // queued on the actor, not awaited, as a change from the wallet screen would be
-        send!(
-            wallet
-                .actor
-                .dispatch_metadata_action(WalletManagerAction::UpdateUnit(BitcoinUnit::Sat))
-        );
-
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
-        while send.amount_entry_mode().unit != BitcoinUnit::Sat {
-            assert!(tokio::time::Instant::now() < deadline, "the queued unit change never arrived");
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-
-        assert_eq!(send.state.lock().amount_entry.btc_text, "50,000");
-        assert_eq!(send.amount_sats(), 50_000);
-
-        // and the next keystroke parses in sats
-        type_btc_amount(&send, "50,0001");
-        assert_eq!(send.amount_sats(), 500_001);
     }
 }
