@@ -731,6 +731,33 @@ mod tests {
         assert!(unused_addresses_contain(&wallet, KeychainKind::Internal, change_index));
     }
 
+    /// Documents #1091: BDK's derivation_of_spk only sees revealed indexes plus a 25-script
+    /// lookahead. A change index past that window is invisible until reveal_addresses_to runs
+    /// (which persist after draft save keeps durable across relaunch).
+    #[test]
+    fn change_spk_past_lookahead_is_invisible_until_revealed() {
+        let mut wallet = test_bdk_wallet();
+        let past_lookahead = 40;
+        let spk = wallet
+            .reveal_addresses_to(KeychainKind::Internal, past_lookahead)
+            .last()
+            .expect("change address at index 40")
+            .address
+            .script_pubkey();
+
+        let mut cold = test_bdk_wallet();
+        assert!(
+            cold.derivation_of_spk(spk.clone()).is_none(),
+            "index 40 is past the default lookahead from an unrevealed store"
+        );
+
+        cold.reveal_addresses_to(KeychainKind::Internal, past_lookahead).for_each(drop);
+        assert_eq!(
+            cold.derivation_of_spk(spk),
+            Some((KeychainKind::Internal, past_lookahead))
+        );
+    }
+
     #[test]
     fn unreserve_tx_change_addresses_keeps_confirmed_change_index_used() {
         let (mut wallet, _) = get_funded_wallet_wpkh();
