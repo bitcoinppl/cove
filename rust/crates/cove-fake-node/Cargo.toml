@@ -40,7 +40,7 @@ color-eyre = { version = "0.6.5", optional = true }
 bdk_esplora = { workspace = true }
 bdk_electrum = { workspace = true }
 reqwest = { workspace = true }
-rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+rustls = { version = "0.23.46", features = ["ring"], default-features = false }
 tokio = { workspace = true, features = ["rt", "macros"] }
 
 [lints]

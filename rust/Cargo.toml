@@ -263,7 +263,7 @@ ahash = { workspace = true }
 reqwest = { workspace = true, features = ["json", "rustls-no-provider"], default-features = false }
 
 # tls (needed for crypto provider install in bootstrap)
-rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+rustls = { version = "0.23.46", features = ["ring"], default-features = false }
 
 # parsing
 winnow = { workspace = true }
