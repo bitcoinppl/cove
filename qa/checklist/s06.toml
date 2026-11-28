@@ -256,30 +256,41 @@ coverage = [
 [[row]]
 id = "s06-send-to-my-wallet-fills-its-next-address"
 section = "6"
-title = "Send to My Wallet lists the other wallets and fills the picked wallet's next address"
+title = "Send between wallets lists the other wallets, shows the picked wallet's card and names it on Confirm"
 platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/transfer_destination.rs",
     "rust/src/manager/send_flow_manager/address_input.rs",
+    "rust/src/manager/send_flow_manager/state.rs",
+    "rust/src/manager/send_flow_manager/read_api.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/AddressTextEditor.swift",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/TransferDestinationSheet.swift",
     "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift",
+    "ios/Cove/Flows/SendFlow/Common/SendFlowDetailsView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/TransferDestinationSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/SendFlowSetAmountScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt",
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/SendToMyWalletFullLaunchUITests.swift::testPickingAnotherWalletFillsItsNextAddressAndSendsThere",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/SendToMyWalletFullLaunchTest.kt::pickingAnotherWalletFillsItsNextAddressAndSendsThere",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::picking_another_wallet_fills_its_next_receive_address",
+    "rust:rust/src/transfer_destination.rs::only_a_hardware_wallet_with_a_screen_is_checked_on_device",
 ]
-# the tests pick a hardware wallet from Send's address field, then check the filled address, the
-# recipient Confirm shows and the address the broadcast pays
+# the tests open Your Wallets from Send between wallets, check its rows, pick a TAPSIGNER, drop the
+# pick by editing its address, pick it again for Confirm's TO WALLET card without the device note,
+# swap it for a hardware wallet with Change, and check the note on Confirm and the address the
+# broadcast pays
 
 [[row]]
 id = "s06-send-to-my-wallet-unscanned-wallet-not-pickable"
 section = "6"
-title = "Send to My Wallet shows a wallet that hasn't finished its first scan but won't pick it"
+title = "Your Wallets shows a wallet that hasn't finished its first scan but won't pick it"
 platforms = ["ios", "android"]
 target = "ui"
 paths = [
@@ -293,6 +304,24 @@ coverage = [
     "rust:rust/src/transfer_destination.rs::an_unscanned_destination_hands_out_no_address",
 ]
 # FA can't hold a wallet's first scan open: the fake node answers at once and has no control to
-# stall a scan, so the agent imports a wallet with history and opens another wallet's picker
-# before that scan finishes; the row must read "Open this wallet once so Cove can scan it" and a
-# tap on it must leave the address empty
+# stall a scan, so the agent imports a wallet with history and opens another wallet's Your Wallets
+# before that scan finishes; the row must be dimmed and read "Open this wallet once so Cove can
+# scan it", and a tap on it must leave the address card empty
+
+[[row]]
+id = "s06-send-between-wallets-coin-control-and-dark-mode"
+section = "6"
+title = "Coin control's Send to section matches Set Amount's, and both read well in dark mode"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/CoinControlSetAmountScreen.kt",
+]
+coverage = ["agent"]
+# the FA tests send from Set Amount in light mode only and assert text, not looks, so the agent
+# opens coin control's Set Amount, picks a wallet and checks the card, Change and the Send between
+# wallets row there, then checks the address card, the picked wallet's card, Your Wallets and
+# Confirm's TO WALLET card in dark mode on both platforms

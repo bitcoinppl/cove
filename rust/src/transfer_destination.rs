@@ -4,7 +4,7 @@
 //! decoy wallets are stored under separate keys, so a main wallet never lists a decoy wallet or
 //! the reverse
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use act_zero::{Addr, call};
 use backon::{ExponentialBuilder, Retryable as _};
@@ -24,8 +24,8 @@ use crate::{
         wallet_manager::{WalletManagerError, actor::WalletActor},
     },
     wallet::{
-        Wallet, WalletError,
-        metadata::{WalletId, WalletMetadata},
+        Address, Wallet, WalletError,
+        metadata::{HardwareWalletMetadata, WalletColor, WalletId, WalletMetadata, WalletType},
     },
     wallet_lifecycle::{
         WalletConstructionPermit, WalletLifecycleCoordinator, WalletLifecycleFailure,
@@ -48,6 +48,62 @@ pub enum TransferDestinationStatus {
     /// The wallet has not finished its first full scan, so its next address may already have
     /// been used on chain. Opening the wallet once runs that scan
     InitialScanIncomplete,
+}
+
+/// The wallet a send pays after the user picked it, and the address it handed out
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct TransferRecipient {
+    pub wallet_id: WalletId,
+    pub name: String,
+    pub color: WalletColor,
+    pub address: Arc<Address>,
+    pub address_check: RecipientAddressCheck,
+}
+
+/// Whether the user should check the recipient's address on its device before sending
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum RecipientAddressCheck {
+    /// Cove holds the wallet's keys, or its device has no screen, as with TAPSIGNER
+    NotNeeded,
+
+    /// Cove derived the address from a hardware wallet's public key, and that device can show
+    /// the address to compare
+    OnDevice,
+}
+
+/// A destination's address handed out for a send, with the wallet it came from
+#[derive(Debug)]
+pub(crate) struct ReservedTransferAddress {
+    pub(crate) destination: WalletMetadata,
+    pub(crate) address: AddressInfoWithDerivation,
+}
+
+impl From<ReservedTransferAddress> for TransferRecipient {
+    fn from(reserved: ReservedTransferAddress) -> Self {
+        let ReservedTransferAddress { destination, address } = reserved;
+
+        Self {
+            address_check: RecipientAddressCheck::of(&destination),
+            wallet_id: destination.id,
+            name: destination.name,
+            color: destination.color,
+            address: Arc::new(Address::new(address.info.address.clone())),
+        }
+    }
+}
+
+impl RecipientAddressCheck {
+    fn of(metadata: &WalletMetadata) -> Self {
+        let has_screenless_device =
+            matches!(metadata.hardware_metadata, Some(HardwareWalletMetadata::TapSigner(_)));
+
+        match metadata.wallet_type {
+            WalletType::Cold | WalletType::XpubOnly if !has_screenless_device => Self::OnDevice,
+            WalletType::Hot | WalletType::Cold | WalletType::XpubOnly | WalletType::WatchOnly => {
+                Self::NotNeeded
+            }
+        }
+    }
 }
 
 /// Why a destination wallet's receive address could not be handed out
@@ -165,7 +221,7 @@ pub(crate) fn transfer_destinations(
 pub(crate) async fn reserve_transfer_address(
     source: &WalletMetadata,
     destination: &WalletId,
-) -> Result<AddressInfoWithDerivation, TransferAddressError> {
+) -> Result<ReservedTransferAddress, TransferAddressError> {
     let metadata = Database::global()
         .wallets
         .get(destination, source.network, source.wallet_mode)
@@ -185,11 +241,13 @@ pub(crate) async fn reserve_transfer_address(
         .with_max_delay(Duration::from_millis(500))
         .with_max_times(8);
 
-    (|| reserve_once(destination.clone()))
+    let address = (|| reserve_once(destination.clone()))
         .retry(backoff)
         .when(TransferAddressError::is_transient)
         .notify(|error, delay| warn!("retrying transfer address in {delay:?}: {error}"))
-        .await
+        .await?;
+
+    Ok(ReservedTransferAddress { destination: metadata, address })
 }
 
 /// The result of the blocking step: an address from a closed wallet, or the open wallet's actor
@@ -333,8 +391,58 @@ mod tests {
         reserve_transfer_address(source, &destination.id)
             .await
             .expect("the destination hands out an address")
+            .address
             .info
             .index
+    }
+
+    /// Only a hardware wallet with a screen gets the advice to check the address on it
+    #[test]
+    fn only_a_hardware_wallet_with_a_screen_is_checked_on_device() {
+        use cove_tap_card::{TapSigner, TapSignerState};
+
+        let with_type = |wallet_type| {
+            let mut metadata = WalletMetadata::preview_new();
+            metadata.wallet_type = wallet_type;
+            metadata
+        };
+
+        let cases = [
+            (WalletType::Hot, RecipientAddressCheck::NotNeeded),
+            (WalletType::WatchOnly, RecipientAddressCheck::NotNeeded),
+            (WalletType::Cold, RecipientAddressCheck::OnDevice),
+            (WalletType::XpubOnly, RecipientAddressCheck::OnDevice),
+        ];
+        for (wallet_type, expected) in cases {
+            assert_eq!(
+                RecipientAddressCheck::of(&with_type(wallet_type)),
+                expected,
+                "{wallet_type}"
+            );
+        }
+
+        // secp256k1's generator point, a valid compressed public key
+        let pubkey = bitcoin::secp256k1::PublicKey::from_slice(&[
+            0x02, 0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95, 0xCE,
+            0x87, 0x0B, 0x07, 0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9, 0x59, 0xF2, 0x81,
+            0x5B, 0x16, 0xF8, 0x17, 0x98,
+        ])
+        .unwrap();
+        let tap_signer = Arc::new(TapSigner {
+            state: TapSignerState::Sealed,
+            card_ident: "TEST-IDENT".to_string(),
+            nonce: "deadbeef".to_string(),
+            signature: "cafebabe".to_string(),
+            pubkey: Arc::new(pubkey),
+        });
+
+        let mut tapsigner = with_type(WalletType::Cold);
+        tapsigner.hardware_metadata = Some(HardwareWalletMetadata::TapSigner(tap_signer));
+        assert_eq!(
+            RecipientAddressCheck::of(&tapsigner),
+            RecipientAddressCheck::NotNeeded,
+            "TAPSIGNER has no screen to check an address on"
+        );
     }
 
     #[tokio::test]

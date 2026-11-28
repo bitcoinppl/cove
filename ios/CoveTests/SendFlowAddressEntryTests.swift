@@ -68,6 +68,7 @@ private final class RecordingSendManager: SendFlowRustManaging {
     func maxSendMinusFeesAndSmallUtxo() -> Amount? { nil }
     func amount() -> Amount { Amount.fromSat(sats: 0) }
     func transferDestinations() -> [TransferDestination] { [] }
+    func transferRecipientPaying(address _: Address) -> TransferRecipient? { nil }
 
     func dispatch(action: SendFlowManagerAction) {
         guard case let .notifyEnteringAddressChanged(address) = action else { return }

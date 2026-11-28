@@ -37,6 +37,7 @@ protocol SendFlowRustManaging: AnyObject, Sendable {
     func maxSendMinusFeesAndSmallUtxo() -> Amount?
     func amount() -> Amount
     func transferDestinations() -> [TransferDestination]
+    func transferRecipientPaying(address: Address) -> TransferRecipient?
     func dispatch(action: SendFlowManagerAction)
 }
 
@@ -93,6 +94,10 @@ private enum SendFlowManagerAccessError: LocalizedError {
     private var _enteringAddress: String = ""
 
     var address: Address? = nil
+
+    /// The wallet the user picked to pay, while the address is still the one it handed out
+    var transferRecipient: TransferRecipient? = nil
+
     var amount: Amount? = nil
     var fiatAmount: Double? = nil
 
@@ -269,6 +274,11 @@ private enum SendFlowManagerAccessError: LocalizedError {
         dispatch(action: .selectTransferDestination(walletId))
     }
 
+    /// The picked wallet a send to `address` pays, for the Confirm screen
+    func transferRecipientPaying(_ address: Address) -> TransferRecipient? {
+        withRustOr(nil) { $0.transferRecipientPaying(address: address) }
+    }
+
     public func setAmount(_ amount: Amount) {
         guard canApplyReconcileMessages else { return }
 
@@ -360,6 +370,9 @@ private enum SendFlowManagerAccessError: LocalizedError {
         rust != nil
     }
 
+    // one exhaustive arm per message, so a message Rust adds fails to compile here; splitting it to
+    // lower the count would need a default arm, which would hide that
+    // swiftlint:disable:next cyclomatic_complexity
     func apply(_ message: Message) {
         guard canApplyReconcileMessages else { return }
 
@@ -377,6 +390,9 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
         case let .updateAddress(address):
             self.address = address
+
+        case let .updateTransferRecipient(recipient):
+            self.transferRecipient = recipient
 
         case .updateAmountEntryMode, .updateEnteringBtcAmount, .updateEnteringFiatAmount,
              .updateEnteringAddress:

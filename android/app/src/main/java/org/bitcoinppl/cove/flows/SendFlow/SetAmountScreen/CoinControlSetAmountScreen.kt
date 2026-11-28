@@ -69,6 +69,7 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
+import org.bitcoinppl.cove_core.WalletColor
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.BitcoinUnit
@@ -80,7 +81,8 @@ fun CoinControlSetAmountScreen(
     onNext: () -> Unit,
     onScanQr: () -> Unit,
     onChangeSpeed: () -> Unit,
-    onPickWallet: (() -> Unit)? = null,
+    onPickWallet: () -> Unit = {},
+    otherWalletColors: List<WalletColor> = emptyList(),
     onToggleBalanceVisibility: () -> Unit = {},
     onAmountTap: () -> Unit,
     onUtxoDetailsClick: () -> Unit,
@@ -190,9 +192,13 @@ fun CoinControlSetAmountScreen(
                             },
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
-                        AddressWidget(
+                        EnterAddressView(
                             onScanQr = onScanQr,
                             onPickWallet = onPickWallet,
+                            otherWalletColors = otherWalletColors,
+                            transferRecipient = sendFlowManager.transferRecipient,
+                            isEditingAddress = presenter.focusField == SetAmountFocusField.ADDRESS,
+                            onEditAddress = { presenter.focusField = SetAmountFocusField.ADDRESS },
                             initialAddress = initialAddress,
                             onAddressChanged = onAddressChanged,
                             focusRequester = addressFocusRequester,
@@ -437,128 +443,6 @@ private fun CoinControlAmountWidget(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().testTag("sendFlow.coinControl.fiatAmount"),
         )
-        Spacer(Modifier.height(24.dp))
-    }
-}
-
-@Composable
-private fun AddressWidget(
-    onScanQr: () -> Unit,
-    initialAddress: String,
-    onAddressChanged: (String) -> Unit,
-    focusRequester: FocusRequester,
-    onDone: () -> Unit = {},
-    onFocusChanged: (Boolean) -> Unit = {},
-    onPickWallet: (() -> Unit)? = null,
-) {
-    var address by remember { mutableStateOf(initialAddress) }
-    var isFocused by remember { mutableStateOf(false) }
-
-    // bidirectional sync: update local state when parent state changes
-    androidx.compose.runtime.LaunchedEffect(initialAddress) {
-        if (address != initialAddress) {
-            address = initialAddress
-        }
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(Modifier.height(20.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.label_enter_address),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stringResource(R.string.label_where_send_to),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                )
-            }
-            // clear button - only visible when focused and has content
-            if (isFocused && address.isNotEmpty()) {
-                IconButton(
-                    onClick = {
-                        address = ""
-                        onAddressChanged("")
-                    },
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Clear,
-                        contentDescription = "Clear address",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-            onPickWallet?.let { pickWallet ->
-                SendToMyWalletButton(onClick = pickWallet)
-            }
-            IconButton(
-                onClick = onScanQr,
-                modifier = Modifier.offset(x = 8.dp),
-            ) {
-                Icon(Icons.Filled.QrCode2, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Box(modifier = Modifier.fillMaxWidth()) {
-            BasicTextField(
-                value = if (isFocused) address else "",
-                onValueChange = { newValue ->
-                    address = newValue
-                    onAddressChanged(newValue)
-                },
-                textStyle =
-                    TextStyle(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        fontFamily = FontFamily.Monospace,
-                    ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onDone() }),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .testTag("sendFlow.address")
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { focusState ->
-                            isFocused = focusState.isFocused
-                            onFocusChanged(focusState.isFocused)
-                        },
-            )
-            // show spaced-out address when not focused
-            if (!isFocused && address.isNotEmpty()) {
-                AddressText(
-                    address = address,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 3,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { focusRequester.requestFocus() },
-                )
-            }
-            // placeholder when empty and not focused
-            if (address.isEmpty() && !isFocused) {
-                Text(
-                    text = "bc1p...",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
         Spacer(Modifier.height(24.dp))
     }
 }

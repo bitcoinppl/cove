@@ -76,6 +76,12 @@ class SendFlowManager internal constructor(
     // validated state
     var address by mutableStateOf<Address?>(null)
 
+    /**
+     * the wallet the user picked to pay, while the address is still the one it handed out
+     */
+    var transferRecipient by mutableStateOf<TransferRecipient?>(null)
+        private set
+
     var amount by mutableStateOf<Amount?>(null)
 
     var fiatAmount by mutableStateOf<Double?>(null)
@@ -280,6 +286,14 @@ class SendFlowManager internal constructor(
         dispatch(SendFlowManagerAction.SelectTransferDestination(walletId))
     }
 
+    /**
+     * the picked wallet a send to [address] pays, for the Confirm screen
+     */
+    fun transferRecipientPaying(address: Address): TransferRecipient? =
+        withRustOr(null) {
+            transferRecipientPaying(address)
+        }
+
     fun updateAmount(amount: Amount) {
         if (isClosed.get()) return
         this.amount = amount
@@ -348,6 +362,25 @@ class SendFlowManager internal constructor(
         }
     }
 
+    private fun showAlert(alert: SendFlowAlertState) {
+        logWarn("setAlert: ${alertKind(alert)}")
+
+        val hadSheet = presenter.sheetState != null
+        val hadAlert = presenter.alertState != null
+        val isDismissingAlert = presenter.isDisappearing
+
+        if (hadSheet || hadAlert || isDismissingAlert) {
+            presenter.clearAlert()
+            presenter.sheetState = null
+            mainScope.launch {
+                delay(ALERT_PRESENTATION_DELAY_MS)
+                presenter.alertState = TaggedItem(alert)
+            }
+        } else {
+            presenter.alertState = TaggedItem(alert)
+        }
+    }
+
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {
             is SendFlowManagerReconcileMessage.UpdateAmountFiat -> {
@@ -368,6 +401,10 @@ class SendFlowManager internal constructor(
                 address = message.v1
             }
 
+            is SendFlowManagerReconcileMessage.UpdateTransferRecipient -> {
+                transferRecipient = message.v1
+            }
+
             is SendFlowManagerReconcileMessage.UpdateAmountEntryMode,
             is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount,
             is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount,
@@ -381,22 +418,7 @@ class SendFlowManager internal constructor(
             }
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                logWarn("setAlert: ${alertKind(message.v1)}")
-
-                val hadSheet = presenter.sheetState != null
-                val hadAlert = presenter.alertState != null
-                val isDismissingAlert = presenter.isDisappearing
-
-                if (hadSheet || hadAlert || isDismissingAlert) {
-                    presenter.clearAlert()
-                    presenter.sheetState = null
-                    mainScope.launch {
-                        delay(ALERT_PRESENTATION_DELAY_MS)
-                        presenter.alertState = TaggedItem(message.v1)
-                    }
-                } else {
-                    presenter.alertState = TaggedItem(message.v1)
-                }
+                showAlert(message.v1)
             }
 
             is SendFlowManagerReconcileMessage.ClearAlert -> {

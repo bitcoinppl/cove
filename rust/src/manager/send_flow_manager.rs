@@ -31,6 +31,7 @@ use crate::{
     app::App,
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::client::PriceResponse,
+    transfer_destination::TransferRecipient,
     wallet::{
         Address,
         balance::Balance,
@@ -53,8 +54,8 @@ use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::Mutex;
 use state::{
-    AmountEntryMode, CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState,
-    SendFlowWallet, State,
+    AmountEntryMode, CoinControlMode, EnterMode, FeeSelection, RecipientDropped,
+    SendFlowManagerState, SendFlowWallet, State,
 };
 use tracing::{debug, error, trace, warn};
 use validation::AmountAlert;
@@ -132,6 +133,9 @@ pub enum SendFlowManagerReconcileMessage {
     UpdateEnteringFiatAmount(String),
     UpdateEnteringAddress(String),
     UpdateAddress(Option<Arc<Address>>),
+
+    /// The wallet the user picked to pay, or `None` once the address is no longer its own
+    UpdateTransferRecipient(Option<TransferRecipient>),
 
     SetMaxSelected(Arc<Amount>),
     UnsetMaxSelected,
@@ -654,13 +658,15 @@ impl RustSendFlowManager {
             }
 
             Action::NotifyAddressChanged(address) => {
-                let mut state = self.state.lock();
-                if state.address.as_ref() != Some(&address) {
-                    state.clear_warning_acknowledgements();
+                let dropped = {
+                    let mut state = self.state.lock();
+                    state.entering_address = address.to_string();
+                    state.set_address(Some(address), None)
+                };
+
+                if dropped == RecipientDropped::Yes {
+                    self.reconciler.send(Message::UpdateTransferRecipient(None));
                 }
-                state.address = Some(address.clone());
-                state.entering_address = address.to_string();
-                state.payjoin_endpoint = None;
             }
 
             Action::NotifyAmountChanged(amount) => self.handle_amount_changed(*amount),

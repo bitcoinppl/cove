@@ -201,6 +201,8 @@ private struct SendFlowLoadedContent: View {
 }
 
 private struct SendFlowRouteView: View {
+    @Environment(SendFlowManager.self) private var sendFlowManager
+
     let sendRoute: SendRoute
     let manager: WalletManager
 
@@ -216,7 +218,10 @@ private struct SendFlowRouteView: View {
                 manager: manager,
                 details: confirm.details,
                 input: confirm.input,
-                payjoinEndpoint: confirm.payjoinEndpoint
+                payjoinEndpoint: confirm.payjoinEndpoint,
+                // every send route shares this manager, which keeps the pick out of the persisted
+                // confirm details and the route
+                recipient: sendFlowManager.transferRecipientPaying(confirm.details.sendingTo())
             )
         case let .hardwareExport(id: id, details: details):
             SendFlowHardwareScreen(id: id, manager: manager, details: details)

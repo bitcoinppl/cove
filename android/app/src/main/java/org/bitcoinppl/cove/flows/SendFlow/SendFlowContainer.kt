@@ -242,10 +242,12 @@ private fun SendFlowRouteToScreen(
     presenter: SendFlowPresenter,
     modifier: Modifier = Modifier,
 ) {
-    // app.wallets holds only this network and mode, so more than one means another destination
     val showTransferDestinations = {
         presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.TransferDestination)
     }
+
+    // app.wallets holds only this network and mode, so any other wallet is one to send to
+    val otherWalletColors = app.wallets.filter { it.id != walletManager.id }.map { it.color }
 
     when (sendRoute) {
         is SendRoute.SetAmount -> {
@@ -307,8 +309,8 @@ private fun SendFlowRouteToScreen(
                 onChangeSpeed = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
-                onPickWallet =
-                    showTransferDestinations.takeIf { app.wallets.size > 1 },
+                onPickWallet = showTransferDestinations,
+                otherWalletColors = otherWalletColors,
             )
 
             // handle sheets for SendFlowSetAmountScreen
@@ -406,8 +408,8 @@ private fun SendFlowRouteToScreen(
                 onChangeSpeed = {
                     presenter.sheetState = TaggedItem(SendFlowPresenter.SheetState.Fee)
                 },
-                onPickWallet =
-                    showTransferDestinations.takeIf { app.wallets.size > 1 },
+                onPickWallet = showTransferDestinations,
+                otherWalletColors = otherWalletColors,
                 onToggleBalanceVisibility = {
                     walletManager.dispatch(WalletManagerAction.ToggleSensitiveVisibility)
                 },

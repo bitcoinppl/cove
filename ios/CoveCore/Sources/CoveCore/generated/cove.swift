@@ -10227,6 +10227,14 @@ public protocol RustSendFlowManagerProtocol: AnyObject, Sendable {
      */
     func transferDestinations()  -> [TransferDestination]
 
+    /**
+     * The picked wallet a send to `address` pays, for the Confirm screen
+     *
+     * `None` when the user entered the address themselves, or when a Confirm screen opened
+     * another way, such as an unsigned transaction reopened for signing, pays someone else
+     */
+    func transferRecipientPaying(address: Address)  -> TransferRecipient?
+
     func utxos()  -> [Utxo]?
 
     /**
@@ -10534,6 +10542,22 @@ open func transferDestinations() -> [TransferDestination]  {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustsendflowmanager_transfer_destinations(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The picked wallet a send to `address` pays, for the Confirm screen
+     *
+     * `None` when the user entered the address themselves, or when a Confirm screen opened
+     * another way, such as an unsigned transaction reopened for signing, pays someone else
+     */
+open func transferRecipientPaying(address: Address) -> TransferRecipient?  {
+    return try!  FfiConverterOptionTypeTransferRecipient.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustsendflowmanager_transfer_recipient_paying(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAddress_lower(address),uniffiCallStatus
     )
 })
 }
@@ -22015,6 +22039,75 @@ public func FfiConverterTypeTransferDestination_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeTransferDestination_lower(_ value: TransferDestination) -> RustBuffer {
     return FfiConverterTypeTransferDestination.lower(value)
+}
+
+
+/**
+ * The wallet a send pays after the user picked it, and the address it handed out
+ */
+public struct TransferRecipient {
+    public var walletId: WalletId
+    public var name: String
+    public var color: WalletColor
+    public var address: Address
+    public var addressCheck: RecipientAddressCheck
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(walletId: WalletId, name: String, color: WalletColor, address: Address, addressCheck: RecipientAddressCheck) {
+        self.walletId = walletId
+        self.name = name
+        self.color = color
+        self.address = address
+        self.addressCheck = addressCheck
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension TransferRecipient: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTransferRecipient: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TransferRecipient {
+        return
+            try TransferRecipient(
+                walletId: FfiConverterTypeWalletId.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                color: FfiConverterTypeWalletColor.read(from: &buf),
+                address: FfiConverterTypeAddress.read(from: &buf),
+                addressCheck: FfiConverterTypeRecipientAddressCheck.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: TransferRecipient, into buf: inout [UInt8]) {
+        FfiConverterTypeWalletId.write(value.walletId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterTypeWalletColor.write(value.color, into: &buf)
+        FfiConverterTypeAddress.write(value.address, into: &buf)
+        FfiConverterTypeRecipientAddressCheck.write(value.addressCheck, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferRecipient_lift(_ buf: RustBuffer) throws -> TransferRecipient {
+    return try FfiConverterTypeTransferRecipient.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTransferRecipient_lower(_ value: TransferRecipient) -> RustBuffer {
+    return FfiConverterTypeTransferRecipient.lower(value)
 }
 
 
@@ -41783,6 +41876,82 @@ public func FfiConverterTypeReceiveAddressStatus_lower(_ value: ReceiveAddressSt
 
 
 
+/**
+ * Whether the user should check the recipient's address on its device before sending
+ */
+
+public enum RecipientAddressCheck: Equatable, Hashable {
+
+    /**
+     * Cove holds the wallet's keys, or its device has no screen, as with TAPSIGNER
+     */
+    case notNeeded
+    /**
+     * Cove derived the address from a hardware wallet's public key, and that device can show
+     * the address to compare
+     */
+    case onDevice
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension RecipientAddressCheck: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecipientAddressCheck: FfiConverterRustBuffer {
+    typealias SwiftType = RecipientAddressCheck
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecipientAddressCheck {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .notNeeded
+
+        case 2: return .onDevice
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RecipientAddressCheck, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .notNeeded:
+            writeInt(&buf, Int32(1))
+
+
+        case .onDevice:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecipientAddressCheck_lift(_ buf: RustBuffer) throws -> RecipientAddressCheck {
+    return try FfiConverterTypeRecipientAddressCheck.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecipientAddressCheck_lower(_ value: RecipientAddressCheck) -> RustBuffer {
+    return FfiConverterTypeRecipientAddressCheck.lower(value)
+}
+
+
+
 
 public enum Route {
 
@@ -44023,6 +44192,11 @@ public enum SendFlowManagerReconcileMessage {
     )
     case updateAddress(Address?
     )
+    /**
+     * The wallet the user picked to pay, or `None` once the address is no longer its own
+     */
+    case updateTransferRecipient(TransferRecipient?
+    )
     case setMaxSelected(Amount
     )
     case unsetMaxSelected
@@ -44076,32 +44250,35 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
         case 4: return .updateAddress(try FfiConverterOptionTypeAddress.read(from: &buf)
         )
 
-        case 5: return .setMaxSelected(try FfiConverterTypeAmount.read(from: &buf)
+        case 5: return .updateTransferRecipient(try FfiConverterOptionTypeTransferRecipient.read(from: &buf)
         )
 
-        case 6: return .unsetMaxSelected
-
-        case 7: return .updateAmountSats(try FfiConverterUInt64.read(from: &buf)
+        case 6: return .setMaxSelected(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 8: return .updateAmountFiat(try FfiConverterDouble.read(from: &buf)
+        case 7: return .unsetMaxSelected
+
+        case 8: return .updateAmountSats(try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 9: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
+        case 9: return .updateAmountFiat(try FfiConverterDouble.read(from: &buf)
         )
 
-        case 10: return .updateAmountEntryMode(try FfiConverterTypeSendFlowAmountEntryMode.read(from: &buf)
+        case 10: return .updateFocusField(try FfiConverterOptionTypeSetAmountFocusField.read(from: &buf)
         )
 
-        case 11: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
+        case 11: return .updateAmountEntryMode(try FfiConverterTypeSendFlowAmountEntryMode.read(from: &buf)
         )
 
-        case 12: return .refreshPresenters
-
-        case 13: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        case 12: return .updateFeeSelection(try FfiConverterTypeFeeSelection.read(from: &buf)
         )
 
-        case 14: return .clearAlert
+        case 13: return .refreshPresenters
+
+        case 14: return .setAlert(try FfiConverterTypeSendFlowAlertState.read(from: &buf)
+        )
+
+        case 15: return .clearAlert
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -44131,51 +44308,56 @@ public struct FfiConverterTypeSendFlowManagerReconcileMessage: FfiConverterRustB
             FfiConverterOptionTypeAddress.write(v1, into: &buf)
 
 
-        case let .setMaxSelected(v1):
+        case let .updateTransferRecipient(v1):
             writeInt(&buf, Int32(5))
+            FfiConverterOptionTypeTransferRecipient.write(v1, into: &buf)
+
+
+        case let .setMaxSelected(v1):
+            writeInt(&buf, Int32(6))
             FfiConverterTypeAmount.write(v1, into: &buf)
 
 
         case .unsetMaxSelected:
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
 
 
         case let .updateAmountSats(v1):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterUInt64.write(v1, into: &buf)
 
 
         case let .updateAmountFiat(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterDouble.write(v1, into: &buf)
 
 
         case let .updateFocusField(v1):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(10))
             FfiConverterOptionTypeSetAmountFocusField.write(v1, into: &buf)
 
 
         case let .updateAmountEntryMode(v1):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterTypeSendFlowAmountEntryMode.write(v1, into: &buf)
 
 
         case let .updateFeeSelection(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(12))
             FfiConverterTypeFeeSelection.write(v1, into: &buf)
 
 
         case .refreshPresenters:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
 
 
         case let .setAlert(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeSendFlowAlertState.write(v1, into: &buf)
 
 
         case .clearAlert:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(15))
 
         }
     }
@@ -52976,6 +53158,30 @@ fileprivate struct FfiConverterOptionTypeStateTransition: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeTransferRecipient: FfiConverterRustBuffer {
+    typealias SwiftType = TransferRecipient?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeTransferRecipient.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeTransferRecipient.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WalletMetadata?
 
@@ -56583,6 +56789,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_transfer_destinations() != 7188) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustsendflowmanager_transfer_recipient_paying() != 48605) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustsendflowmanager_utxos() != 8294) {

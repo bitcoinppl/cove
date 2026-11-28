@@ -6,7 +6,8 @@ use tracing::{debug, warn};
 
 use crate::app::AppAction;
 use crate::manager::deferred_dispatch::DeferredDispatch;
-use crate::transfer_destination::{TransferDestination, transfer_destinations};
+use crate::transfer_destination::{TransferDestination, TransferRecipient, transfer_destinations};
+use crate::wallet::Address;
 
 use super::{
     AmountEntryMode, EnterMode, Message, RustSendFlowManager, SendFlowAlertState, validation,
@@ -38,6 +39,19 @@ impl RustSendFlowManager {
             warn!("unable to list transfer destinations: {error}");
             Vec::new()
         })
+    }
+
+    /// The picked wallet a send to `address` pays, for the Confirm screen
+    ///
+    /// `None` when the user entered the address themselves, or when a Confirm screen opened
+    /// another way, such as an unsigned transaction reopened for signing, pays someone else
+    #[uniffi::method]
+    pub fn transfer_recipient_paying(&self, address: Arc<Address>) -> Option<TransferRecipient> {
+        self.state
+            .lock()
+            .transfer_recipient
+            .clone()
+            .filter(|recipient| recipient.address == address)
     }
 
     #[uniffi::method]

@@ -32,6 +32,8 @@ struct AddressTextEditor: View {
             TextEditor(text: textBinding)
                 .focused($focusField, equals: .address)
                 .accessibilityIdentifier("sendFlow.address")
+                // the address card behind it shows through
+                .scrollContentBackground(.hidden)
                 .offset(x: -4)
                 .font(.footnote)
                 .fontDesign(.monospaced)
@@ -48,10 +50,11 @@ struct AddressTextEditor: View {
             }
 
             if text.isEmpty {
-                Text("bc1p...")
+                Text("Paste or scan address")
                     .font(.footnote)
-                    .fontWeight(.semibold)
+                    .fontDesign(.monospaced)
                     .foregroundStyle(.tertiary)
+                    .allowsHitTesting(false)
                     .padding(.top, 8)
                     .padding(.leading, 5)
             }

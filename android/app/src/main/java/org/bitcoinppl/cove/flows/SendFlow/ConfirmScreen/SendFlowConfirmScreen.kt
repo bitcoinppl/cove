@@ -45,6 +45,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -58,11 +59,14 @@ import org.bitcoinppl.cove.flows.SendFlow.SendState
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.utils.toComposeColor
 import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove.views.FlexibleSpacer
+import org.bitcoinppl.cove_core.RecipientAddressCheck
+import org.bitcoinppl.cove_core.TransferRecipient
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.ConfirmDetails
@@ -93,6 +97,7 @@ fun SendFlowConfirmScreen(
 ) {
     var sheetState by remember { mutableStateOf<SheetState?>(null) }
     val address = details.sendingTo().spacedOut()
+    val recipient = remember(details) { sendFlowManager.transferRecipientPaying(details.sendingTo()) }
 
     // fiat amount calculation
     var fiatAmount by remember { mutableStateOf("---") }
@@ -188,12 +193,16 @@ fun SendFlowConfirmScreen(
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                             SummaryWidget(
-                                address = address,
                                 networkFee = networkFee,
                                 willReceive = willReceive,
                                 willPay = willPay,
-                                onAddressClick = { sheetState = SheetState.AdvancedDetails },
-                            )
+                            ) {
+                                SendingTo(
+                                    address = address,
+                                    recipient = recipient,
+                                    onClick = { sheetState = SheetState.AdvancedDetails },
+                                )
+                            }
                         }
 
                         FlexibleSpacer()
@@ -385,43 +394,37 @@ private fun AmountWidget(
     }
 }
 
+/**
+ * The picked wallet's card when the user sent to one of their own wallets, otherwise the bare address
+ */
+@Composable
+private fun SendingTo(
+    address: String,
+    recipient: TransferRecipient?,
+    onClick: () -> Unit,
+) {
+    if (recipient != null) {
+        TransferRecipientSummary(
+            recipient = recipient,
+            modifier = Modifier.clickable(onClick = onClick),
+        )
+    } else {
+        AddressRow(address = address, onAddressClick = onClick)
+    }
+}
+
 @Composable
 private fun SummaryWidget(
-    address: String,
     networkFee: String,
     willReceive: String,
     willPay: String,
-    onAddressClick: () -> Unit,
+    sendingTo: @Composable () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Spacer(Modifier.height(28.dp))
-        KeyValueRow(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onAddressClick),
-            valueWeight = 2f,
-            labelContent = {
-                Text(
-                    text = stringResource(R.string.label_address),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = TextStyle(fontSize = 13.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
-            valueContent = {
-                AddressText(
-                    address = address,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Right,
-                    maxLines = 4,
-                )
-            },
-        )
+        sendingTo()
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(
             label = stringResource(R.string.label_network_fee),
@@ -450,6 +453,107 @@ private fun SummaryWidget(
             valueFontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun AddressRow(
+    address: String,
+    onAddressClick: () -> Unit,
+) {
+    KeyValueRow(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onAddressClick),
+        valueWeight = 2f,
+        labelContent = {
+            Text(
+                text = stringResource(R.string.label_address),
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        valueContent = {
+            AddressText(
+                address = address,
+                modifier = Modifier.fillMaxWidth(),
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Right,
+                maxLines = 4,
+            )
+        },
+    )
+}
+
+/**
+ * the user's own wallet a transfer pays, with the address it handed out
+ */
+@Composable
+private fun TransferRecipientSummary(
+    recipient: TransferRecipient,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(16.dp)
+                .testTag("sendFlowConfirm.transferRecipient"),
+    ) {
+        Text(
+            text = stringResource(R.string.label_to_wallet),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.6.sp,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(recipient.color.toComposeColor()),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = recipient.name,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag("sendFlowConfirm.transferRecipient.name"),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(10.dp))
+        // no line limit: the card asks the user to check this address, so it shows all of it
+        AddressText(
+            address = recipient.address.spacedOut(),
+            modifier = Modifier.fillMaxWidth(),
+            style = TextStyle(fontSize = 13.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        // cove derived a hardware wallet's address from its public key, so the device itself is
+        // the one place that can confirm it
+        if (recipient.addressCheck == RecipientAddressCheck.ON_DEVICE) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = stringResource(R.string.label_check_address_on_device),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                modifier = Modifier.testTag("sendFlowConfirm.transferRecipient.checkOnDevice"),
+            )
+        }
     }
 }
 

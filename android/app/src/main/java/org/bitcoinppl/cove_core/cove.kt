@@ -1675,6 +1675,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_transfer_destinations(
     ): Short
+    external fun uniffi_cove_checksum_method_rustsendflowmanager_transfer_recipient_paying(
+    ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_utxos(
     ): Short
     external fun uniffi_cove_checksum_method_rustsendflowmanager_wait_for_init(
@@ -2900,6 +2902,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustsendflowmanager_total_spent_in_fiat(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustsendflowmanager_transfer_destinations(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustsendflowmanager_transfer_recipient_paying(`ptr`: Long,`address`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustsendflowmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4872,6 +4876,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_transfer_destinations() != 7188.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustsendflowmanager_transfer_recipient_paying() != 48605.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustsendflowmanager_utxos() != 8294.toShort()) {
@@ -23781,6 +23788,14 @@ public interface RustSendFlowManagerInterface {
      */
     fun `transferDestinations`(): List<TransferDestination>
 
+    /**
+     * The picked wallet a send to `address` pays, for the Confirm screen
+     *
+     * `None` when the user entered the address themselves, or when a Confirm screen opened
+     * another way, such as an unsigned transaction reopened for signing, pays someone else
+     */
+    fun `transferRecipientPaying`(`address`: Address): TransferRecipient?
+
     fun `utxos`(): List<Utxo>?
 
     /**
@@ -24226,6 +24241,26 @@ open class RustSendFlowManager: Disposable, AutoCloseable, RustSendFlowManagerIn
     UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_transfer_destinations(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The picked wallet a send to `address` pays, for the Confirm screen
+     *
+     * `None` when the user entered the address themselves, or when a Confirm screen opened
+     * another way, such as an unsigned transaction reopened for signing, pays someone else
+     */override fun `transferRecipientPaying`(`address`: Address): TransferRecipient? {
+            return FfiConverterOptionalTypeTransferRecipient.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustsendflowmanager_transfer_recipient_paying(
+        it,
+
+        FfiConverterTypeAddress.lower(`address`),_status)
 }
     }
     )
@@ -37710,6 +37745,74 @@ public object FfiConverterTypeTransferDestination: FfiConverterRustBuffer<Transf
     override fun write(value: TransferDestination, buf: ByteBuffer) {
             FfiConverterTypeWalletMetadata.write(value.`metadata`, buf)
             FfiConverterTypeTransferDestinationStatus.write(value.`status`, buf)
+    }
+}
+
+
+
+/**
+ * The wallet a send pays after the user picked it, and the address it handed out
+ */
+data class TransferRecipient (
+    var `walletId`: WalletId
+    ,
+    var `name`: kotlin.String
+    ,
+    var `color`: WalletColor
+    ,
+    var `address`: Address
+    ,
+    var `addressCheck`: RecipientAddressCheck
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`walletId`,
+        this.`name`,
+        this.`color`,
+        this.`address`,
+        this.`addressCheck`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTransferRecipient: FfiConverterRustBuffer<TransferRecipient> {
+    override fun read(buf: ByteBuffer): TransferRecipient {
+        return TransferRecipient(
+            FfiConverterTypeWalletId.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterTypeWalletColor.read(buf),
+            FfiConverterTypeAddress.read(buf),
+            FfiConverterTypeRecipientAddressCheck.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TransferRecipient) = (
+            FfiConverterTypeWalletId.allocationSize(value.`walletId`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterTypeWalletColor.allocationSize(value.`color`) +
+            FfiConverterTypeAddress.allocationSize(value.`address`) +
+            FfiConverterTypeRecipientAddressCheck.allocationSize(value.`addressCheck`)
+    )
+
+    override fun write(value: TransferRecipient, buf: ByteBuffer) {
+            FfiConverterTypeWalletId.write(value.`walletId`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterTypeWalletColor.write(value.`color`, buf)
+            FfiConverterTypeAddress.write(value.`address`, buf)
+            FfiConverterTypeRecipientAddressCheck.write(value.`addressCheck`, buf)
     }
 }
 
@@ -60950,6 +61053,50 @@ public object FfiConverterTypeReceiveAddressStatus: FfiConverterRustBuffer<Recei
 
 
 
+/**
+ * Whether the user should check the recipient's address on its device before sending
+ */
+
+enum class RecipientAddressCheck {
+
+    /**
+     * Cove holds the wallet's keys, or its device has no screen, as with TAPSIGNER
+     */
+    NOT_NEEDED,
+    /**
+     * Cove derived the address from a hardware wallet's public key, and that device can show
+     * the address to compare
+     */
+    ON_DEVICE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRecipientAddressCheck: FfiConverterRustBuffer<RecipientAddressCheck> {
+    override fun read(buf: ByteBuffer) = try {
+        RecipientAddressCheck.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: RecipientAddressCheck) = 4UL
+
+    override fun write(value: RecipientAddressCheck, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
 sealed class Route: Disposable  {
 
     data class LoadAndReset(
@@ -64211,6 +64358,18 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
         companion object
     }
 
+    /**
+     * The wallet the user picked to pay, or `None` once the address is no longer its own
+     */
+    data class UpdateTransferRecipient(
+        val v1: org.bitcoinppl.cove_core.TransferRecipient?) : SendFlowManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
+
     data class SetMaxSelected(
         val v1: org.bitcoinppl.cove_core.types.Amount) : SendFlowManagerReconcileMessage()
 
@@ -64319,6 +64478,13 @@ sealed class SendFlowManagerReconcileMessage: Disposable  {
     )
 
             }
+            is SendFlowManagerReconcileMessage.UpdateTransferRecipient -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is SendFlowManagerReconcileMessage.SetMaxSelected -> {
 
     Disposable.destroy(
@@ -64403,30 +64569,33 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             4 -> SendFlowManagerReconcileMessage.UpdateAddress(
                 FfiConverterOptionalTypeAddress.read(buf),
                 )
-            5 -> SendFlowManagerReconcileMessage.SetMaxSelected(
+            5 -> SendFlowManagerReconcileMessage.UpdateTransferRecipient(
+                FfiConverterOptionalTypeTransferRecipient.read(buf),
+                )
+            6 -> SendFlowManagerReconcileMessage.SetMaxSelected(
                 FfiConverterTypeAmount.read(buf),
                 )
-            6 -> SendFlowManagerReconcileMessage.UnsetMaxSelected
-            7 -> SendFlowManagerReconcileMessage.UpdateAmountSats(
+            7 -> SendFlowManagerReconcileMessage.UnsetMaxSelected
+            8 -> SendFlowManagerReconcileMessage.UpdateAmountSats(
                 FfiConverterULong.read(buf),
                 )
-            8 -> SendFlowManagerReconcileMessage.UpdateAmountFiat(
+            9 -> SendFlowManagerReconcileMessage.UpdateAmountFiat(
                 FfiConverterDouble.read(buf),
                 )
-            9 -> SendFlowManagerReconcileMessage.UpdateFocusField(
+            10 -> SendFlowManagerReconcileMessage.UpdateFocusField(
                 FfiConverterOptionalTypeSetAmountFocusField.read(buf),
                 )
-            10 -> SendFlowManagerReconcileMessage.UpdateAmountEntryMode(
+            11 -> SendFlowManagerReconcileMessage.UpdateAmountEntryMode(
                 FfiConverterTypeSendFlowAmountEntryMode.read(buf),
                 )
-            11 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
+            12 -> SendFlowManagerReconcileMessage.UpdateFeeSelection(
                 FfiConverterTypeFeeSelection.read(buf),
                 )
-            12 -> SendFlowManagerReconcileMessage.RefreshPresenters
-            13 -> SendFlowManagerReconcileMessage.SetAlert(
+            13 -> SendFlowManagerReconcileMessage.RefreshPresenters
+            14 -> SendFlowManagerReconcileMessage.SetAlert(
                 FfiConverterTypeSendFlowAlertState.read(buf),
                 )
-            14 -> SendFlowManagerReconcileMessage.ClearAlert
+            15 -> SendFlowManagerReconcileMessage.ClearAlert
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -64458,6 +64627,13 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
             (
                 4UL
                 + FfiConverterOptionalTypeAddress.allocationSize(value.v1)
+            )
+        }
+        is SendFlowManagerReconcileMessage.UpdateTransferRecipient -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterOptionalTypeTransferRecipient.allocationSize(value.v1)
             )
         }
         is SendFlowManagerReconcileMessage.SetMaxSelected -> {
@@ -64551,51 +64727,56 @@ public object FfiConverterTypeSendFlowManagerReconcileMessage : FfiConverterRust
                 FfiConverterOptionalTypeAddress.write(value.v1, buf)
                 Unit
             }
-            is SendFlowManagerReconcileMessage.SetMaxSelected -> {
+            is SendFlowManagerReconcileMessage.UpdateTransferRecipient -> {
                 buf.putInt(5)
+                FfiConverterOptionalTypeTransferRecipient.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowManagerReconcileMessage.SetMaxSelected -> {
+                buf.putInt(6)
                 FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UnsetMaxSelected -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateAmountSats -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateAmountFiat -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterDouble.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateFocusField -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterOptionalTypeSetAmountFocusField.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 FfiConverterTypeSendFlowAmountEntryMode.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.UpdateFeeSelection -> {
-                buf.putInt(11)
+                buf.putInt(12)
                 FfiConverterTypeFeeSelection.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.RefreshPresenters -> {
-                buf.putInt(12)
+                buf.putInt(13)
                 Unit
             }
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                buf.putInt(13)
+                buf.putInt(14)
                 FfiConverterTypeSendFlowAlertState.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerReconcileMessage.ClearAlert -> {
-                buf.putInt(14)
+                buf.putInt(15)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -74716,6 +74897,38 @@ public object FfiConverterOptionalTypeStateTransition: FfiConverterRustBuffer<St
         } else {
             buf.put(1)
             FfiConverterTypeStateTransition.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeTransferRecipient: FfiConverterRustBuffer<TransferRecipient?> {
+    override fun read(buf: ByteBuffer): TransferRecipient? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeTransferRecipient.read(buf)
+    }
+
+    override fun allocationSize(value: TransferRecipient?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeTransferRecipient.allocationSize(value)
+        }
+    }
+
+    override fun write(value: TransferRecipient?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeTransferRecipient.write(value, buf)
         }
     }
 }
