@@ -95,6 +95,15 @@ suites = ["CoveUITests/ReceiveTextSizeFullLaunchUITests"]
 paths = ["ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift"]
 suites = ["CoveUITests/TapSignerLayoutFullLaunchUITests"]
 
+# the send steps the send flow suites share
+[[rule]]
+paths = ["ios/CoveUITests/SendFlowUITestSupport.swift"]
+suites = [
+    "CoveUITests/SendFlowUnitFullLaunchUITests",
+    "CoveUITests/SendFlowPrefilledAmountFullLaunchUITests",
+    "CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests",
+]
+
 [[rule]]
 paths = ["ios/CoveUITests/SendFlowUnitFullLaunchUITests.swift"]
 suites = ["CoveUITests/SendFlowUnitFullLaunchUITests"]
@@ -102,6 +111,10 @@ suites = ["CoveUITests/SendFlowUnitFullLaunchUITests"]
 [[rule]]
 paths = ["ios/CoveUITests/SendFlowPrefilledAmountFullLaunchUITests.swift"]
 suites = ["CoveUITests/SendFlowPrefilledAmountFullLaunchUITests"]
+
+[[rule]]
+paths = ["ios/CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests.swift"]
+suites = ["CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests"]
 
 [[rule]]
 paths = ["ios/CoveUITests/UtxoLockFullLaunchUITests.swift"]
@@ -280,7 +293,10 @@ paths = [
     "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift",
     "ios/Cove/Flows/SendFlow/Common/SendFlowUtxoCustomAmountSheetView.swift",
 ]
-suites = ["CoveUITests/UtxoLockFullLaunchUITests"]
+suites = [
+    "CoveUITests/UtxoLockFullLaunchUITests",
+    "CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests",
+]
 
 # the keyTeleport route, which RouteView shows with KeyTeleportContainer
 [[rule]]

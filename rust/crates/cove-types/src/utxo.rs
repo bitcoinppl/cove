@@ -147,6 +147,22 @@ impl UtxoList {
     pub fn outpoints(&self) -> Vec<bitcoin::OutPoint> {
         self.utxos.iter().map(|utxo| utxo.outpoint.as_ref().into()).collect()
     }
+
+    /// Whether `utxos` are the same coins as this list, in any order, since a list sorted
+    /// another way still spends the same coins
+    #[must_use]
+    pub fn has_same_coins(&self, utxos: &[Utxo]) -> bool {
+        let sorted_outpoints = |utxos: &[Utxo]| {
+            let mut outpoints = utxos
+                .iter()
+                .map(|utxo| bitcoin::OutPoint::from(utxo.outpoint.as_ref()))
+                .collect::<Vec<_>>();
+            outpoints.sort_unstable();
+            outpoints
+        };
+
+        self.utxos.len() == utxos.len() && sorted_outpoints(&self.utxos) == sorted_outpoints(utxos)
+    }
 }
 impl From<Vec<Utxo>> for UtxoList {
     fn from(utxos: Vec<Utxo>) -> Self {

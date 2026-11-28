@@ -9,146 +9,49 @@ use tracing::{debug, trace};
 
 use super::{
     BtcOnChangeHandler, DeferredSender, Error, FeeSelection, FiatOnChangeHandler, FiatOrBtc,
-    Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, State, btc_on_change,
+    Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, btc_on_change,
     fiat_on_change,
     state::{MaxSelection, SendFlowManagerState},
     validation::AmountAlert,
 };
 
 impl RustSendFlowManager {
-    pub(crate) fn handle_btc_field_changed(
-        self: Arc<Self>,
-        old: String,
-        new: String,
-    ) -> Option<()> {
-        // field text is raw user input and can hold a pasted PIN, so only its length is logged
-        trace!("btc_field_changed len {} --> {}", old.len(), new.len());
-        if old == new {
-            return None;
+    /// Applies the bitcoin amount field's new text, typed while the field showed `unit`
+    ///
+    /// The edit is checked against the entry mode, parsed and committed in one critical section,
+    /// the same one a display preference change takes, so the text, the unit it is parsed in and
+    /// the amount it commits always agree
+    pub(crate) fn handle_btc_field_changed(self: Arc<Self>, new: String, unit: BitcoinUnit) {
+        let (edit, needs_fee_rate_options_base) = self.update_state(|state, sender| {
+            let edit = apply_btc_edit(state, new, unit, sender);
+            (edit, state.fee_rate_options_base.is_none())
+        });
+
+        if edit == AmountEdit::Unchanged {
+            return;
         }
 
-        // update the state
-        let mut sender = self.reconciler.deferred_sender();
-        self.state.lock().entering_btc_amount = new.clone();
-
-        let state: State = self.state.clone().into();
-        let me = self.clone();
-
-        let needs_fee_rate_options_base = self.state.lock().fee_rate_options_base.is_none();
         if needs_fee_rate_options_base {
+            let me = self.clone();
             cove_tokio::task::spawn(async move {
                 me.get_and_update_base_fee_rate_options().await;
             });
         }
 
-        let handler = BtcOnChangeHandler::new(state);
-        let changes = handler.on_change(&old, &new);
-
-        let btc_on_change::Changeset {
-            entering_amount_btc,
-            clear_max_selected,
-            amount_btc,
-            amount_fiat,
-        } = changes;
-
-        if clear_max_selected {
-            self.unset_max_selected(&mut sender);
-        }
-
-        if let Some(amount) = amount_btc {
-            let current_amount_sats = self.state.lock().amount_sats;
-            let amount_sats = amount.to_sat();
-            {
-                let mut state = self.state.lock();
-                if current_amount_sats != Some(amount_sats) {
-                    state.clear_warning_acknowledgements();
-                }
-                state.amount_sats = Some(amount_sats);
-            }
-
-            if current_amount_sats != Some(amount_sats) {
-                sender.queue(Message::UpdateAmountSats(amount_sats));
-                self.schedule_fee_rate_update();
-            }
-        }
-
-        if let Some(amount) = amount_fiat {
-            self.state.lock().amount_fiat = Some(amount);
-            sender.queue(Message::UpdateAmountFiat(amount));
-        }
-
-        if let Some(entering_amount) = entering_amount_btc {
-            self.set_and_send_entering_btc_amount(entering_amount, &mut sender);
-        }
-
-        Some(())
-    }
-
-    pub(crate) fn handle_fiat_field_changed(
-        self: &Arc<Self>,
-        old_value: String,
-        new_value: String,
-    ) -> Option<()> {
-        // field text is raw user input and can hold a pasted PIN, so only its length is logged
-        trace!("fiat_field_changed len {} --> {}", old_value.len(), new_value.len());
-        if old_value == new_value {
-            return None;
-        }
-
-        let mut sender = self.reconciler.deferred_sender();
-
-        // update the state
-        self.state.lock().entering_fiat_amount = new_value.clone();
-
-        let prices = self.app.prices()?;
-        let selected_currency = self.state.lock().selected_fiat_currency;
-        let max_selected = self.state.lock().max_selected.as_ref().map(|max| *max.amount);
-
-        let handler = FiatOnChangeHandler::new(prices, selected_currency, max_selected);
-        let Ok(result) = handler.on_change(&old_value, &new_value) else {
-            tracing::error!("unable to get fiat on change result");
-            return None;
-        };
-
-        let fiat_on_change::Changeset {
-            entering_fiat_amount,
-            fiat_value,
-            btc_amount,
-            clear_max_selected,
-        } = result;
-
-        if let Some(entering_fiat_amount) = entering_fiat_amount {
-            self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
-            sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
-        }
-
-        if let Some(amount_fiat) = fiat_value {
-            self.state.lock().amount_fiat = Some(amount_fiat);
-            sender.queue(Message::UpdateAmountFiat(amount_fiat));
-        }
-
-        if let Some(btc_amount) = btc_amount {
-            let btc_amount = btc_amount.as_sats();
-            {
-                let mut state = self.state.lock();
-                if state.amount_sats != Some(btc_amount) {
-                    state.clear_warning_acknowledgements();
-                }
-                state.amount_sats = Some(btc_amount);
-            }
-            sender.queue(Message::UpdateAmountSats(btc_amount));
+        if edit == AmountEdit::Amount {
             self.schedule_fee_rate_update();
         }
-
-        if clear_max_selected {
-            self.unset_max_selected(&mut sender);
-        }
-
-        Some(())
     }
 
-    fn unset_max_selected(&self, sender: &mut DeferredSender) {
-        unset_max_selected(&mut self.state.lock(), sender);
+    /// Applies the fiat amount field's new text, checked, parsed and committed in one critical
+    /// section like a bitcoin amount edit
+    pub(crate) fn handle_fiat_field_changed(self: &Arc<Self>, new: String) {
+        let prices = self.app.prices();
+        let edit = self.update_state(|state, sender| apply_fiat_edit(state, new, prices, sender));
+
+        if edit == AmountEdit::Amount {
+            self.schedule_fee_rate_update();
+        }
     }
 
     pub(crate) fn selected_fee_rate_changed(
@@ -174,8 +77,7 @@ impl RustSendFlowManager {
         // the amount can be a pasted PIN parsed as sats, so it stays out of the log
         debug!("handle_amount_changed");
 
-        let mut sender = self.reconciler.deferred_sender();
-        let amount_changed = apply_amount(&mut self.state.lock(), amount, &mut sender);
+        let amount_changed = self.update_state(|state, sender| apply_amount(state, amount, sender));
         if amount_changed {
             self.schedule_fee_rate_update();
         }
@@ -222,29 +124,7 @@ impl RustSendFlowManager {
 
         // format on blur
         if old == Some(SetAmountFocusField::Amount) {
-            let amount = self.state.lock().amount_sats.map(Amount::from_sat);
-            let amount_fiat = self.state.lock().amount_fiat;
-
-            if let Some(amount_fiat) = amount_fiat {
-                let currency = self.state.lock().selected_fiat_currency;
-                let entering_fiat_amount = fiat_entry_text(amount_fiat, currency);
-
-                self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
-                sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
-            }
-
-            let unit = self.state.lock().metadata.selected_unit;
-            match (amount, unit) {
-                (Some(amount), BitcoinUnit::Sat) => {
-                    let entering_btc_amount = amount.as_sats().thousands_int();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-                }
-                (Some(amount_sats), BitcoinUnit::Btc) => {
-                    let entering_btc_amount = amount_sats.as_btc().thousands();
-                    self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-                }
-                _ => {}
-            }
+            self.update_state(format_entered_amounts);
         }
 
         self.state.lock().focus_field = new;
@@ -350,16 +230,14 @@ impl RustSendFlowManager {
         trigger: MaxTrigger,
         selection: MaxSelection,
     ) -> MaxCommit {
-        let mut sender = self.reconciler.deferred_sender();
         let amount = selection.amount.clone();
-        let (commit, needs_fee_update) = {
-            let mut state = self.state.lock();
+        let (commit, needs_fee_update) = self.update_state(|state, sender| {
             if trigger == MaxTrigger::Refresh && state.max_selected.is_none() {
-                return MaxCommit::Dropped;
+                return (MaxCommit::Dropped, false);
             }
 
             if state.max_send_request().ok().as_ref() != Some(&selection.request) {
-                return MaxCommit::Stale;
+                return (MaxCommit::Stale, false);
             }
 
             // typing at or above the old Max kept it selected, but the new Max can land above
@@ -371,15 +249,15 @@ impl RustSendFlowManager {
                 .and_then(|max| state.amount_sats.filter(|sats| *sats != max.amount.to_sat()));
 
             if typed_sats.is_some_and(|sats| sats < selection.amount.to_sat()) {
-                unset_max_selected(&mut state, &mut sender);
+                unset_max_selected(state, sender);
                 (MaxCommit::Dropped, true)
             } else {
                 state.max_selected = Some(selection);
                 sender.queue(Message::SetMaxSelected(amount.clone()));
-                let amount_changed = apply_amount(&mut state, *amount, &mut sender);
+                let amount_changed = apply_amount(state, *amount, sender);
                 (MaxCommit::Applied(amount), amount_changed)
             }
-        };
+        });
 
         // a new amount needs its own fee total, and a Max cleared for a typed amount leaves a
         // total priced as a drain; replacing the fee task also aborts a drain estimate in flight
@@ -388,72 +266,6 @@ impl RustSendFlowManager {
         }
 
         commit
-    }
-
-    pub(crate) fn handle_selected_unit_changed(
-        self: &Arc<Self>,
-        old: BitcoinUnit,
-        new: BitcoinUnit,
-    ) {
-        let mut sender = self.reconciler.deferred_sender();
-        self.state.lock().metadata.selected_unit = new;
-
-        sender.queue(Message::RefreshPresenters);
-
-        if old == new {
-            return;
-        }
-
-        // if its already empty clear everything
-        let nothing_entered = {
-            let state = self.state.lock();
-            state.amount_sats.is_none() || state.entering_btc_amount.is_empty()
-        };
-        if nothing_entered {
-            return self.clear_send_amount();
-        }
-
-        // if we are entering fiat, then we don't need to update the entering field
-        if self.state.lock().metadata.fiat_or_btc == FiatOrBtc::Fiat {
-            return;
-        }
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        let entering_btc_amount = btc_entry_text(Amount::from_sat(amount_sats), new);
-        self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-    }
-
-    pub(crate) fn handle_btc_or_fiat_changed(
-        self: &Arc<Self>,
-        _old_value: FiatOrBtc,
-        new_value: FiatOrBtc,
-    ) {
-        let mut sender = self.reconciler.deferred_sender();
-        self.state.lock().metadata.fiat_or_btc = new_value;
-
-        sender.queue(Message::RefreshPresenters);
-
-        let Some(amount_sats) = self.state.lock().amount_sats else {
-            return;
-        };
-
-        match new_value {
-            FiatOrBtc::Btc => {
-                let unit = self.state.lock().metadata.selected_unit;
-                let entering_btc_amount = btc_entry_text(Amount::from_sat(amount_sats), unit);
-                self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
-            }
-
-            FiatOrBtc::Fiat => {
-                let currency = self.state.lock().selected_fiat_currency;
-                let fiat_amount = self.state.lock().amount_fiat.unwrap_or_default();
-                let entering_fiat_amount = fiat_entry_text(fiat_amount, currency);
-                self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
-            }
-        }
     }
 
     pub(crate) fn handle_prices_changed(self: &Arc<Self>, prices: Arc<PriceResponse>) {
@@ -471,20 +283,11 @@ impl RustSendFlowManager {
         self.reconciler.send(Message::UpdateAmountFiat(amount_fiat));
     }
 
-    pub(crate) fn set_and_send_entering_btc_amount(
-        self: &Arc<Self>,
-        new_entering_btc_amount: String,
-        deferred_sender: &mut DeferredSender,
-    ) {
-        set_entering_btc_amount(&mut self.state.lock(), new_entering_btc_amount, deferred_sender);
-    }
-
-    pub(crate) fn set_and_send_entering_fiat_amount(
-        self: &Arc<Self>,
-        new_entering_fiat_amount: String,
-        deferred_sender: &mut DeferredSender,
-    ) {
-        set_entering_fiat_amount(&mut self.state.lock(), new_entering_fiat_amount, deferred_sender);
+    /// Clears the amount, both fields' text and Max in one transition, so a Max drain finishing
+    /// meanwhile cannot leave its amount behind empty fields
+    pub(crate) fn clear_send_amount(self: &Arc<Self>) {
+        self.update_state(clear_amount);
+        self.schedule_fee_rate_update();
     }
 }
 
@@ -512,6 +315,219 @@ pub(crate) enum MaxCommit {
     Dropped,
 }
 
+/// What an amount field edit committed, for the work that runs once the state is unlocked
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AmountEdit {
+    /// The text was the same as before, or an edit typed in an entry mode that has since changed
+    /// set no amount, so nothing changed
+    Unchanged,
+
+    /// The text changed without setting an amount to send
+    Text,
+
+    /// The text set the amount to send, so its fees need recalculating
+    Amount,
+}
+
+/// Parses the bitcoin field's new text, typed while the field showed `unit`, and commits it with
+/// the amount and fiat value it sets
+fn apply_btc_edit(
+    state: &mut SendFlowManagerState,
+    new: String,
+    unit: BitcoinUnit,
+    sender: &mut DeferredSender,
+) -> AmountEdit {
+    let mode = state.amount_entry.mode;
+    if mode.fiat_or_btc != FiatOrBtc::Btc || mode.unit != unit {
+        let changeset = BtcOnChangeHandler::typed_in(state, unit).parse_fresh(&new);
+        let amount = changeset.amount_btc.map(|amount| (amount, changeset.clear_max_selected));
+
+        return match amount {
+            Some((amount, clear_max_selected)) => {
+                commit_stale_edit(state, amount, clear_max_selected, sender)
+            }
+            None => {
+                resend_field(&state.amount_entry.btc_text, sender, Message::UpdateEnteringBtcAmount)
+            }
+        };
+    }
+
+    let old = std::mem::replace(&mut state.amount_entry.btc_text, new.clone());
+
+    // field text is raw user input and can hold a pasted PIN, so only its length is logged
+    trace!("btc_field_changed len {} --> {}", old.len(), new.len());
+    if old == new {
+        return AmountEdit::Unchanged;
+    }
+
+    let btc_on_change::Changeset {
+        entering_amount_btc,
+        clear_max_selected,
+        amount_btc,
+        amount_fiat,
+    } = BtcOnChangeHandler::new(state).on_change(&old, &new);
+
+    if clear_max_selected {
+        unset_max_selected(state, sender);
+    }
+
+    let mut edit = AmountEdit::Text;
+    if let Some(amount) = amount_btc {
+        let amount_sats = amount.to_sat();
+        if state.amount_sats != Some(amount_sats) {
+            state.clear_warning_acknowledgements();
+            state.amount_sats = Some(amount_sats);
+            sender.queue(Message::UpdateAmountSats(amount_sats));
+            edit = AmountEdit::Amount;
+        }
+    }
+
+    if let Some(amount) = amount_fiat {
+        state.amount_fiat = Some(amount);
+        sender.queue(Message::UpdateAmountFiat(amount));
+    }
+
+    if let Some(entering_amount) = entering_amount_btc {
+        set_entering_btc_amount(state, entering_amount, sender);
+    }
+
+    edit
+}
+
+/// Parses the fiat field's new text at the given prices and commits it, with the amount it sets
+///
+/// With no prices the text can't be parsed, so it is kept as typed without an amount
+fn apply_fiat_edit(
+    state: &mut SendFlowManagerState,
+    new: String,
+    prices: Option<PriceResponse>,
+    sender: &mut DeferredSender,
+) -> AmountEdit {
+    if state.amount_entry.mode.fiat_or_btc != FiatOrBtc::Fiat {
+        let max_selected = state.max_selected.as_ref().map(|max| *max.amount);
+        let currency = state.selected_fiat_currency;
+        let amount = prices
+            .and_then(|prices| {
+                FiatOnChangeHandler::new(prices, currency, max_selected).on_change("", &new).ok()
+            })
+            .and_then(|changeset| Some((changeset.btc_amount?, changeset.clear_max_selected)));
+
+        return match amount {
+            Some((amount, clear_max_selected)) => {
+                commit_stale_edit(state, amount, clear_max_selected, sender)
+            }
+            None => resend_field(
+                &state.amount_entry.fiat_text,
+                sender,
+                Message::UpdateEnteringFiatAmount,
+            ),
+        };
+    }
+
+    let old = std::mem::replace(&mut state.amount_entry.fiat_text, new.clone());
+
+    // field text is raw user input and can hold a pasted PIN, so only its length is logged
+    trace!("fiat_field_changed len {} --> {}", old.len(), new.len());
+    if old == new {
+        return AmountEdit::Unchanged;
+    }
+
+    let Some(prices) = prices else { return AmountEdit::Text };
+
+    let max_selected = state.max_selected.as_ref().map(|max| *max.amount);
+    let handler = FiatOnChangeHandler::new(prices, state.selected_fiat_currency, max_selected);
+    let Ok(changeset) = handler.on_change(&old, &new) else {
+        tracing::error!("unable to get fiat on change result");
+        return AmountEdit::Text;
+    };
+
+    let fiat_on_change::Changeset {
+        entering_fiat_amount,
+        fiat_value,
+        btc_amount,
+        clear_max_selected,
+    } = changeset;
+
+    if let Some(entering_fiat_amount) = entering_fiat_amount {
+        state.amount_entry.fiat_text = entering_fiat_amount.clone();
+        sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
+    }
+
+    if let Some(amount_fiat) = fiat_value {
+        state.amount_fiat = Some(amount_fiat);
+        sender.queue(Message::UpdateAmountFiat(amount_fiat));
+    }
+
+    let mut edit = AmountEdit::Text;
+    if let Some(btc_amount) = btc_amount {
+        let amount_sats = btc_amount.as_sats();
+        if state.amount_sats != Some(amount_sats) {
+            state.clear_warning_acknowledgements();
+        }
+
+        state.amount_sats = Some(amount_sats);
+        sender.queue(Message::UpdateAmountSats(amount_sats));
+        edit = AmountEdit::Amount;
+    }
+
+    if clear_max_selected {
+        unset_max_selected(state, sender);
+    }
+
+    edit
+}
+
+/// Commits the amount of an edit typed before a display preference change moved the entry to
+/// another unit or field
+///
+/// The change already rewrote the fields for the new mode, so the edit's text is not stored;
+/// its amount is, parsed in the unit or field it was typed in and rendered in the current mode,
+/// so the last keystroke before a switch still counts
+fn commit_stale_edit(
+    state: &mut SendFlowManagerState,
+    amount: Amount,
+    clear_max_selected: bool,
+    sender: &mut DeferredSender,
+) -> AmountEdit {
+    debug!("committing an amount edit typed before the entry mode changed");
+    if clear_max_selected {
+        unset_max_selected(state, sender);
+    }
+
+    if apply_amount(state, amount, sender) { AmountEdit::Amount } else { AmountEdit::Text }
+}
+
+/// Drops an edit typed before a display preference change that sets no amount yet, such as
+/// "0.", and sends the field's text again so the platform shows what Rust holds even when that
+/// change left the text as it was
+fn resend_field(
+    text: &str,
+    sender: &mut DeferredSender,
+    message: fn(String) -> Message,
+) -> AmountEdit {
+    debug!("dropping a partial amount edit typed before the entry mode changed");
+    sender.queue(message(text.to_string()));
+    AmountEdit::Unchanged
+}
+
+/// Rewrites both amount fields from the committed amount once the amount field loses focus, in
+/// one critical section so the bitcoin text is written in the unit the entry is in
+fn format_entered_amounts(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
+    if let Some(amount_fiat) = state.amount_fiat {
+        let text = fiat_entry_text(amount_fiat, state.selected_fiat_currency);
+        state.amount_entry.fiat_text.clone_from(&text);
+        sender.queue(Message::UpdateEnteringFiatAmount(text));
+    }
+
+    let Some(amount) = state.amount_sats.map(Amount::from_sat) else { return };
+    let text = match state.amount_entry.mode.unit {
+        BitcoinUnit::Sat => amount.as_sats().thousands_int(),
+        BitcoinUnit::Btc => amount.as_btc().thousands(),
+    };
+
+    set_entering_btc_amount(state, text, sender);
+}
+
 fn unset_max_selected(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
     if state.max_selected.take().is_some() {
         sender.queue(Message::UnsetMaxSelected);
@@ -526,7 +542,7 @@ fn apply_amount(
     sender: &mut DeferredSender,
 ) -> bool {
     let btc_price_in_fiat = state.btc_price_in_fiat;
-    match state.metadata.fiat_or_btc {
+    match state.amount_entry.mode.fiat_or_btc {
         FiatOrBtc::Fiat => {
             if let Some(price) = btc_price_in_fiat {
                 let text = fiat_entry_text(fiat_value(amount, price), state.selected_fiat_currency);
@@ -535,7 +551,7 @@ fn apply_amount(
         }
 
         FiatOrBtc::Btc => {
-            let text = btc_entry_text(amount, state.metadata.selected_unit);
+            let text = btc_entry_text(amount, state.amount_entry.mode.unit);
             set_entering_btc_amount(state, text, sender);
         }
     }
@@ -557,13 +573,29 @@ fn apply_amount(
     amount_changed
 }
 
+fn clear_amount(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
+    if state.amount_sats.is_some() {
+        state.clear_warning_acknowledgements();
+    }
+
+    state.amount_sats = None;
+    state.amount_fiat = None;
+    sender.queue(Message::UpdateAmountFiat(0.0));
+    sender.queue(Message::UpdateAmountSats(0));
+
+    let fiat_text = state.selected_fiat_currency.symbol().to_string();
+    set_entering_fiat_amount(state, fiat_text, sender);
+    set_entering_btc_amount(state, String::new(), sender);
+    unset_max_selected(state, sender);
+}
+
 fn set_entering_btc_amount(
     state: &mut SendFlowManagerState,
     entering_btc_amount: String,
     sender: &mut DeferredSender,
 ) {
-    if state.entering_btc_amount != entering_btc_amount {
-        state.entering_btc_amount = entering_btc_amount.clone();
+    if state.amount_entry.btc_text != entering_btc_amount {
+        state.amount_entry.btc_text = entering_btc_amount.clone();
         sender.queue(Message::UpdateEnteringBtcAmount(entering_btc_amount));
     }
 }
@@ -573,14 +605,14 @@ fn set_entering_fiat_amount(
     entering_fiat_amount: String,
     sender: &mut DeferredSender,
 ) {
-    if state.entering_fiat_amount != entering_fiat_amount {
-        state.entering_fiat_amount = entering_fiat_amount.clone();
+    if state.amount_entry.fiat_text != entering_fiat_amount {
+        state.amount_entry.fiat_text = entering_fiat_amount.clone();
         sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
     }
 }
 
 /// The text shown in the bitcoin amount field for a committed amount in the selected unit
-fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
+pub(crate) fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
     match unit {
         BitcoinUnit::Btc => amount.btc_string(),
         BitcoinUnit::Sat => amount.as_sats().thousands_int(),
@@ -588,7 +620,7 @@ fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
 }
 
 /// The text shown in the fiat amount field, symbol first
-fn fiat_entry_text(amount_fiat: f64, currency: FiatCurrency) -> String {
+pub(crate) fn fiat_entry_text(amount_fiat: f64, currency: FiatCurrency) -> String {
     format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat())
 }
 

@@ -260,11 +260,14 @@ class AppManager private constructor() : FfiReconcile {
         }
 
     /**
-     * get or create send flow manager for the given wallet manager
-     * caches the instance so we don't recreate unnecessarily
+     * get or create send flow manager for the given wallet manager while a send route for it is on
+     * the stack; caches the instance so we don't recreate unnecessarily
      */
-    fun getSendFlowManager(wm: WalletManager, presenter: SendFlowPresenter): SendFlowManager =
-        managerCache.getSendFlowManager(wm, presenter)
+    fun getSendFlowManager(
+        wm: WalletManager,
+        presenter: SendFlowPresenter,
+        sendRoute: SendRoute,
+    ): SendFlowManager? = managerCache.getSendFlowManager(wm, presenter, router, sendRoute)
 
     fun setCoinControlManager(manager: CoinControlManager) = managerCache.setCoinControlManager(manager)
 
@@ -570,6 +573,13 @@ class AppManager private constructor() : FfiReconcile {
                         message = "Finish the active KeyTeleport flow before opening a different transfer.",
                     ),
                 )
+            return
+        }
+
+        // a send of another kind than the one open for its wallet replaces that send's screens
+        val replacing = (route as? Route.Send)?.let { RouteFactory().routesReplacingOpenSend(router.routes, it) }
+        if (replacing != null) {
+            router.setRoute(replacing)
             return
         }
 

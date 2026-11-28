@@ -425,6 +425,7 @@ private fun SummaryWidget(
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(
             label = stringResource(R.string.label_network_fee),
+            modifier = Modifier.fillMaxWidth().testTag("sendFlowConfirm.fee"),
             value = networkFee,
             labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -441,6 +442,7 @@ private fun SummaryWidget(
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(
             label = stringResource(R.string.label_you_will_pay),
+            modifier = Modifier.fillMaxWidth().testTag("sendFlowConfirm.total"),
             value = willPay,
             labelColor = MaterialTheme.colorScheme.onSurface,
             valueColor = MaterialTheme.colorScheme.onSurface,

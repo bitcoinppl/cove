@@ -106,15 +106,19 @@ impl RustSendFlowManager {
         self.handle_amount_changed(Amount::from_sat(max_send_sats));
     }
 
+    /// Applies the custom amount typed while the sheet showed `unit`
+    ///
+    /// The text is parsed in the unit it was typed in rather than the entry mode's, which a
+    /// display preference change can move on before the edit arrives; Rust keeps only the amount,
+    /// and renders it in the current mode
     pub(crate) fn handle_coin_control_entered_amount_changed(
         self: &Arc<Self>,
         amount: String,
-        _is_focused: bool,
+        unit: BitcoinUnit,
     ) -> Option<()> {
         // the text is raw user input and can hold a pasted PIN, so only its length is logged
         debug!("handle_coin_control_entered_amount_changed: {} chars", amount.len());
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
-        let unit = self.state.lock().metadata.selected_unit;
         let amount = match unit {
             BitcoinUnit::Sat => Amount::from_sat(amount.parse::<u64>().ok()?),
             BitcoinUnit::Btc => Amount::from_btc_str(&amount).ok()?,
@@ -129,8 +133,8 @@ impl RustSendFlowManager {
         }
 
         match self.state.lock().mode.clone() {
-            // already in coin control mode with the same utxos, so do nothing
-            EnterMode::CoinControl(cc) if cc.utxo_list.utxos == utxos => {
+            // already in coin control mode with the same coins, so the amount typed for them stays
+            EnterMode::CoinControl(cc) if cc.utxo_list.has_same_coins(&utxos) => {
                 return;
             }
             _ => {}

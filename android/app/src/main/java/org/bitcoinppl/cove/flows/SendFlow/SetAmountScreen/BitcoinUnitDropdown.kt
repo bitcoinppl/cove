@@ -22,6 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
@@ -41,6 +44,7 @@ internal fun BitcoinUnitDropdown(
             modifier =
                 Modifier
                     .offset(y = (-4).dp)
+                    .testTag("sendFlow.unit")
                     .clickable { showUnitMenu = true },
         ) {
             Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1)
@@ -55,9 +59,12 @@ internal fun BitcoinUnitDropdown(
         DropdownMenu(
             expanded = showUnitMenu,
             onDismissRequest = { showUnitMenu = false },
+            // the menu is its own popup window, so the app root's resource id mapping doesn't reach it
+            modifier = Modifier.semantics { testTagsAsResourceId = true },
         ) {
             DropdownMenuItem(
                 text = { Text("sats") },
+                modifier = Modifier.testTag("sendFlow.unit.sats"),
                 onClick = {
                     onUnitChange(BitcoinUnit.SAT)
                     showUnitMenu = false
@@ -65,6 +72,7 @@ internal fun BitcoinUnitDropdown(
             )
             DropdownMenuItem(
                 text = { Text("btc") },
+                modifier = Modifier.testTag("sendFlow.unit.btc"),
                 onClick = {
                     onUnitChange(BitcoinUnit.BTC)
                     showUnitMenu = false

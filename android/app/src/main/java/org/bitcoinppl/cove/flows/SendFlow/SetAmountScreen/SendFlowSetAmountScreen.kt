@@ -82,7 +82,6 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.FlexibleSpacer
-import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -112,32 +111,16 @@ fun SendFlowSetAmountScreen(
 
     // derive state from managers (like iOS @Environment)
     val metadata = walletManager.walletMetadata
-    val isFiatMode = metadata?.fiatOrBtc == FiatOrBtc.FIAT
     val isBalanceHidden = !(metadata?.sensitiveVisible ?: false)
     val balanceAmount = walletManager.amountFmt(walletManager.balance.spendable())
     val balanceDenomination = walletManager.unit
-    val amountText =
-        when (metadata?.fiatOrBtc) {
-            FiatOrBtc.BTC -> sendFlowManager.enteringBtcAmount
-            FiatOrBtc.FIAT -> sendFlowManager.enteringFiatAmount
-            else -> sendFlowManager.enteringBtcAmount
-        }
-    val amountDenomination =
-        when (metadata?.fiatOrBtc) {
-            FiatOrBtc.BTC -> walletManager.unit
-            FiatOrBtc.FIAT -> ""
-            else -> walletManager.unit
-        }
-    val dollarEquivalentText =
-        when (metadata?.fiatOrBtc) {
-            FiatOrBtc.FIAT -> sendFlowManager.sendAmountBtc
-            else -> sendFlowManager.sendAmountFiat
-        }
-    val secondaryUnit =
-        when (metadata?.fiatOrBtc) {
-            FiatOrBtc.FIAT -> walletManager.unit
-            else -> ""
-        }
+
+    // the entry unit and field come from the send flow, which owns the text they describe
+    val isFiatMode = sendFlowManager.isFiatEntry
+    val amountText = if (isFiatMode) sendFlowManager.enteringFiatAmount else sendFlowManager.enteringBtcAmount
+    val amountDenomination = if (isFiatMode) "" else sendFlowManager.unit
+    val dollarEquivalentText = if (isFiatMode) sendFlowManager.sendAmountBtc else sendFlowManager.sendAmountFiat
+    val secondaryUnit = if (isFiatMode) sendFlowManager.unit else ""
     val initialAddress = sendFlowManager.enteringAddress
     val feeEta =
         sendFlowManager.selectedFeeRate?.let {
@@ -279,10 +262,10 @@ fun SendFlowSetAmountScreen(
                                 dollarText = dollarEquivalentText,
                                 secondaryUnit = secondaryUnit,
                                 onAmountChanged = { newAmount ->
-                                    when (metadata?.fiatOrBtc) {
-                                        FiatOrBtc.BTC -> sendFlowManager.updateEnteringBtcAmount(newAmount)
-                                        FiatOrBtc.FIAT -> sendFlowManager.updateEnteringFiatAmount(newAmount)
-                                        else -> sendFlowManager.updateEnteringBtcAmount(newAmount)
+                                    if (isFiatMode) {
+                                        sendFlowManager.updateEnteringFiatAmount(newAmount)
+                                    } else {
+                                        sendFlowManager.updateEnteringBtcAmount(newAmount)
                                     }
                                 },
                                 onClearAmount = {

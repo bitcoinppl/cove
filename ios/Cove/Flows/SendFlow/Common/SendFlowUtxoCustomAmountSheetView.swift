@@ -89,8 +89,12 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(SendFlowManager.self) private var manager
     @Environment(\.dismiss) private var dismiss
 
+    /// The wallet's metadata in the send flow's unit, so the typed amount is labelled, shown and
+    /// sent to Rust in one unit, which Rust parses it in
     var metadata: WalletMetadata {
-        walletManager.walletMetadata
+        var metadata = walletManager.walletMetadata
+        metadata.selectedUnit = manager.amountEntryMode.unit
+        return metadata
     }
 
     let utxos: [Utxo]
@@ -188,7 +192,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 amountFromSliderValue(sliderState.amount)
             }
 
-        return walletManager.displayAmount(amount, showUnit: false)
+        return walletDisplayAmount(metadata: metadata, amount: amount, showUnit: false)
     }
 
     private var displayAmountBinding: Binding<String> {
@@ -196,7 +200,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             get: { displayAmount(enteringAmount) },
             set: {
                 enteringAmount = $0
-                manager.dispatch(.notifyCoinControlEnteredAmountChanged($0, isFocused))
+                manager.dispatch(.notifyCoinControlEnteredAmountChanged(text: $0, unit: metadata.selectedUnit))
             }
         )
     }
@@ -314,6 +318,7 @@ private struct SendFlowUtxoCustomAmountHeader: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("sendFlow.coinControl.customAmount.close")
         }
     }
 }
@@ -337,6 +342,7 @@ private struct SendFlowUtxoCustomAmountControls: View {
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .focused(isFocused)
+                    .accessibilityIdentifier("sendFlow.coinControl.customAmount")
 
                 Text(selectedUnitSymbol)
             }

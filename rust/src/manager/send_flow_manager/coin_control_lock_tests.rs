@@ -19,8 +19,8 @@ use cove_types::{
 };
 
 use super::{
-    App, DebouncedTask, EnterMode, Message, ReconcileChannel, RustSendFlowManager,
-    SendFlowAlertState, SendFlowError, State,
+    App, EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError,
+    test_support::show_bitcoin_unit,
 };
 
 use crate::{
@@ -36,7 +36,6 @@ use crate::{
         utxo_locks::{LockTestWallet, OfflineChain},
     },
     transaction::{FeeRate, TxId},
-    wallet::balance::Balance,
 };
 
 /// Three coins, each from its own receive transaction
@@ -77,24 +76,17 @@ async fn coin_control_send_of_two_coins() -> Fixture {
 /// The send flow `new` would build, without its network fee fetch: base fee rates are
 /// already cached, so fee totals come from the wallet alone
 fn send_flow(wallet: &LockTestWallet) -> Arc<RustSendFlowManager> {
-    let metadata = wallet.manager.metadata.read().clone();
-    let state = State::new(metadata, Arc::new(Balance::default()));
+    let send = RustSendFlowManager::with_wallet(wallet.manager.clone(), Arc::default());
+    show_bitcoin_unit(&send, BitcoinUnit::Sat);
 
     {
-        let mut state = state.lock();
-        state.metadata.selected_unit = BitcoinUnit::Sat;
+        let mut state = send.state.lock();
         state.fee_rate_options_base = Some(Arc::new(base_fee_rates()));
         state.has_base_fees = true;
         state.address = Some(Arc::new(external_recipient()));
     }
 
-    Arc::new(RustSendFlowManager {
-        app: App::global().clone(),
-        wallet_manager: wallet.manager.clone(),
-        state: state.into_inner(),
-        reconciler: ReconcileChannel::new(50),
-        fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
-    })
+    send
 }
 
 fn base_fee_rates() -> FeeRateOptions {

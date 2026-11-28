@@ -99,6 +99,52 @@ pub enum SendRoute {
     Confirm(SendRouteConfirmArgs),
 }
 
+/// The kind of send a send session serves
+///
+/// Coin control's draft is kept while its UTXO list is open, so a normal send opened then, such as
+/// from a scanned payment link, must start its own session rather than inherit that draft
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum SendSessionKind {
+    Normal,
+    CoinControl,
+}
+
+#[uniffi::export]
+impl SendRoute {
+    /// The kind of session this route starts, or none for a route that continues the send already
+    /// open, such as the confirm screen
+    pub fn session_kind(&self) -> Option<SendSessionKind> {
+        match self {
+            Self::SetAmount { .. } => Some(SendSessionKind::Normal),
+            Self::CoinControlSetAmount { .. } => Some(SendSessionKind::CoinControl),
+            Self::HardwareExport { .. } | Self::Confirm(_) => None,
+        }
+    }
+}
+
+impl SendRoute {
+    const fn wallet_id(&self) -> &WalletId {
+        match self {
+            Self::SetAmount { id, .. }
+            | Self::CoinControlSetAmount { id, .. }
+            | Self::HardwareExport { id, .. } => id,
+            Self::Confirm(args) => &args.id,
+        }
+    }
+}
+
+impl Route {
+    /// Whether this route is part of a send from `wallet_id`: one of its screens, or the coin
+    /// control list a coin control send is opened from
+    fn is_send_from(&self, wallet_id: &WalletId) -> bool {
+        match self {
+            Self::Send(send) => send.wallet_id() == wallet_id,
+            Self::CoinControl(CoinControlRoute::List(id)) => id == wallet_id,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum CoinControlRoute {
     List(WalletId),
@@ -301,6 +347,27 @@ pub(crate) fn load_and_reset_nested_to_after(
     Route::LoadAndReset { reset_to: routes, after_millis }
 }
 
+/// Where the send that pushing `route` replaces starts in `routes`, if one does: a send of the
+/// other kind for the same wallet
+fn replaced_send_start(routes: &[Route], route: &Route) -> Option<usize> {
+    let Route::Send(send) = route else { return None };
+    let kind = send.session_kind()?;
+    let wallet_id = send.wallet_id();
+
+    let other_kind_open = routes.iter().any(|open| match open {
+        Route::Send(open) => {
+            open.wallet_id() == wallet_id && open.session_kind().is_some_and(|open| open != kind)
+        }
+        _ => false,
+    });
+
+    if !other_kind_open {
+        return None;
+    }
+
+    routes.iter().position(|open| open.is_send_from(wallet_id))
+}
+
 use std::hash::{Hash as _, Hasher as _};
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Object)]
@@ -311,6 +378,27 @@ impl RouteFactory {
     #[uniffi::constructor]
     pub const fn new() -> Self {
         Self
+    }
+
+    /// The nested routes once `route` is pushed onto `routes`, when the push replaces an open
+    /// send, or none when `route` is pushed as usual
+    ///
+    /// Each platform keeps one send session per wallet, so a send of one kind pushed over a send
+    /// of the other kind for the same wallet, such as a scanned payment address over a coin
+    /// control send, replaces it: the old send's screens, from the coin control list it was opened
+    /// from on, leave with its session instead of staying over a closed one. Rust answers whether
+    /// that happened, since route values that crossed the bridge can't be compared reliably
+    pub fn routes_replacing_open_send(
+        &self,
+        routes: Vec<Route>,
+        route: Route,
+    ) -> Option<Vec<Route>> {
+        let replaced_from = replaced_send_start(&routes, &route)?;
+
+        let mut routes = routes;
+        routes.truncate(replaced_from);
+        routes.push(route);
+        Some(routes)
     }
 
     pub fn is_same_parent_route(&self, route: Route, route_to_check: Route) -> bool {
@@ -509,6 +597,43 @@ impl From<SettingsRoute> for Route {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_send_of_another_kind_replaces_the_open_send_for_its_wallet() {
+        let factory = RouteFactory::new();
+        let wallet = WalletId::preview_new_random();
+        let other_wallet = WalletId::preview_new_random();
+
+        let normal =
+            Route::Send(SendRoute::SetAmount { id: wallet.clone(), address: None, amount: None });
+        let coin_control_send =
+            Route::Send(SendRoute::CoinControlSetAmount { id: wallet.clone(), utxos: vec![] });
+        let coin_list = Route::CoinControl(CoinControlRoute::List(wallet));
+        let settings = Route::Settings(SettingsRoute::Main);
+
+        // a payment address scanned over a coin control send replaces it and its coin list
+        let coin_control_open =
+            vec![settings.clone(), coin_list.clone(), coin_control_send.clone()];
+        assert_eq!(
+            factory.routes_replacing_open_send(coin_control_open, normal.clone()),
+            Some(vec![settings, normal.clone()])
+        );
+
+        // over the coin list alone there is no send to replace
+        let list_open = vec![coin_list.clone()];
+        assert_eq!(factory.routes_replacing_open_send(list_open, normal.clone()), None);
+
+        // a send of the same kind, a send screen that continues one, and another wallet's send
+        // are pushed as usual
+        let normal_open = vec![normal.clone()];
+        assert_eq!(factory.routes_replacing_open_send(normal_open, normal), None);
+
+        let other_wallet_send =
+            Route::Send(SendRoute::SetAmount { id: other_wallet, address: None, amount: None });
+        let pushed_other = factory
+            .routes_replacing_open_send(vec![coin_list, coin_control_send], other_wallet_send);
+        assert_eq!(pushed_other, None);
+    }
 
     // regression for #916: a cold launch must not route to a wallet from another network
     #[test]

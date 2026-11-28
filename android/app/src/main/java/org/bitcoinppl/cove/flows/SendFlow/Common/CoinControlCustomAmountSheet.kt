@@ -18,6 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -169,7 +172,9 @@ fun CoinControlCustomAmountSheet(
     fun coinControlAmountChanged(value: Double): SendFlowManagerAction =
         SendFlowManagerAction.NotifyCoinControlAmountChanged(amountFromSliderValue(value))
 
-    fun displayAmount(): String = walletManager.amountFmt(amountFromSliderValue(sliderState.amount))
+    // the send flow's unit, which Rust parses the typed amount in
+    fun displayAmount(): String =
+        amountFromSliderValue(sliderState.amount).fmtString(sendFlowManager.amountEntryMode.unit)
 
     fun handleSliderChange(raw: Double) {
         isEditing = true
@@ -293,7 +298,7 @@ fun CoinControlCustomAmountSheet(
                                 sendFlowManager.dispatch(
                                     SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                                         newValue,
-                                        true,
+                                        sendFlowManager.amountEntryMode.unit,
                                     ),
                                 )
                             },
@@ -306,11 +311,16 @@ fun CoinControlCustomAmountSheet(
                                 ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
-                            modifier = Modifier.widthIn(max = 100.dp),
+                            // the sheet is its own window, so the app root's resource id mapping doesn't reach it
+                            modifier =
+                                Modifier
+                                    .widthIn(max = 100.dp)
+                                    .semantics { testTagsAsResourceId = true }
+                                    .testTag("sendFlow.coinControl.customAmount"),
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            walletManager.unit.uppercase(),
+                            sendFlowManager.unit.uppercase(),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,

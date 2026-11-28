@@ -161,6 +161,9 @@ struct WalletManagerCacheState: Equatable {
 
     private(set) var walletManager: WalletManager?
     private(set) var sendFlowManager: SendFlowManager?
+    /// The kind of send the cached send flow manager was made for
+    @ObservationIgnored
+    private var sendFlowSessionKind: SendSessionKind?
     private(set) var keyTeleportManager: KeyTeleportManager?
     @ObservationIgnored
     weak var coinControlManager: CoinControlManager?
@@ -350,33 +353,44 @@ struct WalletManagerCacheState: Equatable {
         return sendFlowManager
     }
 
-    /// Returns the wallet's send flow manager, creating it when the router shows a send route for
-    /// the wallet, or nil when none does
+    /// Returns the wallet's send flow manager, creating it when the router still shows the
+    /// requesting send route, or nil when it does not
     ///
     /// A send screen that is animating out still runs its tasks after the router dropped its
     /// route, and a manager it created there would outlive the flow with the unit and fiat mode
-    /// the wallet had then, which the next send screen reused
+    /// the wallet had then, which the next send screen reused. The check is for that screen's own
+    /// route, not any send for the wallet, so a screen another send replaced cannot close the new
+    /// send's manager or take over its presenter
+    ///
+    /// A route that starts a different kind of send than the cached manager serves gets a new
+    /// manager: a normal send opened while coin control's list keeps its draft starts fresh, and
+    /// that draft is discarded
     func ensureSendFlowManager(
         _ walletManager: WalletManager,
         presenter: SendFlowPresenter,
-        router: Router
+        router: Router,
+        for sendRoute: SendRoute
     ) throws -> SendFlowManager? {
-        guard router.containsSendRoute(for: walletManager.id) else {
-            logger.debug("no send route for \(walletManager.id), not creating a SendFlowManager")
+        guard router.contains(.send(sendRoute)) else {
+            logger.debug("send route for \(walletManager.id) is gone, not creating a SendFlowManager")
             return nil
         }
 
-        if let sendFlowManager = cachedSendFlowManager(id: walletManager.id) {
+        let requestedKind = sendRoute.sessionKind()
+        if let sendFlowManager = cachedSendFlowManager(id: walletManager.id),
+           requestedKind == nil || requestedKind == sendFlowSessionKind
+        {
             logger.debug("found and using sendflow manager for \(walletManager.id)")
             sendFlowManager.presenter = presenter
             return sendFlowManager
         }
 
-        logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
+        logger.debug("no SendFlowManager for \(walletManager.id) serves \(String(describing: requestedKind)), creating new")
         clearSendFlowManager()
 
         let sendFlowManager = try makeSendFlowManager(walletManager, presenter)
         self.sendFlowManager = sendFlowManager
+        sendFlowSessionKind = requestedKind ?? .normal
         return sendFlowManager
     }
 
@@ -430,7 +444,7 @@ struct WalletManagerCacheState: Equatable {
 
     func reconcileSendFlowManagerOwnership(router: Router) {
         guard let sendFlowManager else { return }
-        guard !router.keepsSendFlow(for: sendFlowManager.id) else { return }
+        guard !router.keepsSendFlow(for: sendFlowManager.id, kind: sendFlowSessionKind) else { return }
 
         clearSendFlowManager()
     }
@@ -461,6 +475,7 @@ struct WalletManagerCacheState: Equatable {
 
         let sendFlowManager = self.sendFlowManager
         self.sendFlowManager = nil
+        sendFlowSessionKind = nil
         sendFlowManager?.close()
     }
 
@@ -482,16 +497,32 @@ extension Router {
         self.default.isKeyTeleportRoute || routes.contains { $0.isKeyTeleportRoute }
     }
 
+    func contains(_ route: Route) -> Bool {
+        self.default == route || routes.contains(route)
+    }
+
     func containsSendRoute(for id: WalletId) -> Bool {
         self.default.isSendRoute(for: id) || routes.contains { $0.isSendRoute(for: id) }
     }
 
-    /// Whether the wallet's send flow is still in use: a send route, or the coin control list it
-    /// was opened from, which goes back to the same send with its recipient and fee kept
-    func keepsSendFlow(for id: WalletId) -> Bool {
-        containsSendRoute(for: id)
-            || self.default.isCoinControlRoute(for: id)
-            || routes.contains { $0.isCoinControlRoute(for: id) }
+    /// The routes after pushing a send of another kind than the one open for its wallet, which
+    /// replaces that send's screens, or nil when the route is pushed as usual
+    func routesReplacingOpenSend(with route: Route) -> [Route]? {
+        guard case .send = route else { return nil }
+        return RouteFactory().routesReplacingOpenSend(routes: routes, route: route)
+    }
+
+    /// Whether the wallet's send flow is still in use: a send route, or, for a coin control send,
+    /// the coin control list it was opened from, which goes back to the same send with its
+    /// recipient and fee kept
+    ///
+    /// A normal send opened over the list, such as from a payment link, ends when the user goes
+    /// back to the list, so the next send never inherits its amount and fee
+    func keepsSendFlow(for id: WalletId, kind: SendSessionKind?) -> Bool {
+        if containsSendRoute(for: id) { return true }
+        guard kind == .coinControl else { return false }
+
+        return self.default.isCoinControlRoute(for: id) || routes.contains { $0.isCoinControlRoute(for: id) }
     }
 }
 

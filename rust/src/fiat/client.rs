@@ -90,6 +90,21 @@ impl PriceResponse {
 impl_default_for!(FiatClient);
 
 impl FiatClient {
+    /// The current prices endpoint: mempool.space, or `COVE_PRICE_URL` in debug builds, which UI
+    /// tests point at the fake node so fiat amounts don't depend on the internet
+    fn prices_url(&self) -> std::borrow::Cow<'_, str> {
+        // read on every fetch, not once, so an Android instrumentation test can set it in the
+        // app process after the global client exists
+        #[cfg(debug_assertions)]
+        if let Ok(url) = std::env::var("COVE_PRICE_URL")
+            && !url.trim().is_empty()
+        {
+            return url.into();
+        }
+
+        self.url.as_str().into()
+    }
+
     fn new() -> Self {
         Self {
             url: CURRENCY_URL.to_string(),
@@ -175,7 +190,7 @@ impl FiatClient {
         }
 
         debug!("fetching prices");
-        let response = self.client()?.get(&self.url).send().await?;
+        let response = self.client()?.get(self.prices_url().as_ref()).send().await?;
         let prices: PriceResponse = response.json().await?;
 
         // saved prices are the same as the new ones don't need to update

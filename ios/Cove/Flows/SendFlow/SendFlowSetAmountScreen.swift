@@ -128,8 +128,6 @@ struct SendFlowSetAmountScreen: View {
         .padding(.top, 0)
         .onChange(of: presenter.focusField, initial: true, focusFieldChanged)
         .onChange(of: scannedCode, initial: false, scannedCodeChanged)
-        .onChange(of: metadata.selectedUnit, initial: false, selectedUnitChanged)
-        .onChange(of: metadata.fiatOrBtc, initial: false, fiatOrBtcChanged)
         .onChange(of: app.prices, initial: true, pricesChanged)
         .task { await prepareScreen() }
         .onAppear(perform: screenAppeared)
@@ -159,10 +157,6 @@ struct SendFlowSetAmountScreen: View {
 
     private func clearSendAmount() {
         sendFlowManager.dispatch(action: .clearSendAmount)
-    }
-
-    private func fiatOrBtcChanged(_ oldValue: FiatOrBtc, _ newValue: FiatOrBtc) {
-        sendFlowManager.dispatch(.notifyBtcOrFiatChanged(old: oldValue, new: newValue))
     }
 
     private func pricesChanged(_: PriceResponse?, _ newPrices: PriceResponse?) {
@@ -243,11 +237,6 @@ struct SendFlowSetAmountScreen: View {
     }
 
     // MARK: OnChange Functions
-
-    private func selectedUnitChanged(oldUnit: Unit, newUnit: Unit) {
-        Log.debug("selectedUnitChanged \(oldUnit) -> \(newUnit)")
-        sendFlowManager.dispatch(action: .notifySelectedUnitedChanged(old: oldUnit, new: newUnit))
-    }
 
     /// presenter focus field changed
     private func focusFieldChanged(_ oldField: FocusField?, _ newField: FocusField?) {

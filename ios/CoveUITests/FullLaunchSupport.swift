@@ -395,6 +395,26 @@ extension XCUIElement {
     /// `typeText` then retries without tapping, failing with "Neither element nor any descendant
     /// has keyboard focus"
     func typeTextOnceFocused(_ text: String) {
+        waitForKeyboardFocus()
+        typeText(text)
+    }
+
+    /// Types into a field the caller has tapped one key at a time, letting the field settle
+    /// after each key
+    ///
+    /// Fields the app reformats as you type, such as the send amount, write their formatted
+    /// text back a moment after each key; typing at full XCUITest speed on a slow CI simulator
+    /// lands the next key before that write, which then replaces it
+    func typeTextKeyByKey(_ text: String) {
+        waitForKeyboardFocus()
+
+        for key in text {
+            typeText(String(key))
+            waitForValueToSettle()
+        }
+    }
+
+    private func waitForKeyboardFocus() {
         for _ in 0 ..< 3 where !hasKeyboardFocus {
             if wait(for: \.hasKeyboardFocus, toEqual: true, timeout: 2) { break }
 
@@ -402,7 +422,20 @@ extension XCUIElement {
         }
 
         XCTAssertTrue(hasKeyboardFocus, "\(self) never took the keyboard focus")
-        typeText(text)
+    }
+
+    /// Waits until the value reads the same twice in a row, or gives up after a few seconds
+    private func waitForValueToSettle() {
+        let deadline = Date().addingTimeInterval(3)
+        var previous = value as? String
+
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.2)
+            let current = value as? String
+            if current == previous { return }
+
+            previous = current
+        }
     }
 }
 

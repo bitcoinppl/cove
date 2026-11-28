@@ -18,7 +18,10 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportManager
+import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RustKeyTeleportManager
+import org.bitcoinppl.cove_core.SendRoute
+import org.bitcoinppl.cove_core.SendSessionKind
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.WalletId
 import java.util.IdentityHashMap
@@ -72,6 +75,9 @@ internal class AndroidManagerCache(
 
     internal var sendFlowManager: SendFlowManager? by mutableStateOf(null)
         private set
+
+    // the kind of send the cached send flow manager was made for
+    private var sendFlowSessionKind: SendSessionKind? = null
 
     internal var coinControlManager: CoinControlManager? by mutableStateOf(null)
         private set
@@ -257,18 +263,50 @@ internal class AndroidManagerCache(
         return installedManager
     }
 
+    /**
+     * The send session for the wallet, or null when the requesting send route is not on the stack
+     *
+     * A screen whose route is already gone, such as one still running its setup while it leaves,
+     * must not create a session that the next send would reuse. The check is for that screen's own
+     * route, not any send for the wallet, so a screen another send replaced cannot close the new
+     * send's manager or take over its presenter
+     *
+     * A route that starts a different kind of send than the cached manager serves gets a new
+     * manager: a normal send opened while coin control's list keeps its draft starts fresh, and
+     * that draft is discarded
+     */
     internal fun getSendFlowManager(
         wm: WalletManager,
         presenter: SendFlowPresenter,
-    ): SendFlowManager {
-        sendFlowManager?.let {
-            if (it.id == wm.id) {
-                Log.d(tag, "found and using sendflow manager for ${wm.id}")
-                it.presenter = presenter
-                return it
+        router: RouterManager,
+        sendRoute: SendRoute,
+    ): SendFlowManager? {
+        val existing = sendFlowManager
+        val requestedKind = sendRoute.sessionKind()
+        val servesRequestedKind = requestedKind == null || requestedKind == sendFlowSessionKind
+
+        return when {
+            !routeStackContains(router.default, router.routes, Route.Send(sendRoute)) -> {
+                Log.d(tag, "send route for ${wm.id} is gone, not creating a SendFlowManager")
+                null
             }
 
-            // close old manager before replacing
+            existing?.id == wm.id && servesRequestedKind -> {
+                Log.d(tag, "found and using sendflow manager for ${wm.id}")
+                existing.also { it.presenter = presenter }
+            }
+
+            else -> replaceSendFlowManager(wm, presenter, requestedKind ?: SendSessionKind.NORMAL)
+        }
+    }
+
+    private fun replaceSendFlowManager(
+        wm: WalletManager,
+        presenter: SendFlowPresenter,
+        kind: SendSessionKind,
+    ): SendFlowManager {
+        // close the old wallet's manager before replacing it
+        sendFlowManager?.let {
             Log.d(tag, "closing old sendflow manager for ${it.id}")
             clearSendFlowManager()
         }
@@ -276,6 +314,7 @@ internal class AndroidManagerCache(
         Log.d(tag, "did not find SendFlowManager for ${wm.id}, creating new")
         val manager = SendFlowManager(wm.newSendFlowManager(wm.balance), presenter)
         sendFlowManager = manager
+        sendFlowSessionKind = kind
         return manager
     }
 
@@ -378,6 +417,7 @@ internal class AndroidManagerCache(
             Log.w(tag, "Error closing SendFlowManager: ${e.message}")
         }
         sendFlowManager = null
+        sendFlowSessionKind = null
     }
 
     private fun clearActiveCoinControlManager() {
@@ -400,7 +440,7 @@ internal class AndroidManagerCache(
 
     internal fun clearInactiveSendFlowManager(router: RouterManager) {
         val manager = sendFlowManager ?: return
-        if (routeStackContainsSendWallet(router.default, router.routes, manager.id)) return
+        if (routeStackKeepsSendFlow(router.default, router.routes, manager.id, sendFlowSessionKind)) return
 
         clearSendFlowManager()
     }

@@ -13,6 +13,7 @@ extension WeakReconciler: SendFlowManagerReconciler where Reconciler == SendFlow
 
 protocol SendFlowRustManaging: AnyObject, Sendable {
     func walletId() -> WalletId
+    func amountEntryMode() -> SendFlowAmountEntryMode
     func enteringFiatAmount() -> String
     func sendAmountFiat() -> String
     func sendAmountBtc() -> String
@@ -29,7 +30,7 @@ protocol SendFlowRustManaging: AnyObject, Sendable {
     ) async throws -> FeeRateOptionWithTotalFee
     func waitForInit() async -> Bool
     func amountExceedsBalance() -> Bool
-    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String) -> String?
+    func sanitizeBtcEnteringAmount(oldValue: String, newValue: String, unit: BitcoinUnit) -> String?
     func sanitizeFiatEnteringAmount(oldValue: String, newValue: String) -> String?
     func utxos() -> [Utxo]?
     func maxSendMinusFees() -> Amount?
@@ -72,6 +73,18 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
     private var rust: SendFlowRustManaging? {
         rustState.withLock { $0.rust }
+    }
+
+    /// The unit and field the amount is entered in, which Rust keeps in step with the wallet's
+    /// display preferences and rewrites the entered text for
+    var amountEntryMode: SendFlowAmountEntryMode
+
+    /// The bitcoin unit label for this send, from the same owner as the entered text
+    var unit: String {
+        switch amountEntryMode.unit {
+        case .btc: "btc"
+        case .sat: "sats"
+        }
     }
 
     var enteringBtcAmount: String = ""
@@ -136,6 +149,7 @@ private enum SendFlowManagerAccessError: LocalizedError {
         self.presenter = presenter
 
         self.id = rust.walletId()
+        self.amountEntryMode = rust.amountEntryMode()
         self.enteringFiatAmount = rust.enteringFiatAmount()
         self.sendAmountFiat = rust.sendAmountFiat()
         self.sendAmountBtc = rust.sendAmountBtc()
@@ -304,7 +318,8 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
     func sanitizeBtcEnteringAmount(oldValue: String, newValue: String) -> String? {
         withRustOr(nil) {
-            $0.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue)
+            // in the unit the screen shows, which Rust can move on from before the screen does
+            $0.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue, unit: amountEntryMode.unit)
         }
     }
 
@@ -348,14 +363,9 @@ private enum SendFlowManagerAccessError: LocalizedError {
         case let .updateAddress(address):
             self.address = address
 
-        case let .updateEnteringBtcAmount(amount):
-            self.enteringBtcAmount = amount
-
-        case let .updateEnteringAddress(address):
-            self._enteringAddress = address
-
-        case let .updateEnteringFiatAmount(amount):
-            self.enteringFiatAmount = amount
+        case .updateAmountEntryMode, .updateEnteringBtcAmount, .updateEnteringFiatAmount,
+             .updateEnteringAddress:
+            applyEntry(message)
 
         case let .updateFocusField(field):
             self.presenter.focusField = field
@@ -375,6 +385,26 @@ private enum SendFlowManagerAccessError: LocalizedError {
 
         case .refreshPresenters:
             self.refreshPresenters()
+        }
+    }
+
+    /// Applies what the user is entering, and the unit and field it is entered in
+    private func applyEntry(_ message: Message) {
+        switch message {
+        case let .updateAmountEntryMode(mode):
+            self.amountEntryMode = mode
+
+        case let .updateEnteringBtcAmount(amount):
+            self.enteringBtcAmount = amount
+
+        case let .updateEnteringFiatAmount(amount):
+            self.enteringFiatAmount = amount
+
+        case let .updateEnteringAddress(address):
+            self._enteringAddress = address
+
+        default:
+            break
         }
     }
 

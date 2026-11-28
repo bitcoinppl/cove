@@ -135,7 +135,11 @@ internal fun BalanceWidget(
     val isHidden = !sensitiveVisible
 
     Column(
-        modifier = Modifier.clickable { onToggleUnit() },
+        // tagged apart from the balance text, which a fiat balance without prices replaces with a spinner
+        modifier =
+            Modifier
+                .testTag("selectedWallet.balanceUnitToggle")
+                .clickable { onToggleUnit() },
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         AmountDisplay(

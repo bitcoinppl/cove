@@ -64,6 +64,7 @@ env:
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/SendFlowUnitFullLaunchUITests,
     CoveUITests/SendFlowPrefilledAmountFullLaunchUITests,
+    CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests,
     CoveUITests/NfcScanPrivacyCoverFullLaunchUITests,
     CoveUITests/PrivacyCoverFullLaunchUITests,
     CoveUITests/QrSheetAppearanceFullLaunchUITests,

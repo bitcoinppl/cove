@@ -519,7 +519,8 @@ final class WalletTransitionTests: XCTestCase {
         let cachedManager = try XCTUnwrap(cache.ensureSendFlowManager(
             walletManager,
             presenter: retainedManager.presenter,
-            router: router
+            router: router,
+            for: .setAmount(id: walletManager.id, address: nil, amount: nil)
         ))
 
         retainedManager.close()
@@ -536,7 +537,8 @@ final class WalletTransitionTests: XCTestCase {
         let replacement = try XCTUnwrap(cache.ensureSendFlowManager(
             walletManager,
             presenter: retainedManager.presenter,
-            router: router
+            router: router,
+            for: .setAmount(id: walletManager.id, address: nil, amount: nil)
         ))
         cache.clearWalletManager()
 
@@ -554,33 +556,132 @@ final class WalletTransitionTests: XCTestCase {
 
         let cache = makeSendFlowManagerCache()
         let presenter = sendFlowManager.presenter
+        let normalSend = SendRoute.setAmount(id: walletManager.id, address: nil, amount: nil)
 
         let noSendRoute = router()
-        XCTAssertNil(try cache.ensureSendFlowManager(walletManager, presenter: presenter, router: noSendRoute))
+        XCTAssertNil(try cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: noSendRoute,
+            for: normalSend
+        ))
         XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
 
         let sending = router(sendingFrom: walletManager.id)
-        let manager = try XCTUnwrap(cache.ensureSendFlowManager(walletManager, presenter: presenter, router: sending))
+        let manager = try XCTUnwrap(cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: sending,
+            for: normalSend
+        ))
 
         cache.reconcileRouteOwnedManagers(router: sending)
         XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === manager)
         XCTAssertTrue(manager.canApplyReconcileMessages)
 
-        // back from the coin control send to its utxo list keeps the recipient and fee
+        // a normal send opened over coin control's utxo list ends once the user is back at the
+        // list, so the next send never inherits its amount and fee
         var coinControlList = router()
         coinControlList.routes = [.coinControl(.list(walletManager.id))]
         cache.reconcileRouteOwnedManagers(router: coinControlList)
-        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === manager)
-        XCTAssertTrue(manager.canApplyReconcileMessages)
+        XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
+        XCTAssertFalse(manager.canApplyReconcileMessages)
+
+        // back from a coin control send to its utxo list keeps the recipient and fee
+        let coinControlSend = SendRoute.coinControlSetAmount(id: walletManager.id, utxos: [])
+        var continued = router()
+        continued.routes = [.coinControl(.list(walletManager.id)), .send(coinControlSend)]
+        let coinControlManager = try XCTUnwrap(cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: continued,
+            for: coinControlSend
+        ))
+
+        cache.reconcileRouteOwnedManagers(router: coinControlList)
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === coinControlManager)
+        XCTAssertTrue(coinControlManager.canApplyReconcileMessages)
 
         // but a screen there can't start a send flow of its own
         cache.clearSendFlowManager()
-        XCTAssertNil(try cache.ensureSendFlowManager(walletManager, presenter: presenter, router: coinControlList))
+        XCTAssertNil(try cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: coinControlList,
+            for: normalSend
+        ))
 
-        let resumed = try XCTUnwrap(cache.ensureSendFlowManager(walletManager, presenter: presenter, router: sending))
+        let resumed = try XCTUnwrap(cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: sending,
+            for: normalSend
+        ))
         cache.reconcileRouteOwnedManagers(router: router(sendingFrom: "different-wallet"))
         XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
         XCTAssertFalse(resumed.canApplyReconcileMessages)
+    }
+}
+
+@MainActor
+extension WalletTransitionTests {
+    /// A normal send opened while coin control's list keeps its draft, such as from a scanned
+    /// payment link, starts fresh instead of inheriting the coin control send
+    func testNormalSendOverTheCoinControlListStartsAFreshSession() throws {
+        let (walletManager, sendFlowManager) = try makeSendFlowManager()
+        defer { walletManager.close() }
+        defer { sendFlowManager.close() }
+
+        let cache = makeSendFlowManagerCache()
+        let presenter = sendFlowManager.presenter
+        let coinControlSend = SendRoute.coinControlSetAmount(id: walletManager.id, utxos: [])
+        let normalSend = SendRoute.setAmount(id: walletManager.id, address: nil, amount: nil)
+
+        var continued = router()
+        continued.routes = [.coinControl(.list(walletManager.id)), .send(coinControlSend)]
+        let coinControlManager = try XCTUnwrap(cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: continued,
+            for: coinControlSend
+        ))
+
+        // Continue again from the list picks the same draft back up
+        let resumed = try cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: continued,
+            for: coinControlSend
+        )
+        XCTAssertTrue(resumed === coinControlManager)
+
+        // a payment link opens a normal send on top of the list
+        var linked = router()
+        linked.routes = [.coinControl(.list(walletManager.id)), .send(normalSend)]
+        let fresh = try XCTUnwrap(cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: linked,
+            for: normalSend
+        ))
+
+        XCTAssertFalse(fresh === coinControlManager)
+        XCTAssertFalse(coinControlManager.canApplyReconcileMessages, "the coin control draft is discarded")
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === fresh)
+
+        // and the normal send keeps its own session across its screens
+        let same = try cache.ensureSendFlowManager(walletManager, presenter: presenter, router: linked, for: normalSend)
+        XCTAssertTrue(same === fresh)
+
+        // the replaced coin control screen finishing its setup late leaves the new send alone
+        XCTAssertNil(try cache.ensureSendFlowManager(
+            walletManager,
+            presenter: presenter,
+            router: linked,
+            for: coinControlSend
+        ))
+        XCTAssertTrue(cache.cachedSendFlowManager(id: walletManager.id) === fresh)
+        XCTAssertTrue(fresh.canApplyReconcileMessages)
     }
 }
 
@@ -604,6 +705,7 @@ private final class TestSendFlowRustManager: SendFlowRustManaging {
     }
 
     func walletId() -> WalletId { id }
+    func amountEntryMode() -> SendFlowAmountEntryMode { SendFlowAmountEntryMode(unit: .btc, fiatOrBtc: .btc) }
     func enteringFiatAmount() -> String { "" }
     func sendAmountFiat() -> String { "" }
     func sendAmountBtc() -> String { "" }
@@ -624,7 +726,7 @@ private final class TestSendFlowRustManager: SendFlowRustManaging {
 
     func waitForInit() async -> Bool { false }
     func amountExceedsBalance() -> Bool { false }
-    func sanitizeBtcEnteringAmount(oldValue _: String, newValue _: String) -> String? { nil }
+    func sanitizeBtcEnteringAmount(oldValue _: String, newValue _: String, unit _: BitcoinUnit) -> String? { nil }
     func sanitizeFiatEnteringAmount(oldValue _: String, newValue _: String) -> String? { nil }
     func utxos() -> [Utxo]? { nil }
     func maxSendMinusFees() -> Amount? { nil }

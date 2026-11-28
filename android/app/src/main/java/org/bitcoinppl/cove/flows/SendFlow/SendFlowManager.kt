@@ -46,6 +46,24 @@ class SendFlowManager internal constructor(
 
     val id: WalletId = rust.walletId()
 
+    /**
+     * The unit and field the amount is entered in, which Rust keeps in step with the wallet's
+     * display preferences and rewrites the entered text for
+     */
+    var amountEntryMode by mutableStateOf(rust.amountEntryMode())
+        private set
+
+    val isFiatEntry: Boolean
+        get() = amountEntryMode.fiatOrBtc == FiatOrBtc.FIAT
+
+    /** The bitcoin unit label for this send, from the same owner as the entered text */
+    val unit: String
+        get() =
+            when (amountEntryMode.unit) {
+                BitcoinUnit.BTC -> "btc"
+                BitcoinUnit.SAT -> "sats"
+            }
+
     // user input state
     var enteringBtcAmount by mutableStateOf("")
         private set
@@ -92,8 +110,9 @@ class SendFlowManager internal constructor(
     var totalFeeString by mutableStateOf<String?>(null)
         private set
 
-    // debounce task
+    // debounce task, and the action it will dispatch
     private var debouncedTask: Job? = null
+    private var pendingAction: SendFlowManagerAction? = null
 
     init {
         logDebug("Initializing SendFlowManager for $id")
@@ -157,7 +176,10 @@ class SendFlowManager internal constructor(
         if (isClosed.get()) return
         if (enteringBtcAmount != value) {
             enteringBtcAmount = value
-            debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value))
+            // the unit is read at the keystroke, not when the debounce fires, so Rust parses an
+            // edit the unit changed under in the unit it was typed in, not the new one
+            val unit = amountEntryMode.unit
+            debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value, unit))
         }
     }
 
@@ -211,7 +233,8 @@ class SendFlowManager internal constructor(
         newValue: String,
     ): String? =
         withRustOr(null) {
-            sanitizeBtcEnteringAmount(oldValue, newValue)
+            // in the unit the screen shows, which Rust can move on from before the screen does
+            sanitizeBtcEnteringAmount(oldValue, newValue, amountEntryMode.unit)
         }
 
     fun sanitizeFiatEnteringAmount(
@@ -247,8 +270,7 @@ class SendFlowManager internal constructor(
 
     /** Commits the released slider amount and returns the authoritative Rust amount */
     fun commitCoinControlAmount(amount: Amount): Amount {
-        debouncedTask?.cancel()
-        debouncedTask = null
+        cancelDebouncedDispatch()
 
         return withRustOr(amount) {
             dispatch(SendFlowManagerAction.NotifyCoinControlAmountChanged(amount))
@@ -291,6 +313,23 @@ class SendFlowManager internal constructor(
             getCustomFeeOption(feeRate, feeSpeed)
         }
 
+    /** Applies what the user is entering, and the unit and field it is entered in */
+    private fun applyEntry(message: SendFlowManagerReconcileMessage) {
+        when (message) {
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode -> {
+                // an edit typed before the mode change goes out now, tagged with the unit it was
+                // typed in, so Rust commits it instead of dropping it for the new unit
+                flushDebouncedDispatch()
+                amountEntryMode = message.v1
+            }
+
+            is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> enteringBtcAmount = message.v1
+            is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> enteringFiatAmount = message.v1
+            is SendFlowManagerReconcileMessage.UpdateEnteringAddress -> _enteringAddress = message.v1
+            else -> Unit
+        }
+    }
+
     private fun apply(message: SendFlowManagerReconcileMessage) {
         when (message) {
             is SendFlowManagerReconcileMessage.UpdateAmountFiat -> {
@@ -311,16 +350,12 @@ class SendFlowManager internal constructor(
                 address = message.v1
             }
 
-            is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount -> {
-                enteringBtcAmount = message.v1
-            }
-
-            is SendFlowManagerReconcileMessage.UpdateEnteringAddress -> {
-                _enteringAddress = message.v1
-            }
-
-            is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount -> {
-                enteringFiatAmount = message.v1
+            is SendFlowManagerReconcileMessage.UpdateAmountEntryMode,
+            is SendFlowManagerReconcileMessage.UpdateEnteringBtcAmount,
+            is SendFlowManagerReconcileMessage.UpdateEnteringFiatAmount,
+            is SendFlowManagerReconcileMessage.UpdateEnteringAddress,
+            -> {
+                applyEntry(message)
             }
 
             is SendFlowManagerReconcileMessage.UpdateFocusField -> {
@@ -394,27 +429,39 @@ class SendFlowManager internal constructor(
         action: SendFlowManagerAction,
         debounceDelayMs: Long = DEFAULT_DEBOUNCE_MS,
     ) {
-        debouncedTask?.cancel()
-        debouncedTask = null
+        cancelDebouncedDispatch()
 
         if (debounceDelayMs <= 0) {
             dispatch(action)
             return
         }
 
+        pendingAction = action
         debouncedTask =
             mainScope.launch {
                 delay(debounceDelayMs)
                 if (!isActive) return@launch
-                dispatch(action)
+                flushDebouncedDispatch()
             }
+    }
+
+    /** Dispatches the pending debounced action now, if there is one */
+    private fun flushDebouncedDispatch() {
+        val action = pendingAction ?: return
+        cancelDebouncedDispatch()
+        dispatch(action)
+    }
+
+    private fun cancelDebouncedDispatch() {
+        debouncedTask?.cancel()
+        debouncedTask = null
+        pendingAction = null
     }
 
     override fun close() {
         rustGuard.closeOnce {
             logDebug("Closing SendFlowManager for $id")
-            debouncedTask?.cancel()
-            debouncedTask = null
+            cancelDebouncedDispatch()
             mainScope.cancel()
             rust.close()
         }

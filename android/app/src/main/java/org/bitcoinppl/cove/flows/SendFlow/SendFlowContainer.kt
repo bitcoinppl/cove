@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
@@ -80,7 +81,11 @@ fun SendFlowContainer(
 
             val wm = app.getWalletManagerLoaded(walletId)
             val presenter = SendFlowPresenter(app, wm)
-            val sfm = app.getSendFlowManager(wm, presenter)
+            val sfm =
+                app.getSendFlowManager(wm, presenter, sendRoute) ?: run {
+                    Log.d(tag, "send route for $walletId is gone, not starting a send session")
+                    return@LaunchedEffect
+                }
 
             // pre-populate address/amount based on route type
             when (sendRoute) {
@@ -132,6 +137,10 @@ fun SendFlowContainer(
                     ),
                 )
             app.popRoute()
+        } catch (e: CancellationException) {
+            // the screen left, such as when another send replaced it, which is no wallet error and
+            // must not pop the route now on top
+            throw e
         } catch (e: Exception) {
             Log.e(tag, "unable to initialize send flow", e)
             app.alertState =
@@ -167,28 +176,6 @@ fun SendFlowContainer(
                 ) {
                     presenter.alertState = TaggedItem(SendFlowAlertState.Error(SendFlowException.NoBalance()))
                 }
-            }
-
-            // observe unit changes and notify send flow manager
-            var previousUnit by remember { mutableStateOf(wm.walletMetadata?.selectedUnit) }
-            LaunchedEffect(wm.walletMetadata?.selectedUnit) {
-                val currentUnit = wm.walletMetadata?.selectedUnit
-                val oldUnit = previousUnit
-                if (oldUnit != null && currentUnit != null && oldUnit != currentUnit) {
-                    sfm.dispatch(SendFlowManagerAction.NotifySelectedUnitedChanged(oldUnit, currentUnit))
-                }
-                previousUnit = currentUnit
-            }
-
-            // observe fiatOrBtc changes and notify send flow manager
-            var previousFiatOrBtc by remember { mutableStateOf(wm.walletMetadata?.fiatOrBtc) }
-            LaunchedEffect(wm.walletMetadata?.fiatOrBtc) {
-                val currentFiatOrBtc = wm.walletMetadata?.fiatOrBtc
-                val oldFiatOrBtc = previousFiatOrBtc
-                if (oldFiatOrBtc != null && currentFiatOrBtc != null && oldFiatOrBtc != currentFiatOrBtc) {
-                    sfm.dispatch(SendFlowManagerAction.NotifyBtcOrFiatChanged(oldFiatOrBtc, currentFiatOrBtc))
-                }
-                previousFiatOrBtc = currentFiatOrBtc
             }
 
             // observe app prices changes and notify send flow manager
@@ -413,7 +400,7 @@ private fun SendFlowRouteToScreen(
                 balanceAmount = walletManager.amountFmt(walletManager.balance.spendable()),
                 balanceDenomination = walletManager.unit,
                 sendingAmount = sendFlowManager.sendAmountBtc,
-                sendingDenomination = walletManager.unit,
+                sendingDenomination = sendFlowManager.unit,
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
                 initialAddress = sendFlowManager.enteringAddress,
                 feeEta =

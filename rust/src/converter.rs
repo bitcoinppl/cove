@@ -55,8 +55,10 @@ impl Converter {
         prices: PriceResponse,
     ) -> Amount {
         let price = prices.get_for_currency(currency) as f64;
-        let btc_amount = fiat_amount / price;
-        let sat_amount = (btc_amount * 100_000_000.0).floor() as u64;
+
+        // rounded, not floored: f64 division lands just below whole amounts, so $30 at $100,000
+        // would otherwise come out as 29,999 sats
+        let sat_amount = (fiat_amount * 100_000_000.0 / price).round() as u64;
 
         Amount::from_sat(sat_amount)
     }
@@ -106,5 +108,30 @@ mod tests {
         assert_eq!(converter.parse_fiat_str("$2.01").unwrap(), 2.01);
         assert_eq!(converter.parse_fiat_str("$1,234.567").unwrap(), 1234.56);
         assert_eq!(converter.parse_fiat_str("$12.").unwrap(), 12.0);
+    }
+
+    #[test]
+    fn fiat_amounts_convert_to_the_nearest_sat() {
+        let prices = PriceResponse {
+            time: 0,
+            fetched_at: 0,
+            usd: 100_000,
+            eur: 100_000,
+            gbp: 100_000,
+            cad: 100_000,
+            chf: 100_000,
+            aud: 100_000,
+            jpy: 100_000,
+        };
+
+        let converter = Converter::new();
+        let sats = |fiat: &str| {
+            converter.convert_from_fiat_string(fiat, FiatCurrency::Usd, prices).as_sats()
+        };
+
+        assert_eq!(sats("$30"), 30_000);
+        assert_eq!(sats("$20.00"), 20_000);
+        assert_eq!(sats("$0.29"), 290);
+        assert_eq!(sats("$1,234.56"), 1_234_560);
     }
 }

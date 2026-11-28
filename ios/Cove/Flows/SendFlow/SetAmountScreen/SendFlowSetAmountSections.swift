@@ -254,6 +254,7 @@ struct SendFlowCoinControlAmountSection: View {
                 .contentTransition(.numericText())
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+                .accessibilityIdentifier("sendFlow.coinControl.fiatAmount")
         }
     }
 }
@@ -275,6 +276,8 @@ private struct SendFlowCoinControlAmountDisplay: View {
             .padding(.horizontal, 30)
             .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
             .onTapGesture(perform: showCustomAmount)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityIdentifier("sendFlow.coinControl.amount")
     }
 }
 
@@ -301,6 +304,7 @@ private struct SendFlowCoinControlUnitMenu: View {
                 .offset(y: -2)
             }
             .foregroundStyle(.primary)
+            .accessibilityIdentifier("sendFlow.coinControl.unit")
         }
     }
 }
@@ -318,6 +322,7 @@ private struct SendFlowCoinControlUnitMenuActions: View {
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
+            .accessibilityIdentifier("sendFlow.coinControl.unit.sats")
 
             Button(action: selectBtc) {
                 Text("btc")
@@ -327,6 +332,7 @@ private struct SendFlowCoinControlUnitMenuActions: View {
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
+            .accessibilityIdentifier("sendFlow.coinControl.unit.btc")
         }
         .foregroundStyle(.primary.opacity(0.8))
         .contentShape(Rectangle())

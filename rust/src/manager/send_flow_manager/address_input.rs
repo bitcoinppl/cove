@@ -18,7 +18,7 @@ impl RustSendFlowManager {
 
         self.state.lock().entering_address = address.clone();
 
-        let network = self.state.lock().metadata.network;
+        let network = self.state.lock().wallet.network;
         let parsed = AddressWithNetwork::try_new(&address).ok();
         let parsed = parsed
             .filter(|address_with_network| address_with_network.is_valid_for_network(network));
@@ -83,35 +83,6 @@ impl RustSendFlowManager {
         });
     }
 
-    pub(crate) fn clear_send_amount(self: &Arc<Self>) {
-        {
-            let mut state = self.state.lock();
-            if state.amount_sats.is_some() {
-                state.clear_warning_acknowledgements();
-            }
-            state.amount_sats = None;
-            state.amount_fiat = None;
-        }
-
-        let mut sender = self.reconciler.deferred_sender();
-        sender.queue(Message::UpdateAmountFiat(0.0));
-        sender.queue(Message::UpdateAmountSats(0));
-        self.schedule_fee_rate_update();
-
-        // fiat
-        let currency = self.state.lock().selected_fiat_currency;
-        let entering_fiat_amount = currency.symbol().to_string();
-        self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
-
-        // btc
-        self.set_and_send_entering_btc_amount(String::new(), &mut sender);
-
-        let was_max_selected = self.state.lock().max_selected.take().is_some();
-        if was_max_selected {
-            sender.queue(Message::UnsetMaxSelected);
-        }
-    }
-
     pub(crate) fn clear_address(self: &Arc<Self>) {
         let mut sender = self.reconciler.deferred_sender();
         {
@@ -136,7 +107,7 @@ impl RustSendFlowManager {
         debug!("handle_scan_code_changed: {} chars", new_value.len());
         let mut sender = self.reconciler.deferred_sender();
 
-        let network = self.state.lock().metadata.network;
+        let network = self.state.lock().wallet.network;
         let address_with_network = {
             let new_value_moved = new_value;
             match AddressWithNetwork::try_new(&new_value_moved) {
@@ -231,18 +202,15 @@ mod tests {
 
     use crate::{
         app::{App, AppAction},
-        manager::{
-            deferred_sender::SingleOrMany,
-            wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
-        },
+        manager::wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
         test_support::hardware_signing::external_address,
-        wallet::{balance::Balance, metadata::WalletMetadata},
+        wallet::metadata::WalletMetadata,
     };
 
     use super::super::{
-        Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
+        Action, Message, RustSendFlowManager, test_support::drain_reconcile_messages,
     };
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
@@ -258,16 +226,8 @@ mod tests {
         metadata.network = network;
 
         let wallet_manager =
-            Arc::new(funded_preview_wallet_manager_with_metadata(metadata.clone(), &[100_000]));
-
-        let state = State::new(metadata, Arc::new(Balance::default()));
-        let manager = Arc::new(RustSendFlowManager {
-            app: App::global().clone(),
-            wallet_manager,
-            state: state.into_inner(),
-            reconciler: ReconcileChannel::new(100),
-            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
-        });
+            Arc::new(funded_preview_wallet_manager_with_metadata(metadata, &[100_000]));
+        let manager = RustSendFlowManager::with_wallet(wallet_manager, Arc::default());
 
         {
             let mut state = manager.state.lock();
@@ -287,20 +247,6 @@ mod tests {
         .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
-    }
-
-    fn drain_reconcile_messages(manager: &RustSendFlowManager) -> Vec<Message> {
-        let receiver = manager.reconciler.receiver();
-        let mut messages = Vec::new();
-
-        while let Ok(message) = receiver.try_recv() {
-            match message {
-                SingleOrMany::Single(message) => messages.push(message),
-                SingleOrMany::Many(batch) => messages.extend(batch),
-            }
-        }
-
-        messages
     }
 
     fn pushed_confirm_route() -> Option<SendRouteConfirmArgs> {

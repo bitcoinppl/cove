@@ -410,7 +410,7 @@ private fun CoinControlAmountWidget(
                     minimumScaleFactor = 0.01f,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().offset(x = amountOffset),
+                    modifier = Modifier.fillMaxWidth().offset(x = amountOffset).testTag("sendFlow.coinControl.amount"),
                 )
             }
             Spacer(Modifier.width(32.dp))
@@ -422,7 +422,7 @@ private fun CoinControlAmountWidget(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 15.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("sendFlow.coinControl.fiatAmount"),
         )
         Spacer(Modifier.height(24.dp))
     }

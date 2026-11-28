@@ -116,6 +116,7 @@ private final class LayoutOnlySendManager: SendFlowRustManaging {
 
     init(walletId: WalletId) { id = walletId }
     func walletId() -> WalletId { id }
+    func amountEntryMode() -> SendFlowAmountEntryMode { SendFlowAmountEntryMode(unit: .btc, fiatOrBtc: .btc) }
     func enteringFiatAmount() -> String { "" }
     func sendAmountFiat() -> String { "" }
     func sendAmountBtc() -> String { "" }
@@ -128,7 +129,7 @@ private final class LayoutOnlySendManager: SendFlowRustManaging {
     func checkPrefilledAmount() -> Bool { false }
     func waitForInit() async -> Bool { true }
     func amountExceedsBalance() -> Bool { false }
-    func sanitizeBtcEnteringAmount(oldValue _: String, newValue _: String) -> String? { nil }
+    func sanitizeBtcEnteringAmount(oldValue _: String, newValue _: String, unit _: BitcoinUnit) -> String? { nil }
     func sanitizeFiatEnteringAmount(oldValue _: String, newValue _: String) -> String? { nil }
     func utxos() -> [Utxo]? { nil }
     func maxSendMinusFees() -> Amount? { nil }
