@@ -49,11 +49,27 @@ class SendDisplayRobot(
 ) {
     val wallet = FullLaunchWalletRobot(device)
     val node = FakeNodeControl()
+    private var previousShowImeWithHardKeyboard: String? = null
 
-    /** Points fee and price fetches at the fake node; debug builds read both on every fetch */
-    fun useFakeNodeFeesAndPrices() {
+    /**
+     * Hides the soft keyboard and points fee and price fetches at the fake node; debug builds read
+     * both on every fetch. Pair with [restoreDevice] in the test's `@After`
+     */
+    fun prepareDevice() {
+        // see UtxoLockFullLaunchTest: the onboarding robot must never see the soft keyboard
+        previousShowImeWithHardKeyboard = device.executeShellCommand("settings get secure $SHOW_IME_SETTING").trim()
+        device.executeShellCommand("settings put secure $SHOW_IME_SETTING 0")
+
         Os.setenv("COVE_FEE_URL", "$FAKE_NODE_ESPLORA_URL/api/v1/fees/recommended", true)
         Os.setenv("COVE_PRICE_URL", "$FAKE_NODE_ESPLORA_URL/api/v1/prices", true)
+    }
+
+    /** Puts back the keyboard setting [prepareDevice] changed */
+    fun restoreDevice() {
+        when (val previous = previousShowImeWithHardKeyboard) {
+            null, "null" -> device.executeShellCommand("settings delete secure $SHOW_IME_SETTING")
+            else -> device.executeShellCommand("settings put secure $SHOW_IME_SETTING $previous")
+        }
     }
 
     /** Funds one coin of each amount, imports the test wallet and waits for its first full scan */
@@ -245,7 +261,7 @@ class SendDisplayRobot(
     /** Taps Max and returns the amount field's text once Max has filled it */
     fun tapMax(): String {
         // Max lives in a toolbar on the soft keyboard; see FullLaunchWalletRobot.tapMax
-        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+        device.executeShellCommand("settings put secure $SHOW_IME_SETTING 1")
 
         device.waitFor(By.res(AMOUNT_TAG)).click()
         device.waitFor(By.res(MAX_TAG)).click()
@@ -423,6 +439,8 @@ class SendDisplayRobot(
         const val CUSTOM_AMOUNT_TAG = "sendFlow.coinControl.customAmount"
         const val FEE_TAG = "sendFlowConfirm.fee"
         const val TOTAL_TAG = "sendFlowConfirm.total"
+
+        const val SHOW_IME_SETTING = "show_ime_with_hard_keyboard"
 
         /** What Rust shows in place of a fiat amount while amounts are hidden */
         const val MASKED_AMOUNT = "**************"

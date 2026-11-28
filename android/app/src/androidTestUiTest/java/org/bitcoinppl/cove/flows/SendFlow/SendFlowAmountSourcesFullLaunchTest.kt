@@ -46,29 +46,19 @@ class SendFlowAmountSourcesFullLaunchTest {
     private lateinit var device: UiDevice
     private lateinit var send: SendDisplayRobot
     private lateinit var qr: QrScript
-    private var previousShowImeWithHardKeyboard: String? = null
 
     @Before
     fun prepareDevice() {
         device = fullLaunchDevice()
         send = SendDisplayRobot(device)
         qr = QrScript()
-
-        // see UtxoLockFullLaunchTest: the onboarding robot must never see the soft keyboard
-        previousShowImeWithHardKeyboard = device.executeShellCommand("settings get secure show_ime_with_hard_keyboard").trim()
-        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 0")
-
-        send.useFakeNodeFeesAndPrices()
+        send.prepareDevice()
     }
 
     @After
     fun restoreDevice() {
         qr.remove()
-
-        when (val previous = previousShowImeWithHardKeyboard) {
-            null, "null" -> device.executeShellCommand("settings delete secure show_ime_with_hard_keyboard")
-            else -> device.executeShellCommand("settings put secure show_ime_with_hard_keyboard $previous")
-        }
+        send.restoreDevice()
     }
 
     /** A payment URI's amount opens Send in the wallet's unit, sats here, and is the amount sent */

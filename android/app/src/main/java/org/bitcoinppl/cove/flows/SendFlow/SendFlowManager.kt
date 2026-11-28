@@ -176,8 +176,8 @@ class SendFlowManager internal constructor(
         if (isClosed.get()) return
         if (enteringBtcAmount != value) {
             enteringBtcAmount = value
-            // the unit is read at the keystroke, not when the debounce fires, so Rust drops an
-            // edit the unit changed under instead of parsing it in the new unit
+            // the unit is read at the keystroke, not when the debounce fires, so Rust parses an
+            // edit the unit changed under in the unit it was typed in, not the new one
             val unit = amountEntryMode.unit
             debouncedDispatch(SendFlowManagerAction.NotifyEnteringBtcAmountChanged(value, unit))
         }
