@@ -194,8 +194,18 @@ pub struct CloudStorage(Arc<Box<dyn CloudStorageAccess>>);
 pub struct CloudStorageClient(CloudStorage, CloudAccessPolicy);
 
 impl CloudStorage {
+    /// Whether the process has installed a cloud storage backend
+    pub fn is_initialized() -> bool {
+        REF.get().is_some()
+    }
+
+    /// The process cloud storage, if the platform has installed one
+    pub fn try_global() -> Option<&'static Self> {
+        REF.get()
+    }
+
     pub fn global() -> &'static Self {
-        REF.get().expect("cloud storage is not initialized")
+        Self::try_global().expect("cloud storage is not initialized")
     }
 
     pub fn global_explicit_client() -> CloudStorageClient {
@@ -920,6 +930,17 @@ mod tests {
             block_on_ready(cloud.has_restorable_cloud_backup(CloudAccessPolicy::Silent)).unwrap();
 
         assert!(!has_backup);
+    }
+
+    #[test]
+    fn try_global_is_none_until_new_installs_a_backend() {
+        // Other tests in this process may have already installed a backend via CloudStorage::new.
+        // When none has, try_global must not panic.
+        if CloudStorage::is_initialized() {
+            assert!(CloudStorage::try_global().is_some());
+        } else {
+            assert!(CloudStorage::try_global().is_none());
+        }
     }
 
     #[test]

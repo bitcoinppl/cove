@@ -40,7 +40,7 @@ use std::sync::{
 
 use act_zero::{Addr, call, send};
 use cove_cspp::MasterKeyPromotionStatus;
-use cove_device::cloud_storage::CloudSyncHealth;
+use cove_device::cloud_storage::{CloudStorage, CloudSyncHealth};
 use cove_device::keychain::Keychain;
 use cove_tokio::task::spawn_actor;
 use flume::Receiver;
@@ -1289,10 +1289,22 @@ impl RustCloudBackupManager {
 
     /// Start silent supplemental inventory checks for this app process
     pub fn start_background_inventory_discovery(&self) {
+        // Debug installs can finish bootstrap before the platform installs cloud storage.
+        // Skipping avoids an actor panic on CloudStorage::global() (#634).
+        if !CloudStorage::is_initialized() {
+            warn!("skipping background inventory discovery; cloud storage is not initialized");
+            return;
+        }
+
         send!(self.supervisor.start_background_inventory_discovery());
     }
 
     pub fn cloud_storage_did_change(&self) {
+        if !CloudStorage::is_initialized() {
+            warn!("skipping cloud storage change; cloud storage is not initialized");
+            return;
+        }
+
         send!(self.supervisor.cloud_reachable(CloudReachable::StorageChanged));
     }
 
@@ -1352,6 +1364,16 @@ impl RustCloudBackupManager {
     }
 
     pub fn resume_pending_cloud_upload_verification(&self) {
+        // Fresh / debug launches may call this before Google Drive / iCloud is wired up.
+        // The UniFFI entry returns immediately after send!, so Kotlin try/catch cannot
+        // catch a later actor panic on CloudStorage::global() (#634).
+        if !CloudStorage::is_initialized() {
+            warn!(
+                "skipping pending cloud upload verification; cloud storage is not initialized"
+            );
+            return;
+        }
+
         send!(self.supervisor.cloud_reachable(CloudReachable::PendingVerification));
     }
 
