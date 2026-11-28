@@ -30,9 +30,8 @@ import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 /**
  * A bottom sheet that shows a QR code for another device to scan
  *
- * The sheet stays light whatever the app's appearance, since cheap scanner cameras, such as
- * SeedSigner's, fail to find a QR code drawn on a dark sheet. The screen goes to full brightness
- * while the sheet is open and the app is unlocked, and returns to the user's level once it closes.
+ * The screen goes to full brightness while the sheet is open and the app is unlocked, and returns
+ * to the user's level once it closes. [background] sets whether the sheet stays light in dark mode.
  * [securePolicy] sets whether the sheet's window may be captured in screenshots
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,10 +40,32 @@ fun QrModalBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     securePolicy: SecureFlagPolicy = SecureFlagPolicy.Inherit,
+    background: QrSheetBackground = QrSheetBackground.AlwaysLight,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     FullScreenBrightness()
 
+    when (background) {
+        QrSheetBackground.AlwaysLight -> LightSheet(onDismissRequest, sheetState, securePolicy, content)
+        QrSheetBackground.AppAppearance ->
+            ModalBottomSheet(
+                onDismissRequest = onDismissRequest,
+                sheetState = sheetState,
+                containerColor = MaterialTheme.colorScheme.surface,
+                properties = ModalBottomSheetProperties(securePolicy = securePolicy),
+                content = content,
+            )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LightSheet(
+    onDismissRequest: () -> Unit,
+    sheetState: SheetState,
+    securePolicy: SecureFlagPolicy,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     // the status bar shows the dimmed screen behind the sheet, so its icons keep that screen's
     // appearance, while the navigation bar sits over the white sheet and needs dark icons. Left
     // unset, the sheet would pick both from its own dark text. These apply as the sheet opens

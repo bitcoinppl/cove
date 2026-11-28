@@ -13,8 +13,9 @@ private struct SelectedWalletSheetContent: View {
     var body: some View {
         switch sheet {
         case .receive:
+            // the address sits on a card with its own quiet zone, so Receive can stay dark
             ReceiveView(manager: context.manager)
-                .qrSheetPresentation()
+                .qrSheetPresentation(.appAppearance)
 
         case let .chooseAddressType(foundAddresses):
             ChooseWalletTypeView(manager: context.manager, foundAddresses: foundAddresses)

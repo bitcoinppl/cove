@@ -1,34 +1,54 @@
 import SwiftUI
 import UIKit
 
+/// The background a QR sheet draws behind its code
+enum QrSheetBackground {
+    /// Light on opaque white whatever the app's appearance, for a code drawn straight onto the
+    /// sheet, since cheap scanner cameras, such as SeedSigner's, fail to find one on a dark sheet
+    case alwaysLight
+    /// The app's own appearance, for a sheet whose code sits on a `QrCodeCard`, whose white quiet
+    /// zone lets a camera find the code on a dark sheet
+    case appAppearance
+}
+
 extension View {
     /// Presents a sheet that shows a QR code for another device to scan
     ///
-    /// The sheet stays in light mode on an opaque white background whatever the app's appearance,
-    /// since cheap scanner cameras, such as SeedSigner's, fail to find a QR code drawn on a dark
-    /// sheet. The screen goes to full brightness while the sheet is shown and returns to where the
-    /// user had it once it closes
+    /// The screen goes to full brightness while the sheet is shown and returns to where the user
+    /// had it once it closes. `background` sets whether the sheet stays light in dark mode
     ///
     /// Apply it to the sheet's root view
-    func qrSheetPresentation() -> some View {
-        modifier(QrSheetPresentation())
+    func qrSheetPresentation(_ background: QrSheetBackground = .alwaysLight) -> some View {
+        modifier(QrSheetPresentation(background: background))
     }
 }
 
 private struct QrSheetPresentation: ViewModifier {
+    let background: QrSheetBackground
     @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
-        content
-            .preferredColorScheme(.light)
-            // opaque, since a sheet below full height otherwise draws on translucent glass, which
-            // shows the dark screen behind it as grey around the QR code
-            .presentationBackground(.white)
+        styled(content)
             .onAppear { QrScreenBrightness.shared.hold() }
             .onDisappear { QrScreenBrightness.shared.release() }
             .onChange(of: scenePhase) { _, phase in
                 QrScreenBrightness.shared.sceneChanged(to: phase)
             }
+    }
+
+    @ViewBuilder
+    private func styled(_ content: Content) -> some View {
+        switch background {
+        case .alwaysLight:
+            content
+                .preferredColorScheme(.light)
+                // opaque, since a sheet below full height otherwise draws on translucent glass,
+                // which shows the dark screen behind it as grey around the QR code
+                .presentationBackground(.white)
+
+        case .appAppearance:
+            content
+        }
     }
 }
 

@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -40,23 +39,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.launch
-import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.AddressText
+import org.bitcoinppl.cove.views.QrCodeCard
 import org.bitcoinppl.cove.views.QrModalBottomSheet
+import org.bitcoinppl.cove.views.QrSheetBackground
 import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.ReceiveAddressCopyPolicy
 import org.bitcoinppl.cove_core.ReceiveAddressPresentation
@@ -129,11 +126,13 @@ fun ReceiveAddressSheet(
         }
     }
 
+    // the address sits on a card with its own quiet zone, so Receive can stay dark
     QrModalBottomSheet(
         onDismissRequest = {
             onDismiss()
         },
         sheetState = sheetState,
+        background = QrSheetBackground.AppAppearance,
     ) {
         ReceiveAddressSheetContent(
             walletName = manager.walletMetadata?.name ?: "Wallet",
@@ -244,8 +243,7 @@ internal fun ReceiveAddressSheetContent(
                             .padding(horizontal = 32.dp)
                             .aspectRatio(1f)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White)
-                            .padding(12.dp),
+                            .background(Color.White),
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
@@ -256,19 +254,10 @@ internal fun ReceiveAddressSheetContent(
                             )
                         }
                         addressRaw != null -> {
-                            val qrBitmap =
-                                remember(addressRaw) {
-                                    QrCodeGenerator.generate(
-                                        text = addressRaw,
-                                        size = 512,
-                                        errorCorrectionLevel = ErrorCorrectionLevel.L,
-                                    )
-                                }
-                            Image(
-                                bitmap = qrBitmap.asImageBitmap(),
+                            QrCodeCard(
+                                text = addressRaw,
                                 contentDescription = "QR Code",
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.FillBounds,
                             )
                         }
                     }
