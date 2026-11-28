@@ -537,21 +537,25 @@ is dropped, since the change already asked for the refresh that replaces it.
 
 A wallet upload's result doesn't wait for a refresh either. The detail reads
 upload states only when it refreshes, and an upload asks for no refresh, so
-whoever persists an `UploadedPendingConfirmation` or `Failed` state, the upload
-worker or the pending-upload verifier, also sends the owner
-`LocalUploadStateChanged`. It reads the row again under the inventory lock, so
-a notice that arrives after a newer write shows the newer state. The owner sets
-the row's status at once when it came from the upload, leaving a row that is
-Confirmed or whose cloud copy holds a key this device lacks as it is, and the
-screen delta carries the change. So a failure shows Failed, and a retry that
-uploads after it replaces Failed. An upload that starts sends nothing, since a
-deferred one goes back to `Dirty`, whose row only a refresh can derive from the
-cloud copy. A detail result may have read an upload before its latest state, so
-when one lands it is checked against the persisted upload states, as it is
-against the local wallets, and each row whose upload has moved on since shows
-its current state. The check reads them under the inventory lock, so a state
-persisted after it sends its own `LocalUploadStateChanged` once the result is
-applied.
+whoever persists an `UploadedPendingConfirmation`, `Failed`, or `Confirmed`
+state — the upload worker, the pending-upload verifier, or a remote-revision
+confirmation — also sends the owner `LocalUploadStateChanged`. It reads the
+row again under the inventory lock, so a notice that arrives after a newer
+write shows the newer state, including when the verifier confirms in the
+instant between an upload saving `UploadedPendingConfirmation` and sending its
+own notice. The owner sets the row's status at once when it came from the
+upload: in-progress and failed statuses stay in Needs Sync, a confirmation
+moves the row to Up to Date, and a row that is already Confirmed or whose
+cloud copy holds a key this device lacks is left as it is. The screen delta
+carries the change. So a failure shows Failed, a retry that uploads after it
+replaces Failed, and a confirmation clears Failed or Pending without a
+refresh. An upload that starts sends nothing, since a deferred one goes back
+to `Dirty`, whose row only a refresh can derive from the cloud copy. A detail
+result may have read an upload before its latest state, so when one lands it
+is checked against the persisted upload states, as it is against the local
+wallets, and each row whose upload has moved on since shows its current
+state. The check reads them under the inventory lock, so a state persisted
+after it sends its own `LocalUploadStateChanged` once the result is applied.
 
 The inventory also belongs to one configuration. The owner's `InventoryScope`
 names the configuration generation the write policy publishes, and it advances

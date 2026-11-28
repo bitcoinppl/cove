@@ -1115,3 +1115,85 @@ async fn failed_uploads_show_on_the_detail_without_a_refresh() {
         ]
     );
 }
+
+// a confirmation that lands while the open detail still shows Failed moves the row to Up to Date
+// without a refresh — including when show_upload_state re-reads Confirmed after a race with the
+// verifier (#1192)
+#[tokio::test(flavor = "current_thread")]
+async fn confirmed_uploads_leave_needs_sync_on_the_detail_without_a_refresh() {
+    use crate::database::cloud_backup::CloudBlobConfirmedState;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 2);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let wallet = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![wallet.clone()]);
+    let record_id = wallet_record_id(wallet.id.as_ref());
+
+    let uploading = PersistedCloudBlobSyncState::wallet(
+        namespace.clone(),
+        wallet.id.clone(),
+        record_id.clone(),
+        PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+            revision_hash: "attempt".into(),
+            started_at: cove_util::time::unix_timestamp_secs_or_zero(),
+        }),
+    );
+    Database::global().cloud_blob_sync_states.set(&uploading).unwrap();
+
+    manager.mark_blob_failed_if_current(&uploading, None, true, None, "offline".into()).unwrap();
+
+    manager.apply_detail_outcome(
+        manager.inventory_scope(),
+        CloudBackupDetailOutcome::RefreshedWithAuthority {
+            listed: crate::manager::cloud_backup_manager::CloudBackupListedDetail {
+                detail: CloudBackupDetail {
+                    last_sync: None,
+                    up_to_date: Vec::new(),
+                    needs_sync: vec![needs_sync_wallet(
+                        &record_id,
+                        CloudBackupWalletStatus::Failed,
+                    )],
+                },
+                cloud_only_record_ids: Default::default(),
+                own_secrets: Default::default(),
+            },
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+        },
+    );
+
+    assert_eq!(
+        needs_sync_statuses(&manager),
+        vec![(record_id.clone(), CloudBackupWalletStatus::Failed)]
+    );
+
+    // the verifier confirms before (or instead of) an upload notice; the detail must catch up
+    let confirmed = PersistedCloudBlobSyncState::wallet(
+        namespace,
+        wallet.id.clone(),
+        record_id.clone(),
+        PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            revision_hash: "landed".into(),
+            confirmed_at: 1,
+        }),
+    );
+    Database::global().cloud_blob_sync_states.set(&confirmed).unwrap();
+    manager.show_upload_state(&confirmed);
+
+    assert!(
+        needs_sync_statuses(&manager).is_empty(),
+        "confirmation must clear the Failed row from Needs Sync"
+    );
+    let detail = manager.model_snapshot().detail.expect("expected a loaded detail");
+    assert_eq!(
+        detail
+            .up_to_date
+            .into_iter()
+            .map(|wallet| (wallet.record_id, wallet.sync_status))
+            .collect::<Vec<_>>(),
+        vec![(record_id, CloudBackupWalletStatus::Confirmed)]
+    );
+}

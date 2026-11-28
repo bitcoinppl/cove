@@ -183,9 +183,10 @@ impl RustCloudBackupManager {
     ///
     /// The detail reads upload states only when it refreshes, and an upload asks for no refresh,
     /// so without this the detail keeps the state it read before, such as a failure after its
-    /// retry succeeded. The row is read again under the inventory lock rather than taken from
-    /// `sync_state`, since a newer write, such as the verifier failing an upload that just
-    /// finished, may have landed and been shown before this call
+    /// retry succeeded, or a row still Failed after the verifier confirmed. The row is read
+    /// again under the inventory lock rather than taken from `sync_state`, since a newer write,
+    /// such as the verifier confirming an upload that just finished, may have landed before
+    /// this call — and that confirmation is the status the open detail must show
     pub(crate) fn show_upload_state(&self, sync_state: &PersistedCloudBlobSyncState) {
         let CloudBackupRecordKey::Wallet(_, record_id) = sync_state.record_key() else { return };
 
@@ -195,7 +196,7 @@ impl RustCloudBackupManager {
                 .get(record_id)
                 .inspect_err(|error| error!("read upload state to show on the detail: {error}"))
                 .ok()??;
-            let status = LocalUploadStatus::from_persisted(&current.state)?;
+            let status = LocalUploadStatus::from_persisted_notice(&current.state)?;
 
             Some(InventoryInput::LocalUploadStateChanged { record_id: record_id.clone(), status })
         });
