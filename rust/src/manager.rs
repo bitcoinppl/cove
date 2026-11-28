@@ -6,6 +6,7 @@ pub mod deferred_dispatch;
 pub mod deferred_sender;
 pub mod import_wallet_manager;
 pub mod key_teleport_manager;
+pub mod node_discovery_manager;
 pub mod onboarding_manager;
 pub mod pending_wallet_manager;
 pub mod reconcile_channel;
