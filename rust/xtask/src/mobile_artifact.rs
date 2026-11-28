@@ -705,12 +705,15 @@ fn validate_and_extract_zip(zip_path: &Path, dest: &Path) -> Result<()> {
 
     for index in 0..archive.len() {
         let file = archive.by_index(index).wrap_err("Failed to inspect artifact ZIP entry")?;
+
+        // zip 9 decodes names fallibly; error messages only need a lossy rendering
+        let display_name = String::from_utf8_lossy(file.name_raw());
         let enclosed_name = file
             .enclosed_name()
-            .ok_or_else(|| eyre!("Artifact ZIP entry is unsafe: {}", file.name()))?;
+            .ok_or_else(|| eyre!("Artifact ZIP entry is unsafe: {display_name}"))?;
 
         validate_zip_entry_path(&enclosed_name)?;
-        reject_zip_unsafe_entry_type(file.name(), file.unix_mode())?;
+        reject_zip_unsafe_entry_type(&display_name, file.unix_mode())?;
     }
 
     recreate_dir(dest)?;
@@ -722,9 +725,9 @@ fn validate_and_extract_zip(zip_path: &Path, dest: &Path) -> Result<()> {
 
     for index in 0..archive.len() {
         let mut file = archive.by_index(index).wrap_err("Failed to extract artifact ZIP entry")?;
-        let relative = file
-            .enclosed_name()
-            .ok_or_else(|| eyre!("Artifact ZIP entry is unsafe: {}", file.name()))?;
+        let relative = file.enclosed_name().ok_or_else(|| {
+            eyre!("Artifact ZIP entry is unsafe: {}", String::from_utf8_lossy(file.name_raw()))
+        })?;
         let out_path = dest.join(&relative);
 
         if file.is_dir() {
