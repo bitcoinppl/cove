@@ -6,6 +6,7 @@
 //
 
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct QrCodeView: View {
@@ -44,6 +45,21 @@ struct QrCodeView: View {
         }
 
         return Image(systemName: "exclamationmark.octagon")
+    }
+}
+
+/// A QR code on a white card whose border is the four-module quiet zone the QR code standard asks for
+///
+/// For a code drawn over a dark background, such as a sheet in dark mode, where a camera could
+/// mistake the background for part of the code. The border is drawn in the code's own modules, so it
+/// stays four modules wide however dense the text makes the code
+struct QrCodeCard: View {
+    let text: String
+
+    var body: some View {
+        QrCodeView(text: text, quietZoneModules: 4)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 

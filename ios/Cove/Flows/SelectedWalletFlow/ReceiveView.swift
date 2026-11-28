@@ -5,7 +5,6 @@
 //  Created by Praveen Perera on 8/14/24.
 //
 
-import CoreImage.CIFilterBuiltins
 import MijickPopups
 import SwiftUI
 
@@ -328,40 +327,10 @@ private struct PaidAddressCopyConfirmationModifier: ViewModifier {
 private struct AddressView: View {
     let addressInfo: AddressInfoWithDerivation?
 
-    func generateQRCode(from string: String) -> UIImage {
-        let data = Data(string.utf8)
-        let filter = CIFilter.qrCodeGenerator()
-        filter.setValue(data, forKey: "inputMessage")
-        filter.setValue("M", forKey: "inputCorrectionLevel")
-
-        let transform = CGAffineTransform(scaleX: 10, y: 10)
-
-        if let outputImage = filter.outputImage?.transformed(by: transform) {
-            // Crop to content to remove default padding
-            let context = CIContext()
-            let cgImage = context.createCGImage(outputImage, from: outputImage.extent)!
-
-            return UIImage(cgImage: cgImage)
-        }
-
-        return UIImage(systemName: "xmark.circle") ?? UIImage()
-    }
-
     var body: some View {
         if let addressInfo {
-            Image(uiImage: generateQRCode(from: addressInfo.addressUnformatted()))
-                .interpolation(.none)
-                .resizable()
-                .scaledToFit()
-                .padding(8)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
+            QrCodeCard(text: addressInfo.addressUnformatted())
                 .padding(.horizontal, 16)
-                .aspectRatio(1, contentMode: .fit)
         } else {
             ProgressView(label: {
                 Text("Loading")

@@ -27,13 +27,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Opens QR sheets with the system in dark mode and checks each draws on a light background and
- * raises the screen to full brightness until it closes
+ * Opens QR sheets with the system in dark mode and checks which draw on a light background, and
+ * that each raises the screen to full brightness until it closes
  *
- * Cheap scanner cameras, such as SeedSigner's, fail to find a QR code drawn on a dark sheet, so
- * every sheet that shows a QR code for another device stays light whatever the appearance. The
- * test reads the screen beside the QR code, where the sheet's own background shows, and the
- * brightness the app's window asks for. Runs in the uiTest flavour; needs the fake node up and
+ * Cheap scanner cameras, such as SeedSigner's, fail to find a QR code drawn on a dark sheet, so a
+ * sheet that draws its code straight onto its background, such as the xpub export, stays light
+ * whatever the appearance. Receive draws its address on a white card with a four-module quiet zone,
+ * which `KeyTeleportPacketQrTest` measures, so it follows the app into dark mode. The test reads
+ * the screen beside the QR code, where the sheet's own background shows, and the brightness the
+ * app's window asks for. Runs in the uiTest flavour; needs the fake node up and
  * forwarded, which `just android-instrumented-ci` does
  */
 @LargeTest
@@ -48,6 +50,9 @@ class QrSheetAppearanceFullLaunchTest {
 
         /** Every channel above this reads as a light background */
         const val LIGHT_CHANNEL_MIN = 220
+
+        /** Every channel below this reads as a dark background */
+        const val DARK_CHANNEL_MAX = 96
     }
 
     @get:Rule
@@ -77,12 +82,12 @@ class QrSheetAppearanceFullLaunchTest {
     }
 
     @Test
-    fun qrSheetsStayLightAtFullBrightnessInDarkMode() {
+    fun exportStaysLightAndReceiveFollowsDarkModeAtFullBrightness() {
         launchPastOnboarding()
         assertBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, "before any QR sheet opened")
 
         screens.openReceive()
-        assertSheetIsLight("Receive")
+        assertSheetBackground("Receive", "a dark background", ::isDark)
         assertBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL, "with Receive open")
 
         device.pressBack()
@@ -90,7 +95,7 @@ class QrSheetAppearanceFullLaunchTest {
         assertBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE, "after Receive closed")
 
         openXpubQrExport()
-        assertSheetIsLight("Export Xpub")
+        assertSheetBackground("Export Xpub", "a light background", ::isLight)
         assertBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL, "with Export Xpub open")
     }
 
@@ -121,19 +126,23 @@ class QrSheetAppearanceFullLaunchTest {
     }
 
     /**
-     * Waits for the open sheet's background to read light at every point, which it does once the
-     * sheet has finished sliding up
+     * Waits for the open sheet's background to pass [expected] at every point, which it does once
+     * the sheet has finished sliding up
      */
-    private fun assertSheetIsLight(sheet: String) {
+    private fun assertSheetBackground(
+        sheet: String,
+        description: String,
+        expected: (Int) -> Boolean,
+    ) {
         var shown = sheetBackgroundColors()
         val deadline = System.currentTimeMillis() + 5_000L
-        while (!shown.all(::isLight) && System.currentTimeMillis() < deadline) {
+        while (!shown.all(expected) && System.currentTimeMillis() < deadline) {
             Thread.sleep(250L)
             shown = sheetBackgroundColors()
         }
 
         SHEET_BACKGROUND.zip(shown).forEach { (point, color) ->
-            assertTrue("$sheet draws ${describe(color)} at $point in dark mode, not a light background", isLight(color))
+            assertTrue("$sheet draws ${describe(color)} at $point in dark mode, not $description", expected(color))
         }
     }
 
@@ -148,6 +157,8 @@ class QrSheetAppearanceFullLaunchTest {
     }
 
     private fun isLight(color: Int): Boolean = channels(color).all { it > LIGHT_CHANNEL_MIN }
+
+    private fun isDark(color: Int): Boolean = channels(color).all { it < DARK_CHANNEL_MAX }
 
     private fun describe(color: Int): String = channels(color).joinToString(prefix = "rgb(", postfix = ")")
 

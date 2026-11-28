@@ -14,6 +14,9 @@ struct ScreenColor: CustomStringConvertible {
     /// Near white, as a light sheet's background is
     var isLight: Bool { min(red, green, blue) > 220 }
 
+    /// Dark, as a sheet's background is in dark mode
+    var isDark: Bool { max(red, green, blue) < 96 }
+
     var description: String { "rgb(\(red), \(green), \(blue))" }
 
     /// Whether this is the same color as `other`, within the small drift screenshots of the same
