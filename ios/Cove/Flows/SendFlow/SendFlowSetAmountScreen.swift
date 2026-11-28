@@ -459,6 +459,11 @@ private struct SendFlowSetAmountSheetContent: View {
         case .qr:
             QrCodeAddressView(app: _app, scannedCode: $scannedCode)
                 .presentationDetents([.large])
+        case .transferDestination:
+            TransferDestinationSheet(
+                destinations: sendFlowManager.transferDestinations(),
+                onSelect: sendFlowManager.selectTransferDestination
+            )
         case .fee:
             SendFlowFeeSelectionSheet(
                 manager: manager,

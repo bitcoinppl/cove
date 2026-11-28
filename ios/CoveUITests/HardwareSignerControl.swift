@@ -107,16 +107,16 @@ struct HardwareSignerControl {
         return try decode(SignedFrames.self, controlRequest(baseUrl, "POST", "unrelated-psbt", body: body))
     }
 
-    /// The test mnemonic's Signet account as a hardware wallet exports it
-    func watchOnlyDescriptors() throws -> Descriptors {
-        let body: [String: Any] = ["mnemonic": XCUIApplication.testMnemonic]
+    /// The mnemonic's Signet account as a hardware wallet exports it
+    func watchOnlyDescriptors(mnemonic: String = XCUIApplication.testMnemonic) throws -> Descriptors {
+        let body: [String: Any] = ["mnemonic": mnemonic]
         return try decode(Descriptors.self, controlRequest(baseUrl, "POST", "watch-only-descriptor", body: body))
     }
 
-    /// The test mnemonic's Signet account of the address type as a bare public key, with the first
+    /// The mnemonic's Signet account of the address type as a bare public key, with the first
     /// receive address the host derives from the mnemonic itself
-    func publicKeyExport(_ addressType: AddressType) throws -> PublicKeyExport {
-        let body: [String: Any] = ["mnemonic": XCUIApplication.testMnemonic, "address_type": addressType.rawValue]
+    func publicKeyExport(_ addressType: AddressType, mnemonic: String = XCUIApplication.testMnemonic) throws -> PublicKeyExport {
+        let body: [String: Any] = ["mnemonic": mnemonic, "address_type": addressType.rawValue]
         return try decode(PublicKeyExport.self, controlRequest(baseUrl, "POST", "public-key-export", body: body))
     }
 

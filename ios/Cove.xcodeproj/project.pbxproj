@@ -18,6 +18,7 @@
 		C0A1003E2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1003D2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift */; };
 		C0A1002E2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1002D2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift */; };
 		C0A1004E2F90000000000001 /* SendFlowUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1004D2F90000000000001 /* SendFlowUITestSupport.swift */; };
+		C0A000222EF0000000000001 /* SendToMyWalletFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000212EF0000000000001 /* SendToMyWalletFullLaunchUITests.swift */; };
 		C0A0FD022F70000000000001 /* VerifyWordsFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0FD012F70000000000001 /* VerifyWordsFullLaunchUITests.swift */; };
 		F4B000022F90000000000001 /* BiometricLockFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */; };
 		F4B000042F90000000000001 /* SimulatorBiometrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B000032F90000000000001 /* SimulatorBiometrics.swift */; };
@@ -61,6 +62,7 @@
 		C0B000902F00000000000001 /* UniffiErrorTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000912F00000000000001 /* UniffiErrorTextTests.swift */; };
 		C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */; };
 		C0B000982F00000000000001 /* SendFlowBackNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */; };
+		C0B000A22F00000000000001 /* SendFlowAddressEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000A32F00000000000001 /* SendFlowAddressEntryTests.swift */; };
 		C5EC00012F00000000000001 /* SecretWordsLockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EC00022F00000000000001 /* SecretWordsLockTests.swift */; };
 		C5EC00032F00000000000001 /* AppAlertLockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EC00042F00000000000001 /* AppAlertLockTests.swift */; };
 		C0B0009A2F00000000000001 /* SafeAreaInsetsEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0009B2F00000000000001 /* SafeAreaInsetsEnvironmentTests.swift */; };
@@ -152,6 +154,7 @@
 		C0A1003D2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowPrefilledAmountFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A1002D2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowDisplayPreferencesFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A1004D2F90000000000001 /* SendFlowUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowUITestSupport.swift; sourceTree = "<group>"; };
+		C0A000212EF0000000000001 /* SendToMyWalletFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendToMyWalletFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A0FD012F70000000000001 /* VerifyWordsFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyWordsFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricLockFullLaunchUITests.swift; sourceTree = "<group>"; };
 		F4B000032F90000000000001 /* SimulatorBiometrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatorBiometrics.swift; sourceTree = "<group>"; };
@@ -192,6 +195,7 @@
 		C0B000912F00000000000001 /* UniffiErrorTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniffiErrorTextTests.swift; sourceTree = "<group>"; };
 		C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowHeaderLayoutTests.swift; sourceTree = "<group>"; };
 		C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowBackNavigationTests.swift; sourceTree = "<group>"; };
+		C0B000A32F00000000000001 /* SendFlowAddressEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowAddressEntryTests.swift; sourceTree = "<group>"; };
 		C5EC00022F00000000000001 /* SecretWordsLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretWordsLockTests.swift; sourceTree = "<group>"; };
 		C5EC00042F00000000000001 /* AppAlertLockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAlertLockTests.swift; sourceTree = "<group>"; };
 		C0B0009B2F00000000000001 /* SafeAreaInsetsEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeAreaInsetsEnvironmentTests.swift; sourceTree = "<group>"; };
@@ -334,6 +338,7 @@
 				C0A1003D2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift */,
 				C0A1002D2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift */,
 				C0A1004D2F90000000000001 /* SendFlowUITestSupport.swift */,
+				C0A000212EF0000000000001 /* SendToMyWalletFullLaunchUITests.swift */,
 				C0A0FD012F70000000000001 /* VerifyWordsFullLaunchUITests.swift */,
 				F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */,
 				F4B000032F90000000000001 /* SimulatorBiometrics.swift */,
@@ -378,6 +383,7 @@
 				C0B000912F00000000000001 /* UniffiErrorTextTests.swift */,
 				C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */,
 				C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */,
+				C0B000A32F00000000000001 /* SendFlowAddressEntryTests.swift */,
 				C5EC00022F00000000000001 /* SecretWordsLockTests.swift */,
 				C5EC00042F00000000000001 /* AppAlertLockTests.swift */,
 				C0B0009B2F00000000000001 /* SafeAreaInsetsEnvironmentTests.swift */,
@@ -672,6 +678,7 @@
 				C0A1003E2F90000000000001 /* SendFlowPrefilledAmountFullLaunchUITests.swift in Sources */,
 				C0A1002E2F90000000000001 /* SendFlowDisplayPreferencesFullLaunchUITests.swift in Sources */,
 				C0A1004E2F90000000000001 /* SendFlowUITestSupport.swift in Sources */,
+				C0A000222EF0000000000001 /* SendToMyWalletFullLaunchUITests.swift in Sources */,
 				C0A0FD022F70000000000001 /* VerifyWordsFullLaunchUITests.swift in Sources */,
 				F4B000022F90000000000001 /* BiometricLockFullLaunchUITests.swift in Sources */,
 				F4B000042F90000000000001 /* SimulatorBiometrics.swift in Sources */,
@@ -717,6 +724,7 @@
 				C0B000902F00000000000001 /* UniffiErrorTextTests.swift in Sources */,
 				C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */,
 				C0B000982F00000000000001 /* SendFlowBackNavigationTests.swift in Sources */,
+				C0B000A22F00000000000001 /* SendFlowAddressEntryTests.swift in Sources */,
 				C5EC00012F00000000000001 /* SecretWordsLockTests.swift in Sources */,
 				C5EC00032F00000000000001 /* AppAlertLockTests.swift in Sources */,
 				C0B0009A2F00000000000001 /* SafeAreaInsetsEnvironmentTests.swift in Sources */,
