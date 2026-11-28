@@ -73,6 +73,7 @@ mod signed_import;
 mod tap_card;
 mod transaction;
 mod transaction_watcher;
+mod transfer_destination;
 mod ur;
 mod wallet;
 mod wallet_identity;
