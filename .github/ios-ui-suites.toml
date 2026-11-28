@@ -95,6 +95,15 @@ suites = ["CoveUITests/ReceiveTextSizeFullLaunchUITests"]
 paths = ["ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift"]
 suites = ["CoveUITests/TapSignerLayoutFullLaunchUITests"]
 
+# the send steps the send flow suites share
+[[rule]]
+paths = ["ios/CoveUITests/SendFlowUITestSupport.swift"]
+suites = [
+    "CoveUITests/SendFlowUnitFullLaunchUITests",
+    "CoveUITests/SendFlowPrefilledAmountFullLaunchUITests",
+    "CoveUITests/SendFlowDisplayPreferencesFullLaunchUITests",
+]
+
 [[rule]]
 paths = ["ios/CoveUITests/SendFlowUnitFullLaunchUITests.swift"]
 suites = ["CoveUITests/SendFlowUnitFullLaunchUITests"]

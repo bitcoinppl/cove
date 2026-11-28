@@ -21,8 +21,9 @@ final class SendFlowPrefilledAmountFullLaunchUITests: XCTestCase {
         node = FakeNodeControl()
         qr = QrScript()
 
-        // fee rates come from the fake node, so sends don't depend on mempool.space
+        // fee rates and prices come from the fake node, so sends don't depend on mempool.space
         app.launchEnvironment["COVE_FEE_URL"] = "\(Self.esploraUrl)/api/v1/fees/recommended"
+        app.launchEnvironment["COVE_PRICE_URL"] = "\(Self.esploraUrl)/api/v1/prices"
         qr.configure(app)
     }
 
@@ -31,16 +32,21 @@ final class SendFlowPrefilledAmountFullLaunchUITests: XCTestCase {
         super.tearDown()
     }
 
-    /// Send opened at a scanned amount checks that amount while its fee is still being
-    /// calculated, and must not alert that the fee is still loading, since the fee shows a moment
-    /// later and the alert only covers Next
+    /// Send opened at a scanned amount in sats shows it in sats with its fiat price, checks that
+    /// amount while its fee is still being calculated, and must not alert that the fee is still
+    /// loading, since the fee shows a moment later and the alert only covers Next
     func testScannedPaymentRequestOpensSendWithoutAFeeStillLoadingAlert() throws {
-        try launchFundedWallet()
-        useSatsOnWalletScreen()
+        try app.launchFundedWallet(node: node)
+        app.useSatsOnWalletScreen()
 
-        openSendFromScannedPaymentRequest(btc: "0.0005")
-        waitForLabel(unitSelector, equalTo: "sats", timeout: 10)
-        waitForAmountText("50000", "0.0005 BTC requested didn't show as 50,000 sats")
+        app.openSendFromScannedPaymentRequest(btc: "0.0005", qr: qr)
+        waitForLabel(app.sendUnitSelector, equalTo: "sats", timeout: 10)
+        app.waitForSendAmountText("50000", "0.0005 BTC requested didn't show as 50,000 sats")
+
+        // the fake node prices bitcoin at 100,000 per BTC
+        let secondaryAmount = app.element("sendFlow.secondaryAmount")
+        XCTAssertTrue(secondaryAmount.waitForExistence(timeout: 10))
+        waitUntil(secondaryAmount, matches: NSPredicate(format: "label CONTAINS %@", "50.00"), timeout: 30, "50,000 sats never showed as 50.00 in fiat")
 
         // the screen checks a prefilled amount 700 ms after it shows, and the fee total lands
         // within a few seconds even on a loaded simulator
@@ -54,74 +60,6 @@ final class SendFlowPrefilledAmountFullLaunchUITests: XCTestCase {
         app.swipeToSend()
 
         let send = try node.waitForBroadcasts(count: 1)[0]
-        let sent = send.outputs.first { $0.address == XCUIApplication.externalAddress }?.sats
-        XCTAssertEqual(sent, 50000, "a request for 0.0005 BTC must send 50,000 sats")
-    }
-
-    // MARK: - Setup
-
-    private func launchFundedWallet() throws {
-        try node.requireHealthy()
-        try node.reset()
-        _ = try node.fundWallet(mnemonic: XCUIApplication.testMnemonic, sats: [100_000, 100_000])
-        try node.mine()
-
-        app.launchEnvironment["COVE_UI_TEST_ESPLORA_URL"] = Self.esploraUrl
-        app.launch(expecting: app.staticTexts["Welcome to Cove"])
-        app.importTestMnemonic()
-        app.assertBalance(sats: 200_000, timeout: 120)
-    }
-
-    private func useSatsOnWalletScreen() {
-        let balance = app.element("selectedWallet.balance")
-        XCTAssertTrue(balance.waitForExistence(timeout: 15))
-        balance.press(forDuration: 1.2)
-
-        let sats = app.buttons["SATS"]
-        XCTAssertTrue(sats.waitForExistence(timeout: 5), "the balance's context menu has no SATS item")
-        sats.tap()
-
-        // a loaded simulator has taken over 10 seconds to redraw the balance after the menu closes
-        waitUntil(balance, matches: NSPredicate(format: "label ENDSWITH %@", " SATS"), timeout: 20, "the balance never showed sats")
-    }
-
-    /// Scans a BIP21 request for the amount with Add Wallet's QR scanner, the app-wide scanner,
-    /// and sends to it from the alert, which opens Send at the requested amount
-    private func openSendFromScannedPaymentRequest(btc amount: String) {
-        app.tapButton(named: "app.sidebar.open")
-        app.tapButton(named: "Add Wallet")
-        app.tapButton(named: "More wallet import options", until: app.buttons["QR"])
-        app.buttons["QR"].tap()
-
-        let request = "bitcoin:\(XCUIApplication.externalAddress)?amount=\(amount)"
-        XCTAssertNoThrow(try qr.show([request]))
-
-        let sendTo = app.buttons["Send To Address"]
-        XCTAssertTrue(sendTo.waitForExistence(timeout: 20), "the scanned request never offered Send To Address")
-        sendTo.tap()
-    }
-
-    // MARK: - Send screen
-
-    private var amountField: XCUIElement {
-        app.textFields["sendFlow.amount"]
-    }
-
-    private var unitSelector: XCUIElement {
-        app.buttons["sendFlow.unit"]
-    }
-
-    /// Waits for the amount field to show the text, ignoring the grouping commas sats get
-    private func waitForAmountText(_ text: String, _ message: String) {
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline {
-            if let value = amountField.value as? String, value.replacingOccurrences(of: ",", with: "") == text {
-                return
-            }
-
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-
-        XCTFail("\(message), got '\(amountField.value as? String ?? "")'")
+        XCTAssertEqual(send.sentToExternal, 50000, "a request for 0.0005 BTC must send 50,000 sats")
     }
 }
