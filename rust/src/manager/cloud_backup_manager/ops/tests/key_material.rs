@@ -325,6 +325,40 @@ fn watch_only_cloud_entry(globals: &TestGlobals, metadata: &WalletMetadata) -> W
     entry
 }
 
+/// Remote truth for a local wallet with no cloud record must not wait on iOS: presence-first
+/// returns NotFound instead of SyncPending (#1166)
+#[tokio::test(flavor = "current_thread")]
+async fn remote_truth_treats_a_missing_record_as_not_found_on_ios() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    globals.cloud.set_explicit_missing_record_lookup(MockMissingRecordLookup::SyncPending);
+
+    let wallet = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![wallet.clone()]);
+    let record_id = wallet_record_id(wallet.id.as_ref());
+    let namespace = manager.current_namespace_id().unwrap();
+
+    let truth = manager
+        .load_remote_wallet_truth(
+            &namespace,
+            &[record_id.clone()],
+            CloudStorage::global_explicit_client(),
+        )
+        .await
+        .expect("presence-first must not surface SyncPending for a missing record");
+
+    assert!(
+        !truth.summaries_by_record_id.contains_key(&record_id),
+        "a missing record stays out of remote truth"
+    );
+    assert!(
+        !truth.unknown_record_ids.contains(&record_id),
+        "SyncPending must not mark the record unknown"
+    );
+}
+
 /// On iOS a consent-allowed read of a record the cloud doesn't hold ends in `SyncPending`, never
 /// `NotFound`, so Enable must learn that a watch-only wallet's first record is absent without
 /// reading it
