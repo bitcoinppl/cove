@@ -592,3 +592,46 @@ coverage = [
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # the rust tests run the scan against an in-process electrum server; the node screen's parsing and submit stay with the agent
+
+[[row]]
+id = "s14-find-and-pick-a-node-on-the-local-network"
+section = "14"
+title = "Find a node on the local network and pick it"
+platforms = ["android"]
+target = "ui"
+paths = [
+    "rust/src/node_discovery.rs",
+    "rust/src/node_discovery/**",
+    "rust/src/node_connect.rs",
+    "rust/src/manager/node_discovery_manager.rs",
+    "rust/src/manager/node_discovery_manager/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/LanNodeDiscovery.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/NodeDiscoveryManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/node_discovery/tests.rs::a_swept_electrum_port_becomes_a_node_named_by_its_reverse_lookup",
+    "rust:rust/src/node_discovery/tests.rs::a_discovered_node_parses_back_to_itself_as_a_custom_node",
+    "rust:rust/src/node_discovery/probe.rs::a_probe_sends_nothing_to_the_server",
+    "rust:rust/src/node_discovery/tests.rs::only_servers_for_the_selected_network_are_listed",
+    "rust:rust/src/node_discovery/verify/tests.rs::a_server_on_another_network_is_rejected",
+    "rust:rust/src/node_discovery/verify/tests.rs::a_server_without_features_is_checked_by_its_first_header",
+    "rust:rust/src/manager/node_discovery_manager/tests.rs::stop_keeps_the_servers_found_and_a_new_search_starts_clean",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::pickingAServerFoundOnTheNetworkSavesItAsTheSelectedNode",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::aServerOnAnotherNetworkIsNotListed",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::stopKeepsTheServersFoundSoFar",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::aPresetTappedWhileAFoundServerIsCheckedIsIgnoredUntilTheCheckEnds",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::aSearchThatFindsNothingSaysSoAndSearchAgainSearchesAgain",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::searchingOffWifiAsksToConnectToWifi",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::searchingBehindABlockingVpnSaysTheVpnBlocksIt",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsLanDiscoveryTest.kt::lanInterfacesAreTheDevicesPrivateIpv4Networks",
+]
+# rust decides what the search finds, that a probe sends nothing, and that only servers whose
+# genesis block matches the selected network are listed. The UI tests can't put a server on the
+# network the emulator is on, so the debug COVE_UI_TEST_LAN_DISCOVERY seam has Rust check loopback
+# servers instead of sweeping: the fake node's Electrum port is listed and a mainnet test server
+# isn't. They check the screen searches only when asked, Stop keeps the servers found, a picked
+# server is saved through the custom node check one choice at a time, and the screen says what to
+# do when a search ends off Wi-Fi, behind a VPN or empty. The interface listing handed to Rust has
+# its own test. On a network with an Electrum server,
+# `live_lan_discovery_finds_and_connects_to_the_node` runs the real search with --ignored
